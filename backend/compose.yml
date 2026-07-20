@@ -10,4 +10,36 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+    networks:
+      - plaiground-network
     restart: unless-stopped
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: plaiground-backend
+    env_file:
+      - .env
+    environment:
+      SERVER_PORT: 8080
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      LIVEKIT_URL: ${LIVEKIT_URL}
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
+      SPRING_PROFILES_ACTIVE: local
+    ports:
+      - "${SERVER_PORT:-8080}:8080"
+    depends_on:
+      redis:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - plaiground-network
+    restart: unless-stopped
+
+networks:
+  plaiground-network:
+    name: plaiground-network
