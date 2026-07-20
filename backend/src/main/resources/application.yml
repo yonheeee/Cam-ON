@@ -1,0 +1,23 @@
+spring:
+  application:
+    name: plaiground-backend
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:local}
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+server:
+  port: ${SERVER_PORT:8080}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+livekit:
+  url: ${LIVEKIT_URL:http://localhost:7880}
+  api-key: ${LIVEKIT_API_KEY:devkey}
+  api-secret: ${LIVEKIT_API_SECRET:secret}

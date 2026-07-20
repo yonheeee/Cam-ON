@@ -1,0 +1,8 @@
+logging:
+  level:
+    com.plaiground: DEBUG
+
+spring:
+  data:
+    redis:
+      database: 0
