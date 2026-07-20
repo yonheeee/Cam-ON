@@ -1,3 +1,22 @@
+## 제스처 목록 (현재 학습 데이터 기준)
+
+| id | 이름 | 종류 | 데이터 수 |
+| --- | --- | --- | --- |
+| 0 | Open | 한 손 | 0 (데이터 삭제됨) |
+| 1 | Close | 한 손 | 0 (데이터 삭제됨) |
+| 2 | Pointer | 한 손 | 0 (데이터 삭제됨) |
+| 3 | OK | 한 손 | 0 (데이터 삭제됨) |
+| 4 | snake | 한 손 | 269 |
+| 5 | gangnamStyle | 한 손 | 142 |
+| 6 | mouse | 한 손 | 162 |
+| 7 | Horse | 양손 조합 | 41 |
+| 8 | cow | 양손 조합 | 100 |
+| 9 | rabbit | 양손 조합 | 102 |
+
+"양손 조합"은 두 손이 다 화면에 잡혀야만 판정/수집되는 클래스(`app.py`의 `COMBO_CLASS_IDS`).
+라벨 이름은 `model/keypoint_classifier/keypoint_classifier_label.csv`가 원본이며, 이 표는 그걸 보기
+좋게 옮겨 적은 것이라 라벨을 바꾸면 이 표도 같이 업데이트해야 한다.
+
 # hand-gesture-recognition-using-mediapipe
 Estimate hand pose using MediaPipe (Python version).<br> This is a sample 
 program that recognizes hand signs and finger gestures with a simple MLP using the detected key points.

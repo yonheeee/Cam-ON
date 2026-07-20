@@ -14,11 +14,16 @@ import mediapipe as mp
 
 from utils import CvFpsCalc
 from utils import SkillEffect
+from utils import HandLandmarkSmoother
 from model import KeyPointClassifier
 from model import PointHistoryClassifier
 
-# 이 라벨과 일치하는 손모양이 인식되면 스킬 이펙트가 발동합니다
-SKILL_EFFECT_LABELS = {'OK', 'V', 'Thumbs Up', 'Rock', 'Horse'}
+# 한 손만으로 이 라벨이 인식되면 스킬 이펙트가 발동합니다
+SKILL_EFFECT_LABELS = {'OK', 'snake', 'gangnamStyle', 'mouse'}
+# 이 라벨들은 양손을 맞춰야 나오는 조합 포즈라, 양손이 다 잡혔을 때만 판정/발동합니다
+COMBO_SKILL_EFFECT_LABELS = {'Horse', 'cow', 'rabbit'}
+# keypoint_classifier_label.csv 기준 조합 전용 클래스 id (Horse=7, cow=8, rabbit=9)
+COMBO_CLASS_IDS = {7, 8, 9}
 
 
 def get_args():
@@ -116,6 +121,10 @@ def main():
     # Skill effect (particle burst on trigger gestures) #####################
     skill_effect = SkillEffect()
     previous_hand_sign = {'Left': None, 'Right': None}
+    previous_combo_sign = None
+
+    # 손가락/손이 겹쳐서 검출이 흔들릴 때 좌표 떨림을 줄이는 1€ 필터
+    landmark_smoother = HandLandmarkSmoother(min_cutoff=1.0, beta=0.3)
 
     #  ########################################################################
     mode = 0
@@ -144,6 +153,7 @@ def main():
         image.flags.writeable = True
 
         #  ####################################################################
+        preprocessed_by_hand = {'Left': None, 'Right': None}
         detected_hands = set()
         if results.multi_hand_landmarks is not None:
             for hand_landmarks, handedness in zip(results.multi_hand_landmarks,
@@ -155,18 +165,27 @@ def main():
                 brect = calc_bounding_rect(debug_image, hand_landmarks)
                 # Landmark calculation
                 landmark_list = calc_landmark_list(debug_image, hand_landmarks)
+                # 겹침으로 인한 좌표 떨림 완화
+                landmark_list = landmark_smoother.smooth(
+                    hand_label, landmark_list, time.time())
 
                 # Conversion to relative coordinates / normalized coordinates
                 pre_processed_landmark_list = pre_process_landmark(
                     landmark_list)
+                preprocessed_by_hand[hand_label] = pre_processed_landmark_list
                 pre_processed_point_history_list = pre_process_point_history(
                     debug_image, point_history[hand_label])
-                # Write to the dataset file
-                logging_csv(number, mode, pre_processed_landmark_list,
-                            pre_processed_point_history_list)
+                logging_csv_point_history(number, mode,
+                                          pre_processed_point_history_list)
 
-                # Hand sign classification
-                hand_sign_id = keypoint_classifier(pre_processed_landmark_list)
+                # Hand sign classification (한 손 기준: 뒤 42칸은 0으로 채운 84차원 입력)
+                padded_landmark_list = pre_processed_landmark_list + [0.0] * 42
+                # 조합 전용 클래스(horse/cow/rabbit)는 양손이 다 잡혔을 때만 수집한다 —
+                # 여기서 로그하면 한 손짜리 데이터로 그 클래스를 오염시키게 됨
+                if number not in COMBO_CLASS_IDS:
+                    logging_csv_keypoint(number, mode, padded_landmark_list)
+
+                hand_sign_id = keypoint_classifier(padded_landmark_list)
                 if hand_sign_id == 2:  # Point gesture
                     point_history[hand_label].append(landmark_list[8])
                 else:
@@ -191,11 +210,11 @@ def main():
                     debug_image,
                     brect,
                     handedness,
-                    keypoint_classifier_labels[hand_sign_id],
+                    "",
                     point_history_classifier_labels[most_common_fg_id[0][0]],
                 )
 
-                # Skill effect: 트리거 손모양으로 "새로" 바뀐 순간에만 파티클 발동
+                # Skill effect: 한 손 트리거 손모양이 "새로" 바뀐 순간에만 파티클 발동
                 hand_sign_label = keypoint_classifier_labels[hand_sign_id]
                 if (hand_sign_label in SKILL_EFFECT_LABELS
                         and previous_hand_sign[hand_label] != hand_sign_label):
@@ -208,6 +227,32 @@ def main():
             if hand_label not in detected_hands:
                 point_history[hand_label].append([0, 0])
                 previous_hand_sign[hand_label] = None
+                landmark_smoother.reset(hand_label)
+
+        # 양손 조합 판정 (horse/cow/rabbit처럼 두 손을 맞춰야 하는 포즈)
+        both_hands_detected = detected_hands == {'Left', 'Right'}
+        if both_hands_detected:
+            combined_landmark_list = combine_two_hand_landmarks(preprocessed_by_hand)
+
+            if number in COMBO_CLASS_IDS:
+                logging_csv_keypoint(number, mode, combined_landmark_list)
+
+            combo_sign_id = keypoint_classifier(combined_landmark_list)
+            combo_sign_label = keypoint_classifier_labels[combo_sign_id]
+
+            cv.putText(debug_image, "SIGN:" + combo_sign_label, (10, 140),
+                       cv.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 0), 4, cv.LINE_AA)
+            cv.putText(debug_image, "SIGN:" + combo_sign_label, (10, 140),
+                       cv.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 2,
+                       cv.LINE_AA)
+
+            if (combo_sign_label in COMBO_SKILL_EFFECT_LABELS
+                    and previous_combo_sign != combo_sign_label):
+                skill_effect.spawn(
+                    (debug_image.shape[1] // 2, debug_image.shape[0] // 2))
+            previous_combo_sign = combo_sign_label
+        else:
+            previous_combo_sign = None
 
         debug_image = draw_point_history(debug_image, point_history['Left'])
         debug_image = draw_point_history(debug_image, point_history['Right'])
@@ -295,6 +340,18 @@ def pre_process_landmark(landmark_list):
     return temp_landmark_list
 
 
+def combine_two_hand_landmarks(preprocessed_by_hand):
+    # 양손이 다 보이면 Left->Right 순서로 이어붙여 "조합 포즈"(horse/cow/rabbit)로 취급.
+    # 한 손만 보이면 어느 손인지 상관없이 앞쪽 42칸에 채우고 뒤 42칸은 0으로 채운다 —
+    # 기존 Open~Rock 학습 데이터가 손 구분 없이 모아진 것과 형식을 맞추기 위함.
+    left = preprocessed_by_hand.get('Left')
+    right = preprocessed_by_hand.get('Right')
+    if left is not None and right is not None:
+        return left + right
+    one_hand = left if left is not None else right
+    return one_hand + [0.0] * 42
+
+
 def pre_process_point_history(image, point_history):
     image_width, image_height = image.shape[1], image.shape[0]
 
@@ -318,20 +375,20 @@ def pre_process_point_history(image, point_history):
     return temp_point_history
 
 
-def logging_csv(number, mode, landmark_list, point_history_list):
-    if mode == 0:
-        pass
+def logging_csv_keypoint(number, mode, landmark_list):
     if mode == 1 and (0 <= number <= 9):
         csv_path = 'model/keypoint_classifier/keypoint.csv'
         with open(csv_path, 'a', newline="") as f:
             writer = csv.writer(f)
             writer.writerow([number, *landmark_list])
+
+
+def logging_csv_point_history(number, mode, point_history_list):
     if mode == 2 and (0 <= number <= 9):
         csv_path = 'model/point_history_classifier/point_history.csv'
         with open(csv_path, 'a', newline="") as f:
             writer = csv.writer(f)
             writer.writerow([number, *point_history_list])
-    return
 
 
 def draw_landmarks(image, landmark_point):
