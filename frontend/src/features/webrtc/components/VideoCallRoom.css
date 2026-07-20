@@ -1,0 +1,20 @@
+.video-call-room--join {
+  max-width: 480px;
+  margin: 4rem auto;
+  text-align: center;
+}
+
+.video-call-room--join form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  text-align: left;
+}
+
+.video-call-room--join label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.9rem;
+}

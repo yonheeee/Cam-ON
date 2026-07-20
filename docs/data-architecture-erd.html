@@ -1,0 +1,1364 @@
+<title>PLAIGROUND — 아키텍처 지도</title>
+<style>
+  :root {
+    --bg: #eef1f5;
+    --grid-line: rgba(27, 35, 46, 0.055);
+    --surface: #ffffff;
+    --ink: #1b232e;
+    --muted: #5c6675;
+    --mysql: #3355d8;
+    --mysql-soft: #e8ecfb;
+    --mysql-border: #c3cdf5;
+    --redis: #d24e29;
+    --redis-soft: #fbe9e1;
+    --redis-border: #f0c4ae;
+    --ref-line: #7a6bd0;
+    --line-base: #d7dbe3;
+    --shadow: rgba(20, 26, 34, 0.10);
+    --ok: #2f9e5c;
+    --ok-soft: #e4f5ea;
+    --fail: #d1394a;
+    --fail-soft: #fbe6e8;
+    --ninja: #6a4fc2;
+    --ninja-soft: #ece8fa;
+    --fetch: #1b8f7a;
+    --fetch-soft: #e2f4f0;
+    --charades: #c23b8a;
+    --charades-soft: #fae5f1;
+    --ai: #b07600;
+    --ai-soft: #f7ecd6;
+    --ai-border: #e6c98a;
+    --app: #157a8c;
+    --app-soft: #e0f2f4;
+    --app-border: #a9d9e0;
+    --mono: ui-monospace, "Cascadia Code", "SF Mono", Consolas, "Liberation Mono", monospace;
+    --sans: -apple-system, "Segoe UI", Pretendard, Roboto, "Noto Sans KR", sans-serif;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12151a;
+      --grid-line: rgba(255, 255, 255, 0.045);
+      --surface: #1b2027;
+      --ink: #e7ebf0;
+      --muted: #93a0ad;
+      --mysql: #85a0ff;
+      --mysql-soft: #1c2440;
+      --mysql-border: #37417c;
+      --redis: #ff8f68;
+      --redis-soft: #3a2119;
+      --redis-border: #6d3826;
+      --ref-line: #ab9df2;
+      --line-base: #333c47;
+      --shadow: rgba(0, 0, 0, 0.45);
+      --ok: #4cbb7d;
+      --ok-soft: #163828;
+      --fail: #e8636f;
+      --fail-soft: #3a1c20;
+      --ninja: #a695f0;
+      --ninja-soft: #292352;
+      --fetch: #4fd3b8;
+      --fetch-soft: #133a33;
+      --charades: #ec7cc0;
+      --charades-soft: #3c2032;
+      --ai: #e3b25c;
+      --ai-soft: #3a2f16;
+      --ai-border: #6b552a;
+      --app: #5fd0e3;
+      --app-soft: #113238;
+      --app-border: #2a5a63;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #12151a;
+    --grid-line: rgba(255, 255, 255, 0.045);
+    --surface: #1b2027;
+    --ink: #e7ebf0;
+    --muted: #93a0ad;
+    --mysql: #85a0ff;
+    --mysql-soft: #1c2440;
+    --mysql-border: #37417c;
+    --redis: #ff8f68;
+    --redis-soft: #3a2119;
+    --redis-border: #6d3826;
+    --ref-line: #ab9df2;
+    --line-base: #333c47;
+    --shadow: rgba(0, 0, 0, 0.45);
+    --ok: #4cbb7d;
+    --ok-soft: #163828;
+    --fail: #e8636f;
+    --fail-soft: #3a1c20;
+    --ninja: #a695f0;
+    --ninja-soft: #292352;
+    --fetch: #4fd3b8;
+    --fetch-soft: #133a33;
+    --charades: #ec7cc0;
+    --charades-soft: #3c2032;
+    --ai: #e3b25c;
+    --ai-soft: #3a2f16;
+    --ai-border: #6b552a;
+    --app: #5fd0e3;
+    --app-soft: #113238;
+    --app-border: #2a5a63;
+  }
+  :root[data-theme="light"] {
+    --bg: #eef1f5;
+    --grid-line: rgba(27, 35, 46, 0.055);
+    --surface: #ffffff;
+    --ink: #1b232e;
+    --muted: #5c6675;
+    --mysql: #3355d8;
+    --mysql-soft: #e8ecfb;
+    --mysql-border: #c3cdf5;
+    --redis: #d24e29;
+    --redis-soft: #fbe9e1;
+    --redis-border: #f0c4ae;
+    --ref-line: #7a6bd0;
+    --line-base: #d7dbe3;
+    --shadow: rgba(20, 26, 34, 0.10);
+    --ok: #2f9e5c;
+    --ok-soft: #e4f5ea;
+    --fail: #d1394a;
+    --fail-soft: #fbe6e8;
+    --ninja: #6a4fc2;
+    --ninja-soft: #ece8fa;
+    --fetch: #1b8f7a;
+    --fetch-soft: #e2f4f0;
+    --charades: #c23b8a;
+    --charades-soft: #fae5f1;
+    --ai: #b07600;
+    --ai-soft: #f7ecd6;
+    --ai-border: #e6c98a;
+    --app: #157a8c;
+    --app-soft: #e0f2f4;
+    --app-border: #a9d9e0;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background:
+      repeating-linear-gradient(0deg, var(--grid-line) 0 1px, transparent 1px 32px),
+      repeating-linear-gradient(90deg, var(--grid-line) 0 1px, transparent 1px 32px),
+      var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    line-height: 1.55;
+  }
+
+  .page {
+    max-width: 1440px;
+    margin: 0 auto;
+    padding: 40px 24px 64px;
+  }
+
+  .masthead { margin-bottom: 28px; }
+
+  .eyebrow {
+    margin: 0 0 8px;
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  h1 {
+    margin: 0 0 10px;
+    font-size: clamp(24px, 3.4vw, 32px);
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    text-wrap: balance;
+  }
+
+  .lede {
+    margin: 0 0 20px;
+    max-width: 62ch;
+    color: var(--muted);
+    font-size: 15px;
+  }
+
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 20px;
+    align-items: center;
+    padding: 12px 16px;
+    border: 1px solid var(--line-base);
+    border-radius: 10px;
+    background: var(--surface);
+    font-size: 13px;
+    color: var(--muted);
+  }
+
+  .legend-item { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+
+  .swatch { width: 12px; height: 12px; border-radius: 3px; flex: none; }
+  .swatch-mysql { background: var(--mysql); }
+  .swatch-redis { background: var(--redis); }
+
+  .line-sample { width: 24px; height: 2px; flex: none; background: var(--ink); opacity: 0.6; }
+  .line-ref { background: var(--ref-line); background-image: repeating-linear-gradient(90deg, var(--ref-line) 0 5px, transparent 5px 9px); }
+
+  .legend-spacer { flex: 1; }
+
+  .reset-btn {
+    appearance: none;
+    border: 1px solid var(--line-base);
+    background: var(--surface);
+    color: var(--ink);
+    font: inherit;
+    font-size: 13px;
+    padding: 6px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+  }
+  .reset-btn:hover { border-color: var(--muted); }
+  .reset-btn:focus-visible { outline: 2px solid var(--ref-line); outline-offset: 2px; }
+
+  .filter-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-top: 10px;
+    font-size: 13px;
+  }
+  .filter-label { color: var(--muted); margin-right: 4px; }
+
+  .filter-btn {
+    appearance: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border: 1px solid var(--line-base);
+    background: var(--surface);
+    color: var(--muted);
+    font: inherit;
+    font-size: 12.5px;
+    padding: 5px 12px;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+  }
+  .filter-btn:hover { color: var(--ink); border-color: var(--muted); }
+  .filter-btn:focus-visible { outline: 2px solid var(--ref-line); outline-offset: 2px; }
+  .filter-btn.is-on { color: var(--ink); border-color: var(--ink); font-weight: 600; }
+
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+  .dot-ninja { background: var(--ninja); }
+  .dot-fetch { background: var(--fetch); }
+  .dot-charades { background: var(--charades); }
+
+  .zoom-wrap {
+    overflow: auto;
+    border: 1px solid transparent;
+    border-radius: 14px;
+  }
+  .zoom-wrap:hover { border-color: var(--line-base); }
+
+  .canvas {
+    position: relative;
+    display: flex;
+    gap: 64px;
+    align-items: flex-start;
+    padding: 28px 8px 8px;
+    transform-origin: 0 0;
+  }
+
+  .zoom-indicator {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--muted);
+    white-space: nowrap;
+    min-width: 6ch;
+  }
+
+  .connectors {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    overflow: visible;
+  }
+
+  .edge {
+    fill: none;
+    stroke: var(--muted);
+    stroke-width: 2;
+    opacity: 0;
+    transition: stroke 0.15s ease, stroke-width 0.15s ease, opacity 0.15s ease;
+  }
+  .edge-ref { stroke-dasharray: 2 6; stroke-linecap: round; }
+  .arrow-own, .arrow-ref, .arrow-call { fill: var(--muted); }
+  .edge.is-active.edge-own { stroke: var(--redis); stroke-width: 2.4; opacity: 1; }
+  .edge.is-active.edge-ref { stroke: var(--ref-line); stroke-width: 2.2; opacity: 1; }
+  .edge.is-active.edge-call { stroke: var(--ref-line); stroke-width: 2.4; opacity: 1; }
+  .edge.is-dim { opacity: 0; }
+
+  .col { display: flex; flex-direction: column; gap: 28px; position: relative; z-index: 1; }
+  .col-mysql { width: 240px; flex: none; }
+  .col-redis-main { flex: 1 1 360px; min-width: 300px; max-width: 440px; }
+  .col-redis-util { width: 200px; flex: none; }
+  .col-redis-special { width: 230px; flex: none; }
+
+  .special-group { display: flex; flex-direction: column; gap: 18px; padding: 14px; border-radius: 12px; border: 1px dashed var(--line-base); }
+  .special-group-label { display: flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 11px; color: var(--muted); }
+
+  .tag-game {
+    font-family: var(--mono);
+    font-size: 9.5px;
+    letter-spacing: 0.04em;
+    padding: 2px 6px;
+    border-radius: 5px;
+    flex: none;
+  }
+  .tag-ninja { background: var(--ninja-soft); color: var(--ninja); }
+  .tag-fetch { background: var(--fetch-soft); color: var(--fetch); }
+  .tag-charades { background: var(--charades-soft); color: var(--charades); }
+  .tag-ai { background: var(--ai-soft); color: var(--ai); }
+  .tag-app { background: var(--app-soft); color: var(--app); }
+  .tag-client { background: var(--line-base); color: var(--muted); }
+
+  .card-ai { border-left: 3px solid var(--ai-border); }
+  .card-ai.is-active { border-left-color: var(--ai); }
+  .card-app { border-left: 3px solid var(--app-border); }
+  .card-app.is-active { border-left-color: var(--app); }
+  .card-client { border-left: 3px dashed var(--muted); }
+  .card-client.is-active { border-left-color: var(--ink); border-left-style: dashed; }
+
+  .sys-canvas .col { width: 100%; }
+  .sys-canvas { justify-content: space-between; }
+  .sys-mid { flex: none; width: 260px; display: flex; flex-direction: column; gap: 16px; }
+  .sys-side { flex: none; width: 220px; display: flex; flex-direction: column; gap: 16px; justify-content: center; }
+
+  .section-divider {
+    margin: 44px 0 28px;
+    padding-top: 24px;
+    border-top: 1px solid var(--line-base);
+  }
+  .section-divider h2 {
+    margin: 0 0 8px;
+    font-size: clamp(20px, 2.6vw, 26px);
+    letter-spacing: -0.01em;
+    text-wrap: balance;
+  }
+  .section-divider p { margin: 0; max-width: 62ch; color: var(--muted); font-size: 14px; }
+
+  .card.is-filtered-out { display: none; }
+
+  .example-table { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 8px; }
+  .example-table caption { text-align: left; font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+  .example-table th, .example-table td { text-align: left; padding: 3px 6px; border-top: 1px solid var(--line-base); }
+  .example-table th { font-family: var(--mono); color: var(--muted); font-weight: 500; }
+  .example-table td { font-family: var(--mono); }
+
+  .col-label {
+    margin: 0 0 2px;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .col-label .col-sub { text-transform: none; letter-spacing: 0; opacity: 0.8; margin-left: 6px; }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line-base);
+    border-radius: 12px;
+    padding: 14px 16px;
+    cursor: pointer;
+    box-shadow: 0 1px 2px var(--shadow);
+    transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
+  }
+  .card:hover { transform: translateY(-1px); box-shadow: 0 6px 16px var(--shadow); }
+  .card:focus-visible { outline: 2px solid var(--ref-line); outline-offset: 2px; }
+
+  .card-mysql { border-left: 3px solid var(--mysql-border); }
+  .card-redis { border-left: 3px solid var(--redis-border); }
+
+  .card.is-active { border-color: currentColor; box-shadow: 0 8px 20px var(--shadow); }
+  .card-mysql.is-active { border-left-color: var(--mysql); }
+  .card-redis.is-active { border-left-color: var(--redis); }
+  .card.is-dim { opacity: 0.35; }
+
+  .card-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+
+  .tag {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    padding: 2px 6px;
+    border-radius: 5px;
+    flex: none;
+  }
+  .tag-mysql { background: var(--mysql-soft); color: var(--mysql); }
+  .tag-redis { background: var(--redis-soft); color: var(--redis); }
+
+  .card h3 {
+    margin: 0;
+    font-family: var(--mono);
+    font-size: 14px;
+    font-weight: 600;
+    word-break: break-all;
+  }
+
+  .card-desc { margin: 0; font-size: 12.5px; color: var(--muted); }
+
+  .card-detail { margin-top: 10px; }
+
+  .field-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .field-table th, .field-table td {
+    text-align: left;
+    padding: 4px 6px;
+    border-top: 1px solid var(--line-base);
+    font-family: var(--mono);
+  }
+  .field-table th { color: var(--muted); font-weight: 500; }
+  .field-table td.note-cell { font-family: var(--sans); color: var(--muted); }
+
+  .note {
+    margin: 8px 0 0;
+    font-size: 12px;
+    color: var(--muted);
+    padding-top: 8px;
+    border-top: 1px dashed var(--line-base);
+  }
+
+  .role-list { margin: 0; padding-left: 18px; font-size: 12.5px; color: var(--ink); display: flex; flex-direction: column; gap: 5px; }
+  .role-list li { padding-left: 2px; }
+
+  .hb-explain { margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--line-base); }
+  .hb-explain p { margin: 0 0 12px; font-size: 12px; color: var(--muted); }
+
+  .hb-timeline { display: flex; flex-direction: column; gap: 10px; }
+
+  .hb-row { display: grid; grid-template-columns: 30px 1fr auto; align-items: center; gap: 10px; }
+  .hb-row-label { font-family: var(--mono); font-size: 10px; color: var(--muted); }
+
+  .hb-track {
+    position: relative;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .hb-track::before {
+    content: "";
+    position: absolute;
+    left: 2px; right: 2px; top: 50%;
+    height: 2px;
+    background: var(--line-base);
+    transform: translateY(-50%);
+  }
+  .hb-track.hb-dead::before {
+    background-image: repeating-linear-gradient(90deg, var(--line-base) 0 4px, transparent 4px 8px);
+    background-color: transparent;
+  }
+
+  .hb-tick {
+    position: relative;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--ok);
+    box-shadow: 0 0 0 3px var(--ok-soft);
+  }
+  .hb-tick.hb-fail-tick { background: var(--fail); box-shadow: 0 0 0 3px var(--fail-soft); }
+
+  .hb-row-status { font-size: 11px; font-weight: 600; white-space: nowrap; }
+  .hb-ok-text { color: var(--ok); }
+  .hb-fail-text { color: var(--fail); }
+
+  .card-util { padding: 10px 14px; }
+  .card-util h3 { font-size: 12.5px; }
+
+  .foot {
+    margin-top: 32px;
+    padding-top: 16px;
+    border-top: 1px solid var(--line-base);
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .foot code { font-family: var(--mono); background: var(--surface); padding: 1px 5px; border-radius: 4px; }
+
+  @media (max-width: 860px) {
+    .canvas { flex-direction: column; }
+    .col-mysql, .col-redis-util, .col-redis-special, .sys-mid, .sys-side { width: 100%; }
+    .connectors { display: none; }
+    .card { cursor: default; }
+    .card:hover { transform: none; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition-duration: 0.001ms !important; }
+  }
+</style>
+
+<div class="page">
+  <header class="masthead">
+    <p class="eyebrow">System Architecture</p>
+    <h1>PLAIGROUND — 시스템 아키텍처</h1>
+    <p class="lede">
+      Frontend가 AI 서버와 Spring 서버를 각각 직접 호출하며 중간에서 데이터를 이어준다. AI 서버는 손동작/객체 인식만 하고 게임 상태는 모르며,
+      Spring 서버는 게임 상태만 관리하고 인식 로직은 모른다 — 두 서버는 서로 직접 통신하지 않는다.
+      모든 필드가 카드에 바로 보이고, 연결선은 평소엔 숨어있다가 마우스를 올리거나 클릭한 카드의 관계만 나타난다. 다이어그램 위에서 Ctrl(또는 ⌘)+스크롤(트랙패드 핀치도 가능)로 확대/축소.
+    </p>
+    <div class="legend">
+      <span class="legend-item"><span class="swatch" style="background: var(--ai)"></span>AI 서버</span>
+      <span class="legend-item"><span class="swatch" style="background: var(--app)"></span>Spring 서버</span>
+      <span class="legend-item"><span class="swatch swatch-mysql"></span>MySQL</span>
+      <span class="legend-item"><span class="swatch swatch-redis"></span>Redis</span>
+      <span class="legend-item"><span class="line-sample"></span>호출 / 데이터 흐름</span>
+      <span class="legend-spacer"></span>
+      <span class="zoom-indicator" id="sysZoomIndicator">확대 100%</span>
+      <button class="reset-btn" id="sysZoomReset" type="button">확대 초기화</button>
+    </div>
+  </header>
+
+  <div class="zoom-wrap" id="sysZoomWrap">
+  <div class="canvas sys-canvas" id="sysCanvas">
+    <svg class="connectors" id="sysConnectors" aria-hidden="true"></svg>
+
+    <div class="sys-side">
+      <p class="col-label">Client</p>
+      <article class="card card-client" data-snode="frontend" tabindex="0" role="button">
+        <div class="card-head"><span class="tag tag-client">CLIENT</span><h3>Frontend</h3></div>
+        <p class="card-desc">참가자 화면 (브라우저)</p>
+        <div class="card-detail"><div>
+          <ul class="role-list">
+            <li>방 생성/입장, 카메라·마이크 권한, 준비 상태 체크</li>
+            <li>참가자 간 화상통화 (WebRTC — 이 다이어그램엔 별도로 안 그림)</li>
+            <li>AI 서버에 인식 요청(프레임/랜드마크) 보내고 판정 응답 받기</li>
+            <li>Spring 서버와 STOMP로 방/게임 상태 실시간 동기화</li>
+            <li>AI 판정 결과를 Spring에 전달해 Redis에 반영되게 함 — 두 서버 사이 유일한 다리</li>
+          </ul>
+        </div></div>
+      </article>
+    </div>
+
+    <div class="sys-mid">
+      <p class="col-label">Backend</p>
+      <article class="card card-ai" data-snode="ai" tabindex="0" role="button">
+        <div class="card-head"><span class="tag tag-ai">AI</span><h3>AI 서버</h3></div>
+        <p class="card-desc">손동작·객체 인식 (Python)</p>
+        <div class="card-detail"><div>
+          <ul class="role-list">
+            <li>MediaPipe로 랜드마크 추출 → 분류기로 판정</li>
+            <li>물건 인식은 순수 분류만 하고 정답 여부는 모름, 손동작은 콤보 완성 여부까지 판정</li>
+            <li>detected_value/confidence(물건 가져오기), 완성된 스킬(손동작 스킬 배틀)을 Frontend에 응답</li>
+          </ul>
+          <p class="note">게임 로직·방 상태는 전혀 모름. 상태 없는(stateless) 순수 추론 서비스. MySQL도 직접 조회하지 않음 — 미션/제시어는 Spring이 관리.</p>
+        </div></div>
+      </article>
+
+      <article class="card card-app" data-snode="spring" tabindex="0" role="button">
+        <div class="card-head"><span class="tag tag-app">APP</span><h3>Spring 서버</h3></div>
+        <p class="card-desc">게임 로직 · 상태 관리 (Java)</p>
+        <div class="card-detail"><div>
+          <ul class="role-list">
+            <li>방 생성/입장/퇴장, 방장 위임, 준비 상태 판정</li>
+            <li>STOMP로 참가자에게 실시간 상태 브로드캐스트</li>
+            <li>Redis 읽기/쓰기 (room/session/round/results 등), MySQL games/missions 조회</li>
+            <li>물건가져오기·몸으로말해요는 제출값을 직접 판정, 손동작 스킬 배틀은 Frontend가 중계한 AI 판정 결과를 라운드 결과에 반영</li>
+          </ul>
+          <p class="note">인식 로직엔 관여 안 함(원본 이미지·좌표는 AI가 처리). AI 서버를 직접 호출하지 않음.</p>
+        </div></div>
+      </article>
+    </div>
+
+    <div class="sys-side">
+      <p class="col-label">Data</p>
+      <article class="card card-mysql" data-snode="mysql" tabindex="0" role="button">
+        <div class="card-head"><span class="tag tag-mysql">MySQL</span><h3>games, missions</h3></div>
+        <p class="card-desc">정적 참조 데이터</p>
+        <div class="card-detail"><div>
+          <p class="note">Spring이 조회. 거의 안 바뀌는 데이터. AI 서버는 stateless라 DB에 직접 접속하지 않음.</p>
+        </div></div>
+      </article>
+
+      <article class="card card-redis" data-snode="redis" tabindex="0" role="button">
+        <div class="card-head"><span class="tag tag-redis">Redis</span><h3>room/session/round</h3></div>
+        <p class="card-desc">방 생명주기 데이터</p>
+        <div class="card-detail"><div>
+          <p class="note">Spring만 접근. 아래 "데이터 구조" 섹션에서 상세 스키마 확인 가능.</p>
+        </div></div>
+      </article>
+    </div>
+  </div>
+  </div>
+
+  <div class="section-divider">
+    <h2>데이터 구조 상세</h2>
+    <p>
+      위 다이어그램의 MySQL·Redis 박스를 확대한 버전. 정적 참조 데이터(게임 종류·미션)는 MySQL에, 방이 열려있는 동안만 존재하는
+      데이터(방·참가자·세션·라운드)는 Redis에 둔다. 닌자·물건가져오기·몸으로말해요 세 게임은 공통 골격을 공유하고, 게임별로 다른
+      부분만 전용 구조를 따로 둔다.
+    </p>
+  </div>
+
+  <header class="masthead">
+    <p class="eyebrow">Data Architecture</p>
+    <h1> PLAIGROUND — 데이터 구조 지도</h1>
+    <p class="lede">
+      모든 필드가 카드에 바로 보이고, 연결선은 평소엔 숨어있다가 마우스를 올리거나 클릭한 카드의 관계만 나타난다. 다이어그램 위에서 Ctrl(또는 ⌘)+스크롤(트랙패드 핀치도 가능)로 확대/축소.
+    </p>
+    <div class="legend">
+      <span class="legend-item"><span class="swatch swatch-mysql"></span>MySQL — 영구 저장</span>
+      <span class="legend-item"><span class="swatch swatch-redis"></span>Redis — 방 종료 시 삭제</span>
+      <span class="legend-item"><span class="line-sample"></span>소유 (생성·삭제를 함께 함)</span>
+      <span class="legend-item"><span class="line-sample line-ref"></span>참조 (값으로만 연결, DB 제약 없음)</span>
+      <span class="legend-spacer"></span>
+      <span class="zoom-indicator" id="mainZoomIndicator">확대 100%</span>
+      <button class="reset-btn" id="mainZoomReset" type="button">확대 초기화</button>
+      <button class="reset-btn" id="resetBtn" type="button">전체 보기로 초기화</button>
+    </div>
+    <div class="filter-bar" id="filterBar">
+      <span class="filter-label">게임별 전용 구조 필터</span>
+      <button class="filter-btn is-on" data-filter="all" type="button">전체</button>
+      <button class="filter-btn" data-filter="ninja" type="button"><span class="dot dot-ninja"></span>닌자</button>
+      <button class="filter-btn" data-filter="fetch" type="button"><span class="dot dot-fetch"></span>물건가져오기</button>
+      <button class="filter-btn" data-filter="charades" type="button"><span class="dot dot-charades"></span>몸으로말해요</button>
+    </div>
+  </header>
+
+  <div class="zoom-wrap" id="mainZoomWrap">
+  <div class="canvas" id="canvas">
+    <svg class="connectors" id="connectors" aria-hidden="true"></svg>
+
+    <div class="col col-mysql">
+      <p class="col-label">MySQL <span class="col-sub">영구 저장</span></p>
+
+      <article class="card card-mysql" data-node="games" tabindex="0" role="button">
+        <div class="card-head"><span class="tag tag-mysql">TABLE</span><h3>games</h3></div>
+        <p class="card-desc">관리자가 등록하는 게임 목록</p>
+        <div class="card-detail"><div>
+          <table class="field-table">
+            <tr><th>game_id</th><td>PK</td></tr>
+            <tr><th>name</th><td>varchar, unique</td></tr>
+            <tr><th>description</th><td>text</td></tr>
+            <tr><th>min/max_players</th><td>int</td></tr>
+            <tr><th>min/max_rounds</th><td>int, null 가능</td></tr>
+            <tr><th>is_active</th><td>tinyint</td></tr>
+          </table>
+          <table class="example-table">
+            <caption>예시 데이터</caption>
+            <tr><th>name</th><th>인원</th><th>라운드</th></tr>
+            <tr><td>NINJA</td><td>2~4</td><td>3~10</td></tr>
+            <tr><td>FETCH_OBJECT</td><td>2~4</td><td>(참여자 수)~10</td></tr>
+            <tr><td>CHARADES</td><td>3~4</td><td>3~10</td></tr>
+          </table>
+          <p class="note">
+            게임 종류 자체에 대한 정의/설명 카탈로그다 — 특정 방에서 몇 번째로 어떤 게임을 하는지(순서)는 이 테이블이 아니라
+            room:{code}:course:{idx}가 담당한다. name 하나로 식별자와 표시값을 겸하므로(예: "NINJA") 값이 바뀌면 이 이름에 의존하는
+            로직도 함께 깨진다는 점은 감수. is_active는 삭제 대신 두는 노출 토글이다 — 0이면 대기방 코스 설정 화면의 선택 목록에서만
+            빠지고(=지금 체험 불가), row 자체는 남는다. 이미 만들어진 방의 course/session이 game_id를 값으로만(DB 제약 없이) 참조하고
+            있어서, row를 진짜로 지우면 그 참조가 끊기기 때문. min_rounds가 NULL이면 "참여자 수"로 앱이 계산(물건가져오기).
+          </p>
+        </div></div>
+      </article>
+
+      <article class="card card-mysql" data-node="missions" tabindex="0" role="button">
+        <div class="card-head"><span class="tag tag-mysql">TABLE</span><h3>missions</h3></div>
+        <p class="card-desc">게임별 미션(제시어/정답)</p>
+        <div class="card-detail"><div>
+          <table class="field-table">
+            <tr><th>mission_id</th><td>PK</td></tr>
+            <tr><th>game_id</th><td>FK</td></tr>
+            <tr><th>mission_type</th><td>varchar</td></tr>
+            <tr><th>keyword</th><td>varchar, null 가능</td></tr>
+            <tr><th>target_label</th><td>varchar, null 가능</td></tr>
+            <tr><th>difficulty</th><td>varchar</td></tr>
+            <tr><th>is_active</th><td>tinyint</td></tr>
+          </table>
+          <table class="example-table">
+            <caption>예시 데이터</caption>
+            <tr><th>mission_type</th><th>keyword</th><th>target_label</th></tr>
+            <tr><td>HAND_POSE</td><td>—</td><td>V, Rock, Horse</td></tr>
+            <tr><td>OBJECT</td><td>가위</td><td>scissors</td></tr>
+            <tr><td>CHARADES</td><td>코끼리</td><td>—</td></tr>
+          </table>
+          <p class="note">
+            이 테이블은 Spring만 조회한다 — AI 서버는 stateless라 missions에 직접 접근하지 않고, 정답 판정은 전부 Spring이 한다.
+            OBJECT(물건가져오기)는 Spring이 target_label을 AI가 응답한 detected_value와 비교해서 판정, CHARADES(몸으로말해요)는
+            AI 인식 자체가 없어 Spring이 keyword를 채팅과 문자열 비교. HAND_POSE(닌자)는 실제 콤보 판정엔 안 쓰이고
+            skill_gesture 쪽 데이터가 그 역할을 대신함(아래 skill_gesture 카드 참고) — 남아있지만 용도가 애매한 타입.
+            round:{n}이 mission_id로 참조.
+          </p>
+        </div></div>
+      </article>
+
+      <article class="card card-mysql" data-node="gesture" data-game="ninja" tabindex="0" role="button">
+        <div class="card-head"><span class="tag tag-mysql">TABLE</span><span class="tag-game tag-ninja">NINJA</span><h3>gesture</h3></div>
+        <p class="card-desc">인식 가능한 개별 손동작</p>
+        <div class="card-detail"><div>
+          <table class="field-table">
+            <tr><th>id</th><td>PK</td></tr>
+            <tr><th>name</th><td>varchar, unique</td></tr>
+            <tr><th>label_kr</th><td>varchar</td></tr>
+          </table>
+          <table class="example-table">
+            <caption>예시 데이터</caption>
+            <tr><th>id</th><th>name</th><th>label_kr</th></tr>
+            <tr><td>1</td><td>OK</td><td>오케이</td></tr>
+            <tr><td>2</td><td>V</td><td>브이</td></tr>
+            <tr><td>3</td><td>Thumbs Up</td><td>따봉</td></tr>
+            <tr><td>4</td><td>Rock</td><td>바위</td></tr>
+            <tr><td>5</td><td>Horse</td><td>말</td></tr>
+          </table>
+          <p class="note">
+            name은 keypoint_classifier_label.csv의 분류기 출력 라벨과 정확히 같은 문자열이어야 함 — AI 서버 판정 결과와 이 테이블을 매칭하는 키.
+            label_kr은 그 값과 분리된 화면 표시용 한글명. skill_gesture가 id를 참조.
+          </p>
+        </div></div>
+      </article>
+
+      <article class="card card-mysql" data-node="effect" data-game="ninja" tabindex="0" role="button">
+        <div class="card-head"><span class="tag tag-mysql">TABLE</span><span class="tag-game tag-ninja">NINJA</span><h3>effect</h3></div>
+        <p class="card-desc">스킬 발동 시 터지는 파티클 이펙트</p>
+        <div class="card-detail"><div>
+          <table class="field-table">
+            <tr><th>id</th><td>PK</td></tr>
+            <tr><th>name</th><td>varchar</td></tr>
+            <tr><th>color</th><td>varchar(7), hex</td></tr>
+            <tr><th>particle_count</th><td>int</td></tr>
+            <tr><th>life</th><td>int, 프레임 수</td></tr>
+            <tr><th>radius_min / radius_max</th><td>int</td></tr>
+            <tr><th>speed_min / speed_max</th><td>int</td></tr>
+          </table>
+          <table class="example-table">
+            <caption>예시 데이터</caption>
+            <tr><th>id</th><th>name</th><th>color</th><th>count</th><th>life</th></tr>
+            <tr><td>1</td><td>골드 버스트</td><td>#ffd700</td><td>28</td><td>20</td></tr>
+            <tr><td>2</td><td>파이어 스파크</td><td>#ff6a00</td><td>40</td><td>25</td></tr>
+          </table>
+          <p class="note">
+            컬럼이 utils/skill_effect.py의 SkillEffect.__init__(life, particle_count, radius_range, speed_range) 파라미터와 1:1로 대응.
+            radius/speed는 "2-5"처럼 문자열 범위로 저장하지 않고 min/max를 분리 — VARCHAR 하나에 범위를 넣으면 gesture 콤보와 똑같은 파싱 모호성이 생김.
+            여러 스킬이 같은 이펙트를 공유할 수 있어 skill과는 다대일 관계(skill.effect_id → effect.id).
+          </p>
+        </div></div>
+      </article>
+
+      <article class="card card-mysql" data-node="skill" data-game="ninja" tabindex="0" role="button">
+        <div class="card-head"><span class="tag tag-mysql">TABLE</span><span class="tag-game tag-ninja">NINJA</span><h3>skill</h3></div>
+        <p class="card-desc">손동작 조합으로 발동하는 스킬</p>
+        <div class="card-detail"><div>
+          <table class="field-table">
+            <tr><th>id</th><td>PK</td></tr>
+            <tr><th>name</th><td>varchar</td></tr>
+            <tr><th>skill_desc</th><td>varchar, null 가능</td></tr>
+            <tr><th>damage</th><td>int</td></tr>
+            <tr><th>effect_id</th><td>FK → effect.id</td></tr>
+          </table>
+          <table class="example-table">
+            <caption>예시 데이터</caption>
+            <tr><th>id</th><th>name</th><th>damage</th><th>effect_id</th></tr>
+            <tr><td>1</td><td>파이어볼</td><td>30</td><td>2</td></tr>
+          </table>
+          <p class="note">
+            스킬을 이루는 손동작 목록/순서는 이 테이블에 안 두고 skill_gesture로 분리 — VARCHAR 한 칸에 gesture id를 이어붙이면(예: "12342")
+            1,23,42인지 12,3,42인지 자릿수 경계가 모호해져 파싱이 깨짐. 참고로 지금 Redis의 ...:round:{n}:attack은 attacker/target 토큰만 있는
+            이진(맞았다/안 맞았다) 구조라, damage를 실제 승패 판정에 쓰려면 그 쪽에도 피해량 누적용 필드가 추가로 필요함.
+          </p>
+        </div></div>
+      </article>
+
+      <article class="card card-mysql" data-node="skill_gesture" data-game="ninja" tabindex="0" role="button">
+        <div class="card-head"><span class="tag tag-mysql">TABLE</span><span class="tag-game tag-ninja">NINJA</span><h3>skill_gesture</h3></div>
+        <p class="card-desc">스킬 ↔ 손동작 순서 매핑</p>
+        <div class="card-detail"><div>
+          <table class="field-table">
+            <tr><th>skill_id</th><td>FK, PK 일부</td></tr>
+            <tr><th>gesture_id</th><td>FK</td></tr>
+            <tr><th>seq</th><td>PK 일부, 콤보 순서</td></tr>
+          </table>
+          <table class="example-table">
+            <caption>예시 데이터 — 파이어볼(id=1) = 바위→브이→오케이</caption>
+            <tr><th>skill_id</th><th>gesture_id</th><th>seq</th></tr>
+            <tr><td>1</td><td>4</td><td>1</td></tr>
+            <tr><td>1</td><td>2</td><td>2</td></tr>
+            <tr><td>1</td><td>1</td><td>3</td></tr>
+          </table>
+          <p class="note">PK(skill_id, seq)로 한 스킬 내 순서 중복을 막음. JOIN 한 번으로 "이 스킬이 몇 번째로 어떤 손동작을 요구하는지" 배열을 그대로 얻어 프론트가 forEach로만 렌더링하면 됨.</p>
+        </div></div>
+      </article>
+    </div>
+
+    <div class="col col-redis-main">
+      <p class="col-label">Redis <span class="col-sub">방 생명주기 (방 종료 시 전부 삭제)</span></p>
+
+      <article class="card card-redis" data-node="room" tabindex="0" role="button">
+        <div class="card-head"><span class="tag tag-redis">HASH</span><h3>room:{code}</h3></div>
+        <p class="card-desc">방 하나 = 키 하나</p>
+        <div class="card-detail"><div>
+          <table class="field-table">
+            <tr><th>host_token</th><td>현재 방장</td></tr>
+            <tr><th>title</th><td>방 제목</td></tr>
+            <tr><th>max_players</th><td>정원</td></tr>
+            <tr><th>course_length</th><td>이 방의 코스에 담긴 총 게임 수</td></tr>
+            <tr><th>current_session_seq</th><td>코스에서 진행 중인 위치(1부터)</td></tr>
+            <tr><th>created_at</th><td>생성 시각</td></tr>
+          </table>
+          <p class="note">room_code로 정확히 1개 조회 (GET room:ABC123). 대기방에서 방장이 코스를 확정하면 course_length가 정해짐. 한 게임이 끝나면 current_session_seq를 1 증가시켜 course의 다음 항목으로 세션을 새로 만듦 — course_length에 도달하면 종합 결과로 이동. 방 종료 시 관련 키 전부 삭제.</p>
+        </div></div>
+      </article>
+
+      <article class="card card-redis" data-node="course" tabindex="0" role="button">
+        <div class="card-head"><span class="tag tag-redis">HASH</span><h3>room:{code}:course:{idx}</h3></div>
+        <p class="card-desc">코스 한 칸 = 이 자리에 놓인 게임 + 라운드 수</p>
+        <div class="card-detail"><div>
+          <table class="field-table">
+            <tr><th>game_id</th><td>MySQL games 참조</td></tr>
+            <tr><th>round_count</th><td>이 게임에 배정된 라운드 수</td></tr>
+          </table>
+          <p class="note">
+            idx는 1..course_length. 대기방(COM05_CONFIG01)에서 방장이 게임 목록과 순서, 게임별 라운드 수를 한 번에 정하면 이 개수만큼 키가 만들어짐 —
+            round:{n} 패턴처럼 "몇 번째"를 키 이름에 그대로 박아서 순서를 표현. 세션이 시작될 때 session:{seq}가 course:{seq}를 읽어 game_id/round_count를 그대로 가져다 씀.
+            round_count는 games.min_rounds~max_rounds 범위 안에서만 설정 가능(애플리케이션이 검증).
+          </p>
+        </div></div>
+      </article>
+
+      <article class="card card-redis" data-node="participants" tabindex="0" role="button">
+        <div class="card-head"><span class="tag tag-redis">SET</span><h3>room:{code}:participants</h3></div>
+        <p class="card-desc">참가자 토큰 멤버십(순서 없음)</p>
+        <div class="card-detail"><div>
+          <table class="field-table">
+            <tr><th>member</th><td>guest token</td></tr>
+          </table>
+          <p class="note">
+            "이 방에 누가 있는지" 확인/순회용. 입장 순서는 각 participant:{token}.joined_at을 읽어 정렬해서 구함 —
+            인원이 최대 4명이라 정렬 비용은 무시 가능(별도 ZSET을 유지할 만큼의 이득이 없음). 방장 재접속 유예 초과 시
+            이 순서대로 다음 참가자에게 연쇄 위임.
+          </p>
+        </div></div>
+      </article>
+
+      <article class="card card-redis" data-node="participant" tabindex="0" role="button">
+        <div class="card-head"><span class="tag tag-redis">HASH</span><h3>room:{code}:participant:{token}</h3></div>
+        <p class="card-desc">참가자 1명 = 키 하나</p>
+        <div class="card-detail"><div>
+          <table class="field-table">
+            <tr><th>nickname</th><td>표시 닉네임</td></tr>
+            <tr><th>connection_status</th><td>연결 상태</td></tr>
+            <tr><th>ready</th><td>준비 완료 여부</td></tr>
+            <tr><th>joined_at</th><td>입장 시각(epoch) — 방장 위임 순서 계산용</td></tr>
+          </table>
+          <p class="note">ready는 "카메라 권한 완료 AND 인식 테스트 통과" 둘 다 만족해야 true. 전원 ready=true여야 게임 시작 가능. 닉네임 등록 시 이 방의 nicknames SET에 반영, 하트비트로 TTL 키 갱신.</p>
+        </div></div>
+      </article>
+
+      <article class="card card-redis" data-node="session" tabindex="0" role="button">
+        <div class="card-head"><span class="tag tag-redis">HASH</span><h3>room:{code}:session:{seq}</h3></div>
+        <p class="card-desc">이 방의 진행 중인 게임</p>
+        <div class="card-detail"><div>
+          <table class="field-table">
+            <tr><th>game_id</th><td>course:{seq}에서 그대로 복사</td></tr>
+            <tr><th>total_rounds</th><td>course:{seq}.round_count에서 그대로 복사</td></tr>
+            <tr><th>current_round</th><td>현재 라운드 번호</td></tr>
+          </table>
+          <p class="note">
+            seq는 이 방에서 몇 번째 게임인지(room:{code}.current_session_seq와 동일 값, course의 위치와 1:1 대응). 이전엔 방장이 그때그때
+            "다른 게임"을 골라 세션을 만들었지만, 이제는 코스가 대기방에서 미리 확정되므로 game_id/total_rounds를 course:{seq}에서 그대로 복사해와 세션을 엶.
+            별도 status 없이 이 키의 존재 자체가 "세션 진행 중"이고, current_round가 total_rounds에 도달하면 이 세션 종료 → current_session_seq 증가.
+            game_id는 값으로만 저장 — 존재 검증은 애플리케이션이 담당.
+          </p>
+        </div></div>
+      </article>
+
+      <article class="card card-redis" data-node="round" tabindex="0" role="button">
+        <div class="card-head"><span class="tag tag-redis">HASH</span><h3>...:session:{seq}:round:{n}</h3></div>
+        <p class="card-desc">라운드 하나 = 키 하나</p>
+        <div class="card-detail"><div>
+          <table class="field-table">
+            <tr><th>mission_id</th><td>MySQL missions 참조</td></tr>
+            <tr><th>presenter_token</th><td>출제자 (몸으로말해요만 사용)</td></tr>
+            <tr><th>started_at</th><td>시작 시각</td></tr>
+          </table>
+          <p class="note">
+            n은 라운드 번호. 별도 status 없음 — 이 키의 존재 자체가 "라운드 진행 중"이고, results 키가 생기면 "종료"다.
+            출제자 연결 끊김(몸으로말해요)도 여기에 상태를 따로 두지 않고, presenter_token으로 room:{code}:participant:{token}의
+            connection_status를 조회해서 판단한다.
+          </p>
+        </div></div>
+      </article>
+
+      <article class="card card-redis" data-node="results" tabindex="0" role="button">
+        <div class="card-head"><span class="tag tag-redis">HASH</span><h3>...:results</h3></div>
+        <p class="card-desc">라운드별 점수</p>
+        <div class="card-detail"><div>
+          <table class="field-table">
+            <tr><th>member</th><td>guest token</td></tr>
+            <tr><th>value</th><td>score</td></tr>
+          </table>
+          <p class="note">참가자 토큰 → 이번 라운드 점수. 3게임 공통으로 사용(닌자는 생존/탈락, 물건가져오기는 순위, 몸으로말해요는 정답 여부 기반으로 점수 계산해서 여기 씀).</p>
+        </div></div>
+      </article>
+
+      <article class="card card-redis" data-node="totals" tabindex="0" role="button">
+        <div class="card-head"><span class="tag tag-redis">HASH</span><h3>...:session:{seq}:totals</h3></div>
+        <p class="card-desc">이번 게임 누적 점수</p>
+        <div class="card-detail"><div>
+          <table class="field-table">
+            <tr><th>member</th><td>guest token</td></tr>
+            <tr><th>value</th><td>누적 score</td></tr>
+          </table>
+          <p class="note">라운드가 끝날 때마다 results 값을 누적. 플로우차트의 "게임 결과" 화면이 바로 이 값을 보여줌.</p>
+        </div></div>
+      </article>
+
+      <article class="card card-redis" data-node="course_totals" tabindex="0" role="button">
+        <div class="card-head"><span class="tag tag-redis">HASH</span><h3>room:{code}:course:totals</h3></div>
+        <p class="card-desc">코스 전체 누적 점수</p>
+        <div class="card-detail"><div>
+          <table class="field-table">
+            <tr><th>member</th><td>guest token</td></tr>
+            <tr><th>value</th><td>누적 score (모든 세션 합산)</td></tr>
+          </table>
+          <p class="note">
+            세션(게임) 하나가 끝날 때마다 그 세션의 totals 값을 여기에 더해 누적 — session:{seq}:totals가 "이번 게임 안에서의 누적"이라면
+            이건 "코스 전체 게임을 통틀은 누적". 종합 결과 페이지의 모드별 중간 발표·최종 리더보드가 이 값을 읽음.
+          </p>
+        </div></div>
+      </article>
+    </div>
+
+    <div class="col col-redis-special">
+      <p class="col-label">Redis <span class="col-sub">게임별 전용</span></p>
+
+      <div class="special-group">
+        <p class="special-group-label"><span class="tag-game tag-ninja">NINJA</span>닌자</p>
+
+        <article class="card card-redis" data-node="alive_players" data-game="ninja" tabindex="0" role="button">
+          <div class="card-head"><span class="tag tag-redis">SET</span><h3>...:alive_players</h3></div>
+          <p class="card-desc">아직 안 죽은 참가자</p>
+          <div class="card-detail"><div>
+            <table class="field-table">
+              <tr><th>member</th><td>guest token</td></tr>
+            </table>
+            <p class="note">player_hp가 0 이하가 되면 SREM으로 제거하고 eliminated로 이동. 이 SET이 비거나 1명 남으면 게임 종료.</p>
+          </div></div>
+        </article>
+
+        <article class="card card-redis" data-node="eliminated" data-game="ninja" tabindex="0" role="button">
+          <div class="card-head"><span class="tag tag-redis">ZSET</span><h3>...:eliminated</h3></div>
+          <p class="card-desc">탈락 순서</p>
+          <div class="card-detail"><div>
+            <table class="field-table">
+              <tr><th>member</th><td>guest token</td></tr>
+              <tr><th>score</th><td>탈락 시각(epoch)</td></tr>
+            </table>
+            <p class="note">역순으로 읽으면 그대로 최종 순위(제일 늦게 죽은 사람 = 1위).</p>
+          </div></div>
+        </article>
+
+        <article class="card card-redis" data-node="attack" data-game="ninja" tabindex="0" role="button">
+          <div class="card-head"><span class="tag tag-redis">HASH</span><h3>...:round:{n}:attack</h3></div>
+          <p class="card-desc">이번 라운드 공격</p>
+          <div class="card-detail"><div>
+            <table class="field-table">
+              <tr><th>attacker_token</th><td>손동작 제일 빨리 완성</td></tr>
+              <tr><th>target_token</th><td>공격 대상으로 지정됨</td></tr>
+              <tr><th>skill_id</th><td>MySQL skill 참조 — 완성한 콤보</td></tr>
+              <tr><th>judged_at</th><td>AI 판정 시각</td></tr>
+            </table>
+            <p class="note">동시 완성 예외는 judged_at 타임스탬프로 선착순 판정. skill_id로 MySQL skill.damage를 조회해 player_hp에서 차감.</p>
+          </div></div>
+        </article>
+
+        <article class="card card-redis" data-node="player_hp" data-game="ninja" tabindex="0" role="button">
+          <div class="card-head"><span class="tag tag-redis">HASH</span><h3>...:session:{seq}:player_hp</h3></div>
+          <p class="card-desc">참가자별 현재 HP</p>
+          <div class="card-detail"><div>
+            <table class="field-table">
+              <tr><th>member</th><td>guest token</td></tr>
+              <tr><th>value</th><td>현재 HP</td></tr>
+            </table>
+            <p class="note">
+              세션 시작 시 참가자 수에 비례한 초기 HP로 채워짐(요구사항명세서 GAME02_HP01). 공격을 맞을 때마다 attack.skill_id가 가리키는
+              skill.damage만큼 HINCRBY로 차감, 라운드마다도 추가로 차감. 0 이하가 되면 alive_players → eliminated로 이동.
+              session:{seq}가 끝나면(다음 게임 진행 시) 이 키도 함께 정리됨 — HP는 세션 하나 안에서만 의미 있는 값.
+            </p>
+          </div></div>
+        </article>
+      </div>
+
+      <div class="special-group">
+        <p class="special-group-label"><span class="tag-game tag-fetch">FETCH</span>물건가져오기</p>
+
+        <article class="card card-redis" data-node="submissions" data-game="fetch" tabindex="0" role="button">
+          <div class="card-head"><span class="tag tag-redis">ZSET</span><h3>...:round:{n}:submissions</h3></div>
+          <p class="card-desc">제출 순서</p>
+          <div class="card-detail"><div>
+            <table class="field-table">
+              <tr><th>member</th><td>guest token</td></tr>
+              <tr><th>score</th><td>제출 시각(epoch)</td></tr>
+            </table>
+            <p class="note">순서 그대로 1~4위. 제한시간 내 없으면 전원 0점 처리 후 다음 라운드.</p>
+          </div></div>
+        </article>
+      </div>
+
+      <div class="special-group">
+        <p class="special-group-label"><span class="tag-game tag-charades">CHARADES</span>몸으로말해요</p>
+
+        <article class="card card-redis" data-node="guesses" data-game="charades" tabindex="0" role="button">
+          <div class="card-head"><span class="tag tag-redis">ZSET</span><h3>...:round:{n}:guesses</h3></div>
+          <p class="card-desc">정답 채팅 제출</p>
+          <div class="card-detail"><div>
+            <table class="field-table">
+              <tr><th>member</th><td>guest token</td></tr>
+              <tr><th>score</th><td>정답 제출 시각(epoch)</td></tr>
+            </table>
+            <p class="note">채팅 텍스트를 missions.keyword와 문자열 매칭해서 정답이면 여기 추가. AI 인식 없음. 출제자(presenter_token) 연결 끊김은 round.presenter_token으로 participant의 connection_status를 조회해서 판단.</p>
+          </div></div>
+        </article>
+      </div>
+    </div>
+
+    <div class="col col-redis-util">
+      <p class="col-label">Redis <span class="col-sub">유틸리티</span></p>
+
+      <article class="card card-redis card-util" data-node="nicknames" tabindex="0" role="button">
+        <div class="card-head"><span class="tag tag-redis">SET</span><h3>room:{code}:nicknames</h3></div>
+        <p class="card-desc">방 기준 중복 체크</p>
+        <div class="card-detail"><div>
+          <p class="note">SISMEMBER로 이 방 안에서만 존재 확인 — 서버 전역이 아니라 방 안에서만 닉네임이 유일하면 됨. 참가자 퇴장 시 SREM으로 제거, 방 종료 시 room:{code}:* 키와 함께 자동 삭제(별도 TTL 불필요).</p>
+        </div></div>
+      </article>
+
+      <article class="card card-redis card-util" data-node="alive" tabindex="0" role="button">
+        <div class="card-head"><span class="tag tag-redis">STRING</span><h3>session:{token}:alive</h3></div>
+        <p class="card-desc">하트비트, TTL 15초</p>
+        <div class="card-detail"><div>
+          <p class="note">하트비트가 오면 EXPIRE로 15초 재설정. 안 오면 자동 소멸 → 방장 위임 트리거.</p>
+          <div class="hb-explain">
+            <p><strong>하트비트</strong>는 클라이언트가 몇 초마다 "저 아직 살아있어요"를 서버에 보내는 신호다.
+            받을 때마다 이 키의 TTL을 15초로 다시 채운다. 신호가 끊기면 15초 뒤 키가 저절로 사라지고,
+            그 순간을 "이 사람이 진짜 나갔다"는 판정으로 쓴다 — 네트워크가 끊긴 걸 서버가 스스로 알아채긴 어렵기 때문.</p>
+            <div class="hb-timeline">
+              <div class="hb-row">
+                <span class="hb-row-label">정상</span>
+                <div class="hb-track">
+                  <span class="hb-tick"></span>
+                  <span class="hb-tick"></span>
+                  <span class="hb-tick"></span>
+                  <span class="hb-tick"></span>
+                </div>
+                <span class="hb-row-status hb-ok-text">계속 연결 유지</span>
+              </div>
+              <div class="hb-row">
+                <span class="hb-row-label">끊김</span>
+                <div class="hb-track hb-dead">
+                  <span class="hb-tick"></span>
+                  <span class="hb-tick hb-fail-tick"></span>
+                </div>
+                <span class="hb-row-status hb-fail-text">15초 뒤 자동 퇴장</span>
+              </div>
+            </div>
+          </div>
+        </div></div>
+      </article>
+    </div>
+  </div>
+  </div>
+
+  <footer class="foot">
+    원래 스키마의 <code>users</code>, <code>rooms</code>, <code>room_participants</code>, <code>game_sessions</code>,
+    <code>rounds</code>, <code>round_results</code>, <code>ai_judgement_logs</code> 7개 테이블은 전부 위 Redis 구조로
+    대체되어 MySQL에서 빠진다. MySQL엔 <code>games</code>, <code>missions</code>와, 닌자 게임의 스킬 설정용
+    <code>skill</code>, <code>gesture</code>, <code>skill_gesture</code>, <code>effect</code> 테이블이 남는다.
+    세 게임(닌자·물건가져오기·몸으로말해요)은 방·코스·참가자·세션·라운드·점수라는 같은 골격을 공유하고,
+    게임마다 달라지는 부분(공격/탈락, 제출 순서, 채팅 정답)만 오른쪽 "게임별 전용" 열에 따로 둔다. 코스는 대기방에서 방장이
+    미리 확정하는 게임 개수·순서·게임별 라운드 수이며, 세션은 코스의 각 항목을 실제로 플레이할 때 열린다.
+  </footer>
+</div>
+
+<script>
+(function () {
+
+  function initDiagram(opts) {
+    var canvas = document.getElementById(opts.canvasId);
+    var svg = document.getElementById(opts.svgId);
+    var edges = opts.edges;
+    var attr = opts.nodeAttr;
+    var cards = {};
+    canvas.querySelectorAll('[' + attr + ']').forEach(function (el) {
+      cards[el.getAttribute(attr)] = el;
+    });
+
+    var pinned = null;
+
+    function pointFor(el, side, cRect) {
+      var r = el.getBoundingClientRect();
+      var y = r.top - cRect.top + r.height / 2;
+      if (side === 'right') return { x: r.right - cRect.left, y: y };
+      if (side === 'left') return { x: r.left - cRect.left, y: y };
+      return { x: r.left - cRect.left + r.width / 2, y: y };
+    }
+
+    function sidesBetween(a, b) {
+      var ra = a.getBoundingClientRect();
+      var rb = b.getBoundingClientRect();
+      return ra.left <= rb.left ? ['right', 'left'] : ['left', 'right'];
+    }
+
+    function draw() {
+      if (window.innerWidth <= 860) return;
+      var cRect = canvas.getBoundingClientRect();
+      svg.setAttribute('width', cRect.width);
+      svg.setAttribute('height', cRect.height);
+      svg.setAttribute('viewBox', '0 0 ' + cRect.width + ' ' + cRect.height);
+
+      var html = '<defs>' +
+        '<marker id="' + opts.svgId + '-arrow-own" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" class="arrow-own"></path></marker>' +
+        '<marker id="' + opts.svgId + '-arrow-ref" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" class="arrow-ref"></path></marker>' +
+        '<marker id="' + opts.svgId + '-arrow-call" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" class="arrow-call"></path></marker>' +
+        '</defs>';
+
+      edges.forEach(function (edge) {
+        var from = edge[0], to = edge[1], type = edge[2];
+        var a = cards[from], b = cards[to];
+        if (!a || !b) return;
+        if (a.classList.contains('is-filtered-out') || b.classList.contains('is-filtered-out')) return;
+        var sides = sidesBetween(a, b);
+        var p1 = pointFor(a, sides[0], cRect);
+        var p2 = pointFor(b, sides[1], cRect);
+        var midX = (p1.x + p2.x) / 2;
+        var d = 'M ' + p1.x + ' ' + p1.y + ' C ' + midX + ' ' + p1.y + ', ' + midX + ' ' + p2.y + ', ' + p2.x + ' ' + p2.y;
+        html += '<path d="' + d + '" class="edge edge-' + type + '" data-from="' + from + '" data-to="' + to +
+          '" marker-end="url(#' + opts.svgId + '-arrow-' + type + ')"></path>';
+      });
+
+      svg.innerHTML = html;
+    }
+
+    function setActive(id) {
+      var related = {};
+      related[id] = true;
+      edges.forEach(function (e) {
+        if (e[0] === id) related[e[1]] = true;
+        if (e[1] === id) related[e[0]] = true;
+      });
+      Object.keys(cards).forEach(function (nid) {
+        var el = cards[nid];
+        var isRelated = !!related[nid];
+        el.classList.toggle('is-active', isRelated);
+        el.classList.toggle('is-dim', !isRelated);
+      });
+      svg.querySelectorAll('.edge').forEach(function (p) {
+        var rel = p.dataset.from === id || p.dataset.to === id;
+        p.classList.toggle('is-active', rel);
+        p.classList.toggle('is-dim', !rel);
+      });
+    }
+
+    function clearActive() {
+      Object.keys(cards).forEach(function (nid) {
+        cards[nid].classList.remove('is-active', 'is-dim');
+      });
+      svg.querySelectorAll('.edge').forEach(function (p) {
+        p.classList.remove('is-active', 'is-dim');
+      });
+    }
+
+    function redraw() {
+      draw();
+      if (pinned) setActive(pinned);
+    }
+
+    Object.keys(cards).forEach(function (id) {
+      var el = cards[id];
+      el.addEventListener('mouseenter', function () { if (!pinned) setActive(id); });
+      el.addEventListener('mouseleave', function () { if (!pinned) clearActive(); });
+      el.addEventListener('focus', function () { if (!pinned) setActive(id); });
+      el.addEventListener('blur', function () { if (!pinned) clearActive(); });
+
+      el.addEventListener('click', function () {
+        if (pinned === id) {
+          pinned = null;
+          clearActive();
+        } else {
+          pinned = id;
+          setActive(id);
+        }
+        requestAnimationFrame(redraw);
+      });
+
+      el.addEventListener('keydown', function (ev) {
+        if (ev.key === 'Enter' || ev.key === ' ') {
+          ev.preventDefault();
+          el.click();
+        }
+      });
+    });
+
+    canvas.addEventListener('click', function (ev) {
+      if (ev.target === canvas) { pinned = null; clearActive(); }
+    });
+
+    document.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Escape') { pinned = null; clearActive(); }
+    });
+
+    if (opts.resetBtnId) {
+      var resetBtn = document.getElementById(opts.resetBtnId);
+      if (resetBtn) {
+        resetBtn.addEventListener('click', function () {
+          pinned = null;
+          clearActive();
+          requestAnimationFrame(redraw);
+        });
+      }
+    }
+
+    window.addEventListener('resize', function () { requestAnimationFrame(redraw); });
+    var ro = new ResizeObserver(function () { requestAnimationFrame(redraw); });
+    ro.observe(canvas);
+    Object.keys(cards).forEach(function (id) { ro.observe(cards[id]); });
+
+    if (opts.filterSelector) {
+      var filterButtons = document.querySelectorAll(opts.filterSelector);
+      filterButtons.forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var filter = btn.dataset.filter;
+          filterButtons.forEach(function (b) { b.classList.toggle('is-on', b === btn); });
+
+          pinned = null;
+          clearActive();
+
+          Object.keys(cards).forEach(function (id) {
+            var el = cards[id];
+            var game = el.dataset.game;
+            var hide = game && filter !== 'all' && game !== filter;
+            el.classList.toggle('is-filtered-out', hide);
+          });
+
+          requestAnimationFrame(redraw);
+        });
+      });
+    }
+
+    draw();
+
+    return { redraw: redraw };
+  }
+
+  function attachZoom(opts) {
+    var wrap = document.getElementById(opts.wrapId);
+    var target = document.getElementById(opts.canvasId);
+    var indicator = document.getElementById(opts.indicatorId);
+    var resetBtn = document.getElementById(opts.resetBtnId);
+    if (!wrap || !target) return;
+
+    var MIN = 0.5, MAX = 2.5, STEP = 0.1;
+    var scale = 1;
+    var baseHeight = target.offsetHeight;
+
+    function apply(newScale, pivot) {
+      newScale = Math.min(MAX, Math.max(MIN, +newScale.toFixed(2)));
+      if (newScale === scale) return;
+
+      var prevScale = scale;
+      scale = newScale;
+      target.style.transform = 'scale(' + scale + ')';
+      wrap.style.height = Math.round(baseHeight * scale) + 'px';
+
+      if (pivot) {
+        var contentX = (wrap.scrollLeft + pivot.x) / prevScale;
+        var contentY = (wrap.scrollTop + pivot.y) / prevScale;
+        wrap.scrollLeft = contentX * scale - pivot.x;
+        wrap.scrollTop = contentY * scale - pivot.y;
+      }
+
+      if (indicator) indicator.textContent = '확대 ' + Math.round(scale * 100) + '%';
+      requestAnimationFrame(opts.onZoom);
+    }
+
+    wrap.addEventListener('wheel', function (ev) {
+      if (!ev.ctrlKey && !ev.metaKey) return;
+      ev.preventDefault();
+      var rect = wrap.getBoundingClientRect();
+      var pivot = { x: ev.clientX - rect.left, y: ev.clientY - rect.top };
+      var delta = ev.deltaY > 0 ? -STEP : STEP;
+      apply(scale + delta, pivot);
+    }, { passive: false });
+
+    if (resetBtn) {
+      resetBtn.addEventListener('click', function () {
+        apply(1, null);
+        wrap.scrollLeft = 0;
+        wrap.scrollTop = 0;
+      });
+    }
+  }
+
+  var sysDiagram = initDiagram({
+    canvasId: 'sysCanvas',
+    svgId: 'sysConnectors',
+    nodeAttr: 'data-snode',
+    edges: [
+      ['frontend', 'ai', 'call'],
+      ['frontend', 'spring', 'call'],
+      ['spring', 'mysql', 'call'],
+      ['spring', 'redis', 'call']
+    ]
+  });
+
+  attachZoom({
+    wrapId: 'sysZoomWrap',
+    canvasId: 'sysCanvas',
+    indicatorId: 'sysZoomIndicator',
+    resetBtnId: 'sysZoomReset',
+    onZoom: sysDiagram.redraw
+  });
+
+  var mainDiagram = initDiagram({
+    canvasId: 'canvas',
+    svgId: 'connectors',
+    nodeAttr: 'data-node',
+    resetBtnId: 'resetBtn',
+    filterSelector: '.filter-btn',
+    edges: [
+      ['room', 'participants', 'own'],
+      ['participants', 'participant', 'own'],
+      ['room', 'course', 'own'],
+      ['course', 'games', 'ref'],
+      ['session', 'course', 'ref'],
+      ['room', 'session', 'own'],
+      ['session', 'round', 'own'],
+      ['session', 'totals', 'own'],
+      ['room', 'course_totals', 'own'],
+      ['totals', 'course_totals', 'ref'],
+      ['round', 'results', 'own'],
+      ['participant', 'nicknames', 'own'],
+      ['participant', 'alive', 'ref'],
+      ['session', 'games', 'ref'],
+      ['round', 'missions', 'ref'],
+      ['round', 'participant', 'ref'],
+      ['session', 'alive_players', 'own'],
+      ['alive_players', 'eliminated', 'own'],
+      ['session', 'player_hp', 'own'],
+      ['round', 'attack', 'own'],
+      ['attack', 'player_hp', 'ref'],
+      ['attack', 'skill', 'ref'],
+      ['round', 'submissions', 'own'],
+      ['round', 'guesses', 'own'],
+      ['skill', 'skill_gesture', 'own'],
+      ['skill_gesture', 'gesture', 'ref'],
+      ['skill', 'effect', 'ref']
+    ]
+  });
+
+  attachZoom({
+    wrapId: 'mainZoomWrap',
+    canvasId: 'canvas',
+    indicatorId: 'mainZoomIndicator',
+    resetBtnId: 'mainZoomReset',
+    onZoom: mainDiagram.redraw
+  });
+})();
+</script>
