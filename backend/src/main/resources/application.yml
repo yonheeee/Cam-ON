@@ -21,3 +21,9 @@ livekit:
   url: ${LIVEKIT_URL:http://localhost:7880}
   api-key: ${LIVEKIT_API_KEY:devkey}
   api-secret: ${LIVEKIT_API_SECRET:secret}
+
+security:
+  jwt:
+    issuer: plaiground-backend
+    audience: plaiground-services
+    access-token-ttl: 12h
