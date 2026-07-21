@@ -40,7 +40,7 @@ class RoomRequestValidationTest {
 
     @Test
     void acceptsSixCharacterUppercaseRoomCode() {
-        assertThat(validator.validate(new JoinRoomRequest("AB12CD"))).isEmpty();
+        assertThat(validator.validate(new JoinRoomRequest("AB23CD"))).isEmpty();
     }
 
     @Test

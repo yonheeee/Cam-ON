@@ -15,8 +15,10 @@ import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.ActiveProfiles;
 
 @SpringBootTest
+@ActiveProfiles("test")
 @EnabledIfEnvironmentVariable(named = "REDIS_TEST_HOST", matches = ".+")
 class RedisSessionRepositoryIntegrationTests {
 
@@ -53,16 +55,20 @@ class RedisSessionRepositoryIntegrationTests {
             Instant.parse("2026-07-21T00:00:00Z")
         );
 
-        sessionRepository.save(created);
+        Instant expiresAt = Instant.now().plusSeconds(43_200);
+        sessionRepository.save(created, expiresAt);
         assertThat(sessionRepository.findByParticipantId(participantId))
             .contains(created);
+        assertThat(redisTemplate.getExpire(
+            RedisGuestSessionKeys.session(participantId)
+        )).isBetween(1L, 43_200L);
 
         GuestSession updated = new GuestSession(
             participantId,
             "바뀐 닉네임",
             Instant.parse("2026-07-21T01:00:00Z")
         );
-        sessionRepository.save(updated);
+        sessionRepository.save(updated, expiresAt);
         assertThat(sessionRepository.findByParticipantId(participantId))
             .contains(updated);
 
