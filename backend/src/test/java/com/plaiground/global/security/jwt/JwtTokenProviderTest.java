@@ -11,6 +11,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -19,7 +20,7 @@ import org.springframework.security.oauth2.jwt.JwtException;
 
 class JwtTokenProviderTest {
 
-    private static final Instant NOW = Instant.parse("2026-07-21T00:00:00Z");
+    private static final Instant NOW = Instant.now().truncatedTo(ChronoUnit.SECONDS);
     private static final Duration TTL = Duration.ofHours(12);
     private static RSAPrivateKey privateKey;
     private static RSAPublicKey publicKey;
@@ -121,6 +122,12 @@ class JwtTokenProviderTest {
     }
 
     private static JwtProperties properties(String audience) {
-        return new JwtProperties("plaiground-backend", audience, TTL);
+        return new JwtProperties(
+            "plaiground-backend",
+            audience,
+            TTL,
+            null,
+            null
+        );
     }
 }

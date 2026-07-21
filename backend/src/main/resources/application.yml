@@ -27,3 +27,5 @@ security:
     issuer: plaiground-backend
     audience: plaiground-services
     access-token-ttl: 12h
+    private-key-path: ${JWT_PRIVATE_KEY_PATH:}
+    public-key-path: ${JWT_PUBLIC_KEY_PATH:}

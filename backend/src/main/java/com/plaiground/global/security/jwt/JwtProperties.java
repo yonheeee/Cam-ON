@@ -7,7 +7,9 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public record JwtProperties(
     String issuer,
     String audience,
-    Duration accessTokenTtl
+    Duration accessTokenTtl,
+    String privateKeyPath,
+    String publicKeyPath
 ) {
     public JwtProperties {
         if (issuer == null || issuer.isBlank()) {

@@ -50,10 +50,11 @@ the service. The current architecture recommends 15 seconds.
 | `nickname` | `String` | Nickname entered when the session was created |
 | `created_at` | `Instant` | ISO-8601 creation time |
 
-Guest sessions do not currently receive a Redis TTL because the repository
-contract does not define token expiry. `SessionService` must delete the key when
-the access token is revoked. The team should align a future key TTL with the
-access-token expiration before authentication is enabled.
+Guest sessions expire at the exact same `expiresAt` instant as the JWT access
+token (currently 12 hours after issuance). Saving the HASH and setting its
+`PEXPIREAT` value happen in one Lua script. A valid JWT is rejected when this
+Redis session is absent; expired sessions are not refreshed and the client must
+create a new guest session.
 
 ## Atomic operations
 

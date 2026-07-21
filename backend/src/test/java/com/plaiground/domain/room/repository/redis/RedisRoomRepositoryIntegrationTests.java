@@ -28,8 +28,10 @@ import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.ActiveProfiles;
 
 @SpringBootTest
+@ActiveProfiles("test")
 @EnabledIfEnvironmentVariable(named = "REDIS_TEST_HOST", matches = ".+")
 class RedisRoomRepositoryIntegrationTests {
 

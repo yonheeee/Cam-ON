@@ -28,6 +28,9 @@ import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 
 public class JwtTokenProvider {
 
+    public record IssuedAccessToken(String value, Instant expiresAt) {
+    }
+
     private static final OAuth2Error INVALID_AUDIENCE = new OAuth2Error(
         "invalid_token",
         "The required audience is missing",
@@ -52,6 +55,10 @@ public class JwtTokenProvider {
     }
 
     public String createAccessToken(UUID participantId) {
+        return issueAccessToken(participantId).value();
+    }
+
+    public IssuedAccessToken issueAccessToken(UUID participantId) {
         Instant issuedAt = clock.instant();
         Instant expiresAt = issuedAt.plus(properties.accessTokenTtl());
 
@@ -66,7 +73,10 @@ public class JwtTokenProvider {
             .expiresAt(expiresAt)
             .build();
 
-        return encoder.encode(JwtEncoderParameters.from(header, claims)).getTokenValue();
+        String value = encoder.encode(
+            JwtEncoderParameters.from(header, claims)
+        ).getTokenValue();
+        return new IssuedAccessToken(value, expiresAt);
     }
 
     public UUID extractParticipantId(String accessToken) {
@@ -78,7 +88,7 @@ public class JwtTokenProvider {
         }
     }
 
-    Jwt decode(String accessToken) {
+    public Jwt decode(String accessToken) {
         return decoder.decode(accessToken);
     }
 

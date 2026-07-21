@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Repository;
 
 @Repository
@@ -16,6 +17,16 @@ public class RedisSessionRepository implements SessionRepository {
     private static final String NICKNAME = "nickname";
     private static final String CREATED_AT = "created_at";
 
+    private static final DefaultRedisScript<Long> SAVE_SCRIPT =
+        new DefaultRedisScript<>("""
+            redis.call('HSET', KEYS[1],
+                'participant_id', ARGV[1],
+                'nickname', ARGV[2],
+                'created_at', ARGV[3])
+            redis.call('PEXPIREAT', KEYS[1], ARGV[4])
+            return 1
+            """, Long.class);
+
     private final StringRedisTemplate redisTemplate;
 
     public RedisSessionRepository(StringRedisTemplate redisTemplate) {
@@ -23,14 +34,19 @@ public class RedisSessionRepository implements SessionRepository {
     }
 
     @Override
-    public void save(GuestSession session) {
-        redisTemplate.opsForHash().putAll(
-            RedisGuestSessionKeys.session(session.participantId()),
-            Map.of(
-                PARTICIPANT_ID, session.participantId().toString(),
-                NICKNAME, session.nickname(),
-                CREATED_AT, session.createdAt().toString()
-            )
+    public void save(GuestSession session, Instant expiresAt) {
+        if (!expiresAt.isAfter(session.createdAt())) {
+            throw new IllegalArgumentException(
+                "Guest session expiration must be after creation"
+            );
+        }
+        redisTemplate.execute(
+            SAVE_SCRIPT,
+            java.util.List.of(RedisGuestSessionKeys.session(session.participantId())),
+            session.participantId().toString(),
+            session.nickname(),
+            session.createdAt().toString(),
+            Long.toString(expiresAt.toEpochMilli())
         );
     }
 
