@@ -21,10 +21,10 @@ from model import PointHistoryClassifier
 # 한 손만으로 이 라벨이 인식되면 스킬 이펙트가 발동합니다 (지금은 전부 양손 조합이라 비어있음)
 SKILL_EFFECT_LABELS = set()
 # 이 라벨들은 양손을 맞춰야 나오는 조합 포즈라, 양손이 다 잡혔을 때만 판정/발동합니다
-COMBO_SKILL_EFFECT_LABELS = {'snake', 'gangnamStyle', 'mouse', 'Horse', 'cow', 'rabbit',
-                             'cat', 'spider'}
+COMBO_SKILL_EFFECT_LABELS = {'snake', 'girl_V', 'mouse', 'Horse', 'cow', 'rabbit',
+                             'cat', 'spider', 'sailor_moon'}
 # keypoint_classifier_label.csv 기준 조합 전용 클래스 id — 지금은 전부 양손 조합
-COMBO_CLASS_IDS = {0, 1, 2, 3, 4, 5, 6, 7}
+COMBO_CLASS_IDS = {0, 1, 2, 3, 4, 5, 6, 7, 8}
 
 
 def get_args():
