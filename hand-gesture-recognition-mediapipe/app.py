@@ -26,6 +26,39 @@ COMBO_SKILL_EFFECT_LABELS = {'snake', 'girl_V', 'mouse', 'Horse', 'cow', 'rabbit
 # keypoint_classifier_label.csv 기준 조합 전용 클래스 id — 지금은 전부 양손 조합
 COMBO_CLASS_IDS = {0, 1, 2, 3, 4, 5, 6, 7, 8}
 
+# 스킬 = 제스처 시퀀스(순서대로 완성해야 발동). gesture 하나하나는 의미 없는 "원소"이고,
+# 이 순서로 이어붙였을 때만 스킬로 인정된다.
+# display_name은 cv.putText(Hershey 폰트)가 한글을 못 그려서 화면 디버그 표시 전용으로 둔 영문 alias.
+# 실제 파티클/색 이펙트는 프론트에서 외부 이펙트로 구현할 예정이라 여기서는 다루지 않는다 —
+# 이 데모는 시퀀스 판정/홀드/데미지 로직 검증용.
+SKILLS = [
+    {
+        'name': '뇌절', 'display_name': 'Noejeol(Lightning)',
+        'sequence': ['Horse', 'snake'], 'damage': 20,
+    },
+    {
+        'name': '봉선화의 술', 'display_name': 'Bongseonhwa(Fire)',
+        'sequence': ['snake', 'mouse', 'cow'], 'damage': 30,
+    },
+    {
+        'name': '수룡탄의 술', 'display_name': 'Suryongtan(Water)',
+        'sequence': ['sailor_moon', 'cow', 'rabbit'], 'damage': 30,
+    },
+    {
+        'name': '냥냥펀치', 'display_name': 'NyangPunch(Cat)',
+        'sequence': ['girl_V', 'cat'], 'damage': 15,
+    },
+    {
+        'name': '바람의 상처', 'display_name': 'WindScar(Wind)',
+        'sequence': ['spider', 'Horse', 'mouse', 'sailor_moon'], 'damage': 45,
+    },
+]
+# 접미사 매칭 시 짧은 시퀀스가 긴 시퀀스보다 먼저 우발적으로 걸리지 않도록 긴 것부터 검사
+SKILLS_BY_LENGTH_DESC = sorted(SKILLS, key=lambda s: -len(s['sequence']))
+
+SEQUENCE_STEP_TIMEOUT = 3.0  # 이전 동작 후 이 시간(초) 안에 다음 동작을 이어야 콤보가 유지됨
+HOLD_DURATION = 1.0  # 전환 중 스쳐 지나가는 포즈를 걸러내기 위해, 같은 포즈를 이 시간 이상 유지해야 확정
+
 
 def get_args():
     parser = argparse.ArgumentParser()
@@ -123,6 +156,13 @@ def main():
     skill_effect = SkillEffect()
     previous_hand_sign = {'Left': None, 'Right': None}
     previous_combo_sign = None
+
+    combo_sequence_buffer = deque(maxlen=max(len(s['sequence']) for s in SKILLS))
+    last_triggered_skill = None  # (name, display_name, damage, triggered_at)
+    combo_hold_start = 0.0
+    combo_hold_confirmed = False
+    # 프레임 하나 튀는 오인식(손 떨림 등) 때문에 홀드 타이머가 리셋되는 걸 막기 위한 다수결 스무딩
+    combo_sign_history = deque(maxlen=5)
 
     # 손가락/손이 겹쳐서 검출이 흔들릴 때 좌표 떨림을 줄이는 1€ 필터
     landmark_smoother = HandLandmarkSmoother(min_cutoff=1.0, beta=0.3)
@@ -240,24 +280,55 @@ def main():
 
             combo_sign_id = keypoint_classifier(combined_landmark_list)
             combo_sign_label = keypoint_classifier_labels[combo_sign_id]
+            now = time.time()
 
-            cv.putText(debug_image, "SIGN:" + combo_sign_label, (10, 140),
+            # 프레임 하나짜리 오인식에 흔들리지 않도록 최근 몇 프레임의 다수결로 안정화
+            combo_sign_history.append(combo_sign_label)
+            stable_combo_sign_label = Counter(
+                combo_sign_history).most_common(1)[0][0]
+
+            # 안정화된 포즈가 바뀔 때만 홀드 타이머를 리셋 —
+            # 같은 포즈를 HOLD_DURATION 이상 유지해야만 그 스텝이 "완성"으로 인정된다.
+            if stable_combo_sign_label != previous_combo_sign:
+                combo_hold_start = now
+                combo_hold_confirmed = False
+                previous_combo_sign = stable_combo_sign_label
+            hold_elapsed = now - combo_hold_start
+
+            sign_text = "SIGN:" + stable_combo_sign_label
+            if stable_combo_sign_label in COMBO_SKILL_EFFECT_LABELS and not combo_hold_confirmed:
+                sign_text += " ({:.1f}/{:.1f}s)".format(
+                    min(hold_elapsed, HOLD_DURATION), HOLD_DURATION)
+            cv.putText(debug_image, sign_text, (10, 140),
                        cv.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 0), 4, cv.LINE_AA)
-            cv.putText(debug_image, "SIGN:" + combo_sign_label, (10, 140),
+            cv.putText(debug_image, sign_text, (10, 140),
                        cv.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 2,
                        cv.LINE_AA)
 
-            if (combo_sign_label in COMBO_SKILL_EFFECT_LABELS
-                    and previous_combo_sign != combo_sign_label):
-                skill_effect.spawn(
-                    (debug_image.shape[1] // 2, debug_image.shape[0] // 2))
-            previous_combo_sign = combo_sign_label
+            if (not combo_hold_confirmed
+                    and stable_combo_sign_label in COMBO_SKILL_EFFECT_LABELS
+                    and hold_elapsed >= HOLD_DURATION):
+                combo_hold_confirmed = True
+                if (combo_sequence_buffer
+                        and now - combo_sequence_buffer[-1][1] > SEQUENCE_STEP_TIMEOUT):
+                    combo_sequence_buffer.clear()
+                combo_sequence_buffer.append((stable_combo_sign_label, now))
+
+                matched_skill = match_skill(combo_sequence_buffer, SKILLS_BY_LENGTH_DESC)
+                if matched_skill is not None:
+                    last_triggered_skill = (matched_skill['display_name'],
+                                            matched_skill['damage'], now)
+                    combo_sequence_buffer.clear()
         else:
             previous_combo_sign = None
+            combo_hold_confirmed = False
+            combo_sign_history.clear()
 
         debug_image = draw_point_history(debug_image, point_history['Left'])
         debug_image = draw_point_history(debug_image, point_history['Right'])
         debug_image = skill_effect.update_and_draw(debug_image)
+        debug_image = draw_combo_progress(debug_image, combo_sequence_buffer)
+        debug_image = draw_triggered_skill(debug_image, last_triggered_skill)
         debug_image = draw_info(debug_image, fps, mode, number)
 
         # Screen reflection #############################################################
@@ -351,6 +422,16 @@ def combine_two_hand_landmarks(preprocessed_by_hand):
         return left + right
     one_hand = left if left is not None else right
     return one_hand + [0.0] * 42
+
+
+def match_skill(combo_sequence_buffer, skills_by_length_desc):
+    # buffer 뒤쪽 n개가 스킬의 시퀀스와 정확히 일치하는지 검사 (긴 시퀀스부터 우선 검사)
+    labels = [label for label, _ in combo_sequence_buffer]
+    for skill in skills_by_length_desc:
+        seq = skill['sequence']
+        if len(labels) >= len(seq) and labels[-len(seq):] == seq:
+            return skill
+    return None
 
 
 def pre_process_point_history(image, point_history):
@@ -616,6 +697,31 @@ def draw_point_history(image, point_history):
             cv.circle(image, (point[0], point[1]), 1 + int(index / 2),
                       (152, 251, 152), 2)
 
+    return image
+
+
+def draw_combo_progress(image, combo_sequence_buffer):
+    if combo_sequence_buffer:
+        labels = [label for label, _ in combo_sequence_buffer]
+        text = "COMBO: " + " -> ".join(labels)
+        cv.putText(image, text, (10, 170), cv.FONT_HERSHEY_SIMPLEX, 0.7,
+                   (0, 0, 0), 3, cv.LINE_AA)
+        cv.putText(image, text, (10, 170), cv.FONT_HERSHEY_SIMPLEX, 0.7,
+                   (255, 255, 255), 1, cv.LINE_AA)
+    return image
+
+
+def draw_triggered_skill(image, last_triggered_skill):
+    if last_triggered_skill is None:
+        return image
+    display_name, damage, triggered_at = last_triggered_skill
+    if time.time() - triggered_at > 2.5:
+        return image
+    text = "SKILL! {} (-{})".format(display_name, damage)
+    cv.putText(image, text, (10, 200), cv.FONT_HERSHEY_SIMPLEX, 1.0,
+               (0, 0, 0), 4, cv.LINE_AA)
+    cv.putText(image, text, (10, 200), cv.FONT_HERSHEY_SIMPLEX, 1.0,
+               (0, 215, 255), 2, cv.LINE_AA)
     return image
 
 
