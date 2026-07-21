@@ -70,7 +70,6 @@ class RedisRoomRepositoryIntegrationTests {
         assertThat(roomRepository.saveIfAbsent(room)).isTrue();
         assertThat(roomRepository.saveIfAbsent(room)).isFalse();
         assertThat(roomRepository.findById(room.roomId())).contains(room);
-        assertThat(roomRepository.findByCode(room.roomCode())).contains(room);
 
         UUID newHostId = UUID.randomUUID();
         roomRepository.updateHost(room.roomId(), newHostId);
@@ -91,7 +90,6 @@ class RedisRoomRepositoryIntegrationTests {
 
         roomRepository.delete(room.roomId());
         assertThat(roomRepository.findById(room.roomId())).isEmpty();
-        assertThat(roomRepository.findByCode(room.roomCode())).isEmpty();
         assertThat(participantRepository.findAll(room.roomId())).isEmpty();
         assertThat(connectionRepository.isAlive(participant.participantId()))
             .isFalse();
@@ -250,7 +248,6 @@ class RedisRoomRepositoryIntegrationTests {
         UUID hostId = UUID.randomUUID();
         return new Room(
             UUID.randomUUID(),
-            "ABC123",
             "테스트 방",
             hostId,
             maxPlayers,

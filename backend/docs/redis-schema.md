@@ -5,31 +5,25 @@ when `RoomRepository.delete(roomId)` is called.
 
 ## Keys
 
-### `room:{roomCode}` — HASH
+### `room:{roomId}` — HASH
 
 | Field | Java type | Description |
 | --- | --- | --- |
 | `room_id` | `UUID` | REST path identifier |
-| `room_code` | `String` | Six-character invitation code |
 | `title` | `String` | Room title |
 | `host_token` | `UUID` | Current host participant ID |
 | `max_players` | `int` | Maximum participants |
 | `status` | `RoomStatus` | `WAITING`, `PLAYING`, or `FINISHED` |
 | `created_at` | `Instant` | ISO-8601 creation time |
 
-Example: `room:ABC123`
+Example: `room:550e8400-e29b-41d4-a716-446655440000`
 
-### `room:id:{roomId}` — STRING
-
-Maps a REST `roomId` to its `roomCode`. This is a backend lookup index because
-the public API uses `roomId`, while room lifecycle keys use `roomCode`.
-
-### `room:{roomCode}:participants` — SET
+### `room:{roomId}:participants` — SET
 
 Contains participant UUID strings. `findAll` reads participant HASH values and
 sorts them by `joined_at`; the SET itself does not represent join order.
 
-### `room:{roomCode}:participant:{participantId}` — HASH
+### `room:{roomId}:participant:{participantId}` — HASH
 
 | Field | Java type | Description |
 | --- | --- | --- |
@@ -38,7 +32,7 @@ sorts them by `joined_at`; the SET itself does not represent join order.
 | `ready` | `boolean` | Ready state |
 | `joined_at` | `Instant` | ISO-8601 join time |
 
-### `room:{roomCode}:nicknames` — SET
+### `room:{roomId}:nicknames` — SET
 
 Contains nicknames currently in the room. Nicknames are compared exactly as
 received; trimming and normalization belong to the service validation policy.
@@ -63,8 +57,7 @@ access-token expiration before authentication is enabled.
 
 ## Atomic operations
 
-`RoomRepository.saveIfAbsent` uses one Lua script to reserve both the room code
-and room ID index.
+`RoomRepository.saveIfAbsent` uses one Lua script to reserve the room ID.
 
 `ParticipantRepository.tryAdd` uses one Lua script to check and update all of
 the following as a single Redis operation:

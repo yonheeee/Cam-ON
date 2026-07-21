@@ -100,19 +100,13 @@ public class RedisParticipantRepository implements ParticipantRepository {
 
     @Override
     public JoinParticipantResult tryAdd(UUID roomId, Participant participant) {
-        Optional<String> roomCode = findRoomCode(roomId);
-        if (roomCode.isEmpty()) {
-            return JoinParticipantResult.ROOM_NOT_FOUND;
-        }
-
-        String code = roomCode.get();
         Long result = redisTemplate.execute(
             TRY_ADD_SCRIPT,
             List.of(
-                RedisRoomKeys.room(code),
-                RedisRoomKeys.participants(code),
-                RedisRoomKeys.participant(code, participant.participantId()),
-                RedisRoomKeys.nicknames(code)
+                RedisRoomKeys.room(roomId),
+                RedisRoomKeys.participants(roomId),
+                RedisRoomKeys.participant(roomId, participant.participantId()),
+                RedisRoomKeys.nicknames(roomId)
             ),
             participant.participantId().toString(),
             participant.nickname(),
@@ -125,20 +119,13 @@ public class RedisParticipantRepository implements ParticipantRepository {
 
     @Override
     public Optional<Participant> findById(UUID roomId, UUID participantId) {
-        return findRoomCode(roomId).flatMap(roomCode ->
-            findParticipant(roomCode, participantId)
-        );
+        return findParticipant(roomId, participantId);
     }
 
     @Override
     public List<Participant> findAll(UUID roomId) {
-        Optional<String> roomCode = findRoomCode(roomId);
-        if (roomCode.isEmpty()) {
-            return List.of();
-        }
-
         Set<String> participantIds = redisTemplate.opsForSet().members(
-            RedisRoomKeys.participants(roomCode.get())
+            RedisRoomKeys.participants(roomId)
         );
         if (participantIds == null || participantIds.isEmpty()) {
             return List.of();
@@ -146,7 +133,7 @@ public class RedisParticipantRepository implements ParticipantRepository {
 
         List<Participant> participants = new ArrayList<>(participantIds.size());
         for (String participantId : participantIds) {
-            findParticipant(roomCode.get(), UUID.fromString(participantId))
+            findParticipant(roomId, UUID.fromString(participantId))
                 .ifPresent(participants::add);
         }
         participants.sort(Comparator.comparing(Participant::joinedAt));
@@ -165,11 +152,11 @@ public class RedisParticipantRepository implements ParticipantRepository {
 
     @Override
     public void resetAllReady(UUID roomId) {
-        findRoomCode(roomId).ifPresent(roomCode -> redisTemplate.execute(
+        redisTemplate.execute(
             RESET_READY_SCRIPT,
-            List.of(RedisRoomKeys.participants(roomCode)),
-            RedisRoomKeys.participantPrefix(roomCode)
-        ));
+            List.of(RedisRoomKeys.participants(roomId)),
+            RedisRoomKeys.participantPrefix(roomId)
+        );
     }
 
     @Override
@@ -188,23 +175,23 @@ public class RedisParticipantRepository implements ParticipantRepository {
 
     @Override
     public void remove(UUID roomId, UUID participantId) {
-        findRoomCode(roomId).ifPresent(roomCode -> redisTemplate.execute(
+        redisTemplate.execute(
             REMOVE_SCRIPT,
             List.of(
-                RedisRoomKeys.participants(roomCode),
-                RedisRoomKeys.participant(roomCode, participantId),
-                RedisRoomKeys.nicknames(roomCode)
+                RedisRoomKeys.participants(roomId),
+                RedisRoomKeys.participant(roomId, participantId),
+                RedisRoomKeys.nicknames(roomId)
             ),
             participantId.toString()
-        ));
+        );
     }
 
     private Optional<Participant> findParticipant(
-        String roomCode,
+        UUID roomId,
         UUID participantId
     ) {
         Map<Object, Object> values = redisTemplate.opsForHash().entries(
-            RedisRoomKeys.participant(roomCode, participantId)
+            RedisRoomKeys.participant(roomId, participantId)
         );
         if (values.isEmpty()) {
             return Optional.empty();
@@ -225,18 +212,12 @@ public class RedisParticipantRepository implements ParticipantRepository {
         String field,
         String value
     ) {
-        findRoomCode(roomId).ifPresent(roomCode -> redisTemplate.execute(
+        redisTemplate.execute(
             UPDATE_IF_EXISTS_SCRIPT,
-            List.of(RedisRoomKeys.participant(roomCode, participantId)),
+            List.of(RedisRoomKeys.participant(roomId, participantId)),
             field,
             value
-        ));
-    }
-
-    private Optional<String> findRoomCode(UUID roomId) {
-        return Optional.ofNullable(redisTemplate.opsForValue().get(
-            RedisRoomKeys.roomIdIndex(roomId)
-        ));
+        );
     }
 
     private static JoinParticipantResult toJoinResult(Long result) {
