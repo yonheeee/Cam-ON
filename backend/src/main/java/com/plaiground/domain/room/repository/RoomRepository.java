@@ -10,8 +10,6 @@ public interface RoomRepository {
 
     Optional<Room> findById(UUID roomId);
 
-    Optional<Room> findByCode(String roomCode);
-
     void updateHost(UUID roomId, UUID hostParticipantId);
 
     void updateStatus(UUID roomId, RoomStatus status);
