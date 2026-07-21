@@ -18,12 +18,12 @@ from utils import HandLandmarkSmoother
 from model import KeyPointClassifier
 from model import PointHistoryClassifier
 
-# 한 손만으로 이 라벨이 인식되면 스킬 이펙트가 발동합니다
-SKILL_EFFECT_LABELS = {'OK', 'snake', 'gangnamStyle', 'mouse'}
+# 한 손만으로 이 라벨이 인식되면 스킬 이펙트가 발동합니다 (지금은 전부 양손 조합이라 비어있음)
+SKILL_EFFECT_LABELS = set()
 # 이 라벨들은 양손을 맞춰야 나오는 조합 포즈라, 양손이 다 잡혔을 때만 판정/발동합니다
-COMBO_SKILL_EFFECT_LABELS = {'Horse', 'cow', 'rabbit'}
-# keypoint_classifier_label.csv 기준 조합 전용 클래스 id (Horse=7, cow=8, rabbit=9)
-COMBO_CLASS_IDS = {7, 8, 9}
+COMBO_SKILL_EFFECT_LABELS = {'snake', 'gangnamStyle', 'mouse', 'Horse', 'cow', 'rabbit'}
+# keypoint_classifier_label.csv 기준 조합 전용 클래스 id — 지금은 전부 양손 조합
+COMBO_CLASS_IDS = {0, 1, 2, 3, 4, 5}
 
 
 def get_args():

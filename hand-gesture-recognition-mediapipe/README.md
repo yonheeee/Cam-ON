@@ -2,16 +2,17 @@
 
 | id | 이름 | 종류 | 데이터 수 |
 | --- | --- | --- | --- |
-| 0 | Open | 한 손 | 0 (데이터 삭제됨) |
-| 1 | Close | 한 손 | 0 (데이터 삭제됨) |
-| 2 | Pointer | 한 손 | 0 (데이터 삭제됨) |
-| 3 | OK | 한 손 | 0 (데이터 삭제됨) |
-| 4 | snake | 한 손 | 269 |
-| 5 | gangnamStyle | 한 손 | 142 |
-| 6 | mouse | 한 손 | 162 |
-| 7 | Horse | 양손 조합 | 41 |
-| 8 | cow | 양손 조합 | 100 |
-| 9 | rabbit | 양손 조합 | 102 |
+| 0 | snake | 양손 조합 | 0 (재수집 필요) |
+| 1 | gangnamStyle | 양손 조합 | 0 (재수집 필요) |
+| 2 | mouse | 양손 조합 | 0 (재수집 필요) |
+| 3 | Horse | 양손 조합 | 41 |
+| 4 | cow | 양손 조합 | 100 |
+| 5 | rabbit | 양손 조합 | 102 |
+
+지금은 6개 클래스 전부 양손 조합. snake/gangnamStyle/mouse는 예전에 한손 경로로 잘못 모은 데이터라 삭제함 —
+`k` 모드에서 두 손을 다 보여준 채로 0/1/2를 눌러서 다시 모아야 함.
+
+(Open/Close/Pointer/OK는 데이터가 없어서 라벨 자체를 삭제 — 인덱스가 0부터 다시 시작함)
 
 "양손 조합"은 두 손이 다 화면에 잡혀야만 판정/수집되는 클래스(`app.py`의 `COMBO_CLASS_IDS`).
 라벨 이름은 `model/keypoint_classifier/keypoint_classifier_label.csv`가 원본이며, 이 표는 그걸 보기
