@@ -6,6 +6,7 @@ import java.util.UUID;
 
 public record RoomSnapshotResponse(
     UUID roomId,
+    String roomCode,
     String title,
     int maxPlayers,
     RoomStatus status,

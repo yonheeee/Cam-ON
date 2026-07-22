@@ -72,6 +72,7 @@ class RedisRoomRepositoryIntegrationTests {
         assertThat(roomRepository.saveIfAbsent(room)).isTrue();
         assertThat(roomRepository.saveIfAbsent(room)).isFalse();
         assertThat(roomRepository.findById(room.roomId())).contains(room);
+        assertThat(roomRepository.findByCode(room.roomCode())).contains(room);
 
         UUID newHostId = UUID.randomUUID();
         roomRepository.updateHost(room.roomId(), newHostId);
@@ -92,9 +93,50 @@ class RedisRoomRepositoryIntegrationTests {
 
         roomRepository.delete(room.roomId());
         assertThat(roomRepository.findById(room.roomId())).isEmpty();
+        assertThat(roomRepository.findByCode(room.roomCode())).isEmpty();
         assertThat(participantRepository.findAll(room.roomId())).isEmpty();
         assertThat(connectionRepository.isAlive(participant.participantId()))
             .isFalse();
+    }
+
+    @Test
+    void atomicallyCreatesRoomWithHostAndRejectsDuplicateCode() {
+        Room room = room(4);
+        Participant host = new Participant(
+            room.hostParticipantId(),
+            "host",
+            false,
+            ConnectionStatus.CONNECTED,
+            room.createdAt()
+        );
+
+        assertThat(roomRepository.tryCreate(room, host)).isTrue();
+        assertThat(roomRepository.findByCode(room.roomCode())).contains(room);
+        assertThat(participantRepository.findAll(room.roomId()))
+            .containsExactly(host);
+
+        Room duplicateCodeRoom = new Room(
+            UUID.randomUUID(),
+            room.roomCode(),
+            "another room",
+            UUID.randomUUID(),
+            4,
+            RoomStatus.WAITING,
+            room.createdAt()
+        );
+        Participant anotherHost = new Participant(
+            duplicateCodeRoom.hostParticipantId(),
+            "another-host",
+            false,
+            ConnectionStatus.CONNECTED,
+            duplicateCodeRoom.createdAt()
+        );
+
+        assertThat(roomRepository.tryCreate(duplicateCodeRoom, anotherHost))
+            .isFalse();
+        assertThat(roomRepository.findById(duplicateCodeRoom.roomId())).isEmpty();
+        assertThat(participantRepository.findAll(duplicateCodeRoom.roomId()))
+            .isEmpty();
     }
 
     @Test
@@ -250,6 +292,7 @@ class RedisRoomRepositoryIntegrationTests {
         UUID hostId = UUID.randomUUID();
         return new Room(
             UUID.randomUUID(),
+            "AB23CD",
             "테스트 방",
             hostId,
             maxPlayers,
