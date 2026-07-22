@@ -18,3 +18,16 @@
   gap: 0.25rem;
   font-size: 0.9rem;
 }
+
+.video-call-room__connection-error {
+  position: fixed;
+  top: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #ff4444;
+  color: #fff;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  z-index: 100;
+  font-size: 0.9rem;
+}

@@ -7,6 +7,9 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -37,10 +40,12 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ScheduledFuture;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.scheduling.TaskScheduler;
@@ -76,6 +81,14 @@ class NinjaGameServiceTest {
 
         Room room = new Room(roomId, roomCode, "title", UUID.randomUUID(), 4, RoomStatus.PLAYING, seq, Instant.now());
         when(roomRepository.findById(roomId)).thenReturn(Optional.of(room));
+
+        // 실제 TaskScheduler는 항상 Future를 반환하는데(null 아님), 스텁 안 해두면 Mockito가 기본값
+        // null을 반환해서 서비스 쪽 pendingTimeouts.put(key, future)가 NPE 난다 — 계약대로 맞춰줌.
+        // lenient(): 라운드를 안 여는 테스트(예외 케이스들)에서는 이 스텁이 안 쓰여도 경고 안 나게.
+        // schedule()의 리턴 타입(ScheduledFuture<?>)이 와일드카드 캡처 때문에 when(...).thenReturn(...)
+        // 형태로는 타입이 안 맞아서, 제네릭 체크를 우회하는 doReturn(...).when(...) 형태를 쓴다.
+        ScheduledFuture<?> scheduledFuture = mock(ScheduledFuture.class);
+        lenient().doReturn(scheduledFuture).when(taskScheduler).schedule(any(Runnable.class), any(Instant.class));
 
         Effect effect = Effect.builder()
             .id(2L).name("골드 버스트").color("#ffd700")
@@ -304,13 +317,20 @@ class NinjaGameServiceTest {
     // ---- startSession ----
 
     @Test
-    void startSession_shufflesSkillsAndStartsFirstRound() {
+    void startSession_clearsPreviousSessionThenShufflesSkillsAndStartsFirstRound() {
         Set<String> tokens = Set.of("p1", "p2", "p3");
         when(skillRepository.findAllIds()).thenReturn(List.of(10L, 20L, 30L));
         when(ninjaRedis.getSkillIdForRound(roomCode, seq, 1)).thenReturn(10L);
 
-        service.startSession(roomId, tokens);
+        service.startSession(roomId, tokens, 5);
 
+        // 이전 판 잔여 데이터(공격권/HP/순위 등)가 새 게임에 섞여 들어가는 걸 막기 위해
+        // 스킬 셔플보다 먼저 세션을 통째로 지워야 한다.
+        InOrder inOrder = inOrder(ninjaRedis);
+        inOrder.verify(ninjaRedis).clearSession(roomCode, seq);
+        inOrder.verify(ninjaRedis).saveSkillOrder(eq(roomCode), eq(seq), any());
+
+        verify(ninjaRedis).setTotalRounds(roomCode, seq, 5);
         verify(ninjaRedis).saveSkillOrder(eq(roomCode), eq(seq),
             argThat(list -> list.size() == 3 && list.containsAll(List.of(10L, 20L, 30L))));
         verify(ninjaRedis).initAlivePlayers(roomCode, seq, tokens);

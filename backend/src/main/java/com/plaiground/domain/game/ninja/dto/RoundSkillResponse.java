@@ -12,16 +12,19 @@ public record RoundSkillResponse(
     String skillName,
     String skillDesc,
     List<GestureStepResponse> gestures,
-    EffectResponse effect
+    EffectResponse effect,
+    // 마지막 라운드면 null.
+    NextSkillPreview nextSkill
 ) {
-    public static RoundSkillResponse of(int round, Skill skill) {
+    public static RoundSkillResponse of(int round, Skill skill, NextSkillPreview nextSkill) {
         return new RoundSkillResponse(
             round,
             skill.getId(),
             skill.getName(),
             skill.getSkillDesc(),
             skill.getGestures().stream().map(GestureStepResponse::from).toList(),
-            EffectResponse.from(skill.getEffect())
+            EffectResponse.from(skill.getEffect()),
+            nextSkill
         );
     }
 }

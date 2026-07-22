@@ -4,11 +4,13 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Repository;
 
 // room:{code}:session:{seq} 계열 키만 다룬다 — room/course/session 자체의 생성·진행은 이 도메인 책임이 아니고,
 // 세션 하나가 열려 있다는 전제 하에 닌자 전용 필드(alive_players/eliminated/player_hp/round 등)만 읽고 쓴다.
+@Slf4j
 @Repository
 public class NinjaRedisRepository {
 
@@ -29,6 +31,18 @@ public class NinjaRedisRepository {
 
     private String sessionKey(String roomCode, int seq) {
         return "room:%s:session:%d".formatted(roomCode, seq);
+    }
+
+    // 이 세션(room:{code}:session:{seq}) 밑에 걸린 키를 전부 지운다 — round:{n}/round:{n}:attack처럼
+    // 라운드 번호가 안 정해진 키까지 다 정리해야 해서 정확한 키 목록 대신 접두사로 통째로 찾아 지운다.
+    // 참가자 몇 명 규모의 로컬/데모 환경이라 KEYS(운영 환경에서 권장 안 되는 O(N) 명령)를 써도
+    // 문제없다고 판단했다 — 세션 시작 시 딱 한 번만 호출됨.
+    public void clearSession(String roomCode, int seq) {
+        Set<String> keys = redis.keys(sessionKey(roomCode, seq) + "*");
+        if (keys != null && !keys.isEmpty()) {
+            redis.delete(keys);
+            log.info("[Repository] clearSession : roomCode={} seq={} {}개 키 삭제", roomCode, seq, keys.size());
+        }
     }
 
     private String skillOrderKey(String roomCode, int seq) {
@@ -53,6 +67,10 @@ public class NinjaRedisRepository {
 
     private String hpKey(String roomCode, int seq) {
         return sessionKey(roomCode, seq) + ":player_hp";
+    }
+
+    private String finalRankingKey(String roomCode, int seq) {
+        return sessionKey(roomCode, seq) + ":final_ranking";
     }
 
     // --- 세션 준비 ---
@@ -100,6 +118,12 @@ public class NinjaRedisRepository {
         return value == null ? null : Integer.valueOf(value.toString());
     }
 
+    // 원래는 세션이 열릴 때 course:{seq}.round_count를 그대로 복사해오는 값(room/course 도메인 책임) —
+    // 그 흐름이 아직 없어서 지금은 이 메서드로 직접 채운다(예: dev 시드 컨트롤러).
+    public void setTotalRounds(String roomCode, int seq, int totalRounds) {
+        redis.opsForHash().put(sessionKey(roomCode, seq), TOTAL_ROUNDS_FIELD, String.valueOf(totalRounds));
+    }
+
     // --- 라운드 진행 ---
 
     public void openRound(String roomCode, int seq, int round, Long skillId, Instant startedAt) {
@@ -119,9 +143,11 @@ public class NinjaRedisRepository {
 
     // 라운드 종료(대상 지정 완료 vs 타임아웃) 경합 해소용 락. 먼저 도착한 호출만 true를 받는다.
     public boolean closeRound(String roomCode, int seq, int round, String reason) {
-        return Boolean.TRUE.equals(
+        boolean won = Boolean.TRUE.equals(
             redis.opsForHash().putIfAbsent(roundKey(roomCode, seq, round), CLOSED_FIELD, reason)
         );
+        log.info("[Repository] closeRound(HSETNX) : round={} reason={} 결과={}", round, reason, won ? "성공" : "이미 닫힘");
+        return won;
     }
 
     public boolean isRoundClosed(String roomCode, int seq, int round) {
@@ -131,9 +157,11 @@ public class NinjaRedisRepository {
     // --- 공격권/대상 선점 (동시 완성 예외 처리) ---
 
     public boolean claimAttacker(String roomCode, int seq, int round, String token) {
-        return Boolean.TRUE.equals(
+        boolean won = Boolean.TRUE.equals(
             redis.opsForHash().putIfAbsent(attackKey(roomCode, seq, round), ATTACKER_TOKEN_FIELD, token)
         );
+        log.info("[Repository] claimAttacker(HSETNX) : round={} token={} 결과={}", round, token, won ? "선점 성공" : "선점 실패");
+        return won;
     }
 
     public void recordAttackSkill(String roomCode, int seq, int round, Long skillId, Instant judgedAt) {
@@ -148,9 +176,11 @@ public class NinjaRedisRepository {
     }
 
     public boolean claimTarget(String roomCode, int seq, int round, String token) {
-        return Boolean.TRUE.equals(
+        boolean won = Boolean.TRUE.equals(
             redis.opsForHash().putIfAbsent(attackKey(roomCode, seq, round), TARGET_TOKEN_FIELD, token)
         );
+        log.info("[Repository] claimTarget(HSETNX) : round={} target={} 결과={}", round, token, won ? "선점 성공" : "이미 지정됨");
+        return won;
     }
 
     // --- 생존/HP ---
@@ -180,5 +210,23 @@ public class NinjaRedisRepository {
     public List<String> getEliminatedOrderDesc(String roomCode, int seq) {
         Set<String> members = redis.opsForZSet().reverseRange(eliminatedKey(roomCode, seq), 0, -1);
         return members == null ? List.of() : List.copyOf(members);
+    }
+
+    // --- 게임 종료 ---
+
+    // 게임 종료 결과는 WS(ninja:game-ended)로만 나가면 STOMP를 안 붙인 프론트는 영영 못 받는다 —
+    // GET .../state가 폴링으로도 순위를 읽을 수 있도록 여기 별도로 저장해둔다(순위 순서, rank는
+    // 인덱스+1로 유도).
+    public void saveRanking(String roomCode, int seq, List<String> orderedTokens) {
+        String key = finalRankingKey(roomCode, seq);
+        redis.delete(key);
+        if (!orderedTokens.isEmpty()) {
+            redis.opsForList().rightPushAll(key, orderedTokens);
+        }
+    }
+
+    public List<String> getRanking(String roomCode, int seq) {
+        List<String> values = redis.opsForList().range(finalRankingKey(roomCode, seq), 0, -1);
+        return values == null ? List.of() : values;
     }
 }

@@ -20,6 +20,8 @@ public enum ErrorCode {
     NINJA_NOT_ATTACKER(HttpStatus.FORBIDDEN, "이번 라운드의 공격권을 획득한 참가자가 아닙니다."),
     NINJA_TARGET_ALREADY_SET(HttpStatus.CONFLICT, "이미 공격 대상이 지정되었습니다."),
     NINJA_INVALID_TARGET(HttpStatus.BAD_REQUEST, "공격 대상으로 지정할 수 없는 참가자입니다."),
+    NINJA_NOT_ENOUGH_PLAYERS(HttpStatus.BAD_REQUEST, "닌자 게임은 최소 2명 이상이어야 시작할 수 있습니다."),
+    NINJA_TOO_MANY_PLAYERS(HttpStatus.BAD_REQUEST, "닌자 게임은 최대 4명까지만 참가할 수 있습니다."),
     INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "서버 오류가 발생했습니다.");
 
     private final HttpStatus status;

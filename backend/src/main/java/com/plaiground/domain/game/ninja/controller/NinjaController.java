@@ -11,6 +11,7 @@ import com.plaiground.global.apiresponse.ApiResponse;
 import com.plaiground.global.security.GuestPrincipal;
 import jakarta.validation.Valid;
 import java.util.UUID;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -22,6 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 // {gameId}는 room의 UUID(roomId)를 그대로 받는다 — 이 방에서 지금 진행 중인 세션은 서비스가
 // room.currentSessionSeq()로 알아서 찾는다(별도 세션 식별자 없음). 여기는 요청을 받아 서비스에
 // 위임만 하고, Redis/WS 처리는 전부 NinjaGameService에 있다.
+@Slf4j
 @RestController
 @RequestMapping("/api/games/{gameId}/ninja")
 public class NinjaController {
@@ -37,7 +39,10 @@ public class NinjaController {
         @PathVariable UUID gameId,
         @PathVariable int round
     ) {
-        return ApiResponse.ok(ninjaGameService.getRoundSkill(gameId, round));
+        log.info("[Controller] GET rounds/{}/skill : gameId={}", round, gameId);
+        RoundSkillResponse response = ninjaGameService.getRoundSkill(gameId, round);
+        log.info("[Controller] GET rounds/{}/skill 완료 : skillId={} skillName={}", round, response.skillId(), response.skillName());
+        return ApiResponse.ok(response);
     }
 
     @PostMapping("/rounds/{round}/attack")
@@ -48,7 +53,11 @@ public class NinjaController {
         @Valid @RequestBody AttackRequest request
     ) {
         String participantToken = principal.participantId().toString();
-        return ApiResponse.ok(ninjaGameService.attack(gameId, round, participantToken, request));
+        log.info("[Controller] POST rounds/{}/attack : gameId={} participantToken={} skillId={}",
+            round, gameId, participantToken, request.skillId());
+        AttackResponse response = ninjaGameService.attack(gameId, round, participantToken, request);
+        log.info("[Controller] POST rounds/{}/attack 완료 : attackerToken={} 공격권 선점 성공", round, response.attackerToken());
+        return ApiResponse.ok(response);
     }
 
     @PostMapping("/rounds/{round}/target")
@@ -59,11 +68,19 @@ public class NinjaController {
         @Valid @RequestBody TargetRequest request
     ) {
         String participantToken = principal.participantId().toString();
-        return ApiResponse.ok(ninjaGameService.target(gameId, round, participantToken, request));
+        log.info("[Controller] POST rounds/{}/target : gameId={} participantToken={} targetToken={}",
+            round, gameId, participantToken, request.targetToken());
+        TargetResponse response = ninjaGameService.target(gameId, round, participantToken, request);
+        log.info("[Controller] POST rounds/{}/target 완료 : damage={} targetHpAfter={} eliminated={} gameEnded={}",
+            round, response.damage(), response.targetHpAfter(), response.targetEliminated(), response.gameEnded());
+        return ApiResponse.ok(response);
     }
 
     @GetMapping("/state")
     public ApiResponse<NinjaStateResponse> getState(@PathVariable UUID gameId) {
-        return ApiResponse.ok(ninjaGameService.getState(gameId));
+        NinjaStateResponse response = ninjaGameService.getState(gameId);
+        log.debug("[Controller] GET state : gameId={} round={}/{} alive={}",
+            gameId, response.round(), response.totalRounds(), response.alivePlayers().size());
+        return ApiResponse.ok(response);
     }
 }
