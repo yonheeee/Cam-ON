@@ -5,6 +5,7 @@ import java.util.UUID;
 
 public record Room(
     UUID roomId,
+    String roomCode,
     String title,
     UUID hostParticipantId,
     int maxPlayers,

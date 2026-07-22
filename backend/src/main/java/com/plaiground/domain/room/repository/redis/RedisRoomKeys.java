@@ -5,6 +5,7 @@ import java.util.UUID;
 final class RedisRoomKeys {
 
     private static final String ROOM_PREFIX = "room:";
+    private static final String ROOM_CODE_PREFIX = "room-code:";
     private static final String HEARTBEAT_PREFIX = "session:";
 
     private RedisRoomKeys() {
@@ -12,6 +13,10 @@ final class RedisRoomKeys {
 
     static String room(UUID roomId) {
         return ROOM_PREFIX + roomId;
+    }
+
+    static String roomCode(String roomCode) {
+        return ROOM_CODE_PREFIX + roomCode;
     }
 
     static String participants(UUID roomId) {

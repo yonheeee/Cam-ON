@@ -2,6 +2,7 @@ package com.plaiground.domain.room.repository.redis;
 
 import com.plaiground.domain.room.domain.Room;
 import com.plaiground.domain.room.domain.RoomStatus;
+import com.plaiground.domain.room.domain.Participant;
 import com.plaiground.domain.room.repository.RoomRepository;
 import java.time.Instant;
 import java.util.List;
@@ -16,8 +17,9 @@ import org.springframework.stereotype.Repository;
 public class RedisRoomRepository implements RoomRepository {
 
     private static final String ROOM_ID = "room_id";
+    private static final String ROOM_CODE = "room_code";
     private static final String TITLE = "title";
-    private static final String HOST_PARTICIPANT_ID = "host_token";
+    private static final String HOST_PARTICIPANT_ID = "host_participant_id";
     private static final String MAX_PLAYERS = "max_players";
     private static final String STATUS = "status";
     private static final String CREATED_AT = "created_at";
@@ -25,17 +27,45 @@ public class RedisRoomRepository implements RoomRepository {
     private static final DefaultRedisScript<Long> SAVE_IF_ABSENT_SCRIPT =
         new DefaultRedisScript<>("""
             if redis.call('EXISTS', KEYS[1]) == 1
-            then
+                or redis.call('EXISTS', KEYS[2]) == 1 then
                 return 0
             end
 
             redis.call('HSET', KEYS[1],
                 'room_id', ARGV[1],
-                'title', ARGV[2],
-                'host_token', ARGV[3],
-                'max_players', ARGV[4],
-                'status', ARGV[5],
-                'created_at', ARGV[6])
+                'room_code', ARGV[2],
+                'title', ARGV[3],
+                'host_participant_id', ARGV[4],
+                'max_players', ARGV[5],
+                'status', ARGV[6],
+                'created_at', ARGV[7])
+            redis.call('SET', KEYS[2], ARGV[1])
+            return 1
+            """, Long.class);
+
+    private static final DefaultRedisScript<Long> TRY_CREATE_SCRIPT =
+        new DefaultRedisScript<>("""
+            if redis.call('EXISTS', KEYS[1]) == 1
+                or redis.call('EXISTS', KEYS[2]) == 1 then
+                return 0
+            end
+
+            redis.call('HSET', KEYS[1],
+                'room_id', ARGV[1],
+                'room_code', ARGV[2],
+                'title', ARGV[3],
+                'host_participant_id', ARGV[4],
+                'max_players', ARGV[5],
+                'status', ARGV[6],
+                'created_at', ARGV[7])
+            redis.call('SET', KEYS[2], ARGV[1])
+            redis.call('SADD', KEYS[3], ARGV[4])
+            redis.call('HSET', KEYS[4],
+                'nickname', ARGV[8],
+                'ready', ARGV[9],
+                'connection_status', ARGV[10],
+                'joined_at', ARGV[11])
+            redis.call('SADD', KEYS[5], ARGV[8])
             return 1
             """, Long.class);
 
@@ -56,6 +86,11 @@ public class RedisRoomRepository implements RoomRepository {
                 redis.call('DEL', ARGV[2] .. participantId .. ':alive')
             end
 
+            local roomCode = redis.call('HGET', KEYS[1], 'room_code')
+            if roomCode then
+                redis.call('DEL', ARGV[3] .. roomCode)
+            end
+
             redis.call('DEL', KEYS[1], KEYS[2], KEYS[3])
             return 1
             """, Long.class);
@@ -70,13 +105,43 @@ public class RedisRoomRepository implements RoomRepository {
     public boolean saveIfAbsent(Room room) {
         Long result = redisTemplate.execute(
             SAVE_IF_ABSENT_SCRIPT,
-            List.of(RedisRoomKeys.room(room.roomId())),
+            List.of(
+                RedisRoomKeys.room(room.roomId()),
+                RedisRoomKeys.roomCode(room.roomCode())
+            ),
             room.roomId().toString(),
+            room.roomCode(),
             room.title(),
             room.hostParticipantId().toString(),
             Integer.toString(room.maxPlayers()),
             room.status().name(),
             room.createdAt().toString()
+        );
+        return Long.valueOf(1L).equals(result);
+    }
+
+    @Override
+    public boolean tryCreate(Room room, Participant host) {
+        Long result = redisTemplate.execute(
+            TRY_CREATE_SCRIPT,
+            List.of(
+                RedisRoomKeys.room(room.roomId()),
+                RedisRoomKeys.roomCode(room.roomCode()),
+                RedisRoomKeys.participants(room.roomId()),
+                RedisRoomKeys.participant(room.roomId(), host.participantId()),
+                RedisRoomKeys.nicknames(room.roomId())
+            ),
+            room.roomId().toString(),
+            room.roomCode(),
+            room.title(),
+            room.hostParticipantId().toString(),
+            Integer.toString(room.maxPlayers()),
+            room.status().name(),
+            room.createdAt().toString(),
+            host.nickname(),
+            Boolean.toString(host.ready()),
+            host.connectionStatus().name(),
+            host.joinedAt().toString()
         );
         return Long.valueOf(1L).equals(result);
     }
@@ -92,12 +157,24 @@ public class RedisRoomRepository implements RoomRepository {
 
         return Optional.of(new Room(
             UUID.fromString(required(values, ROOM_ID)),
+            required(values, ROOM_CODE),
             required(values, TITLE),
             UUID.fromString(required(values, HOST_PARTICIPANT_ID)),
             Integer.parseInt(required(values, MAX_PLAYERS)),
             RoomStatus.valueOf(required(values, STATUS)),
             Instant.parse(required(values, CREATED_AT))
         ));
+    }
+
+    @Override
+    public Optional<Room> findByCode(String roomCode) {
+        String roomId = redisTemplate.opsForValue().get(
+            RedisRoomKeys.roomCode(roomCode)
+        );
+        if (roomId == null) {
+            return Optional.empty();
+        }
+        return findById(UUID.fromString(roomId));
     }
 
     @Override
@@ -124,7 +201,8 @@ public class RedisRoomRepository implements RoomRepository {
                 RedisRoomKeys.nicknames(roomId)
             ),
             RedisRoomKeys.participantPrefix(roomId),
-            "session:"
+            "session:",
+            "room-code:"
         );
     }
 

@@ -10,13 +10,19 @@ when `RoomRepository.delete(roomId)` is called.
 | Field | Java type | Description |
 | --- | --- | --- |
 | `room_id` | `UUID` | REST path identifier |
+| `room_code` | `String` | Six-character invite/join code |
 | `title` | `String` | Room title |
-| `host_token` | `UUID` | Current host participant ID |
+| `host_participant_id` | `UUID` | Current host participant ID |
 | `max_players` | `int` | Maximum participants |
 | `status` | `RoomStatus` | `WAITING`, `PLAYING`, or `FINISHED` |
 | `created_at` | `Instant` | ISO-8601 creation time |
 
 Example: `room:550e8400-e29b-41d4-a716-446655440000`
+
+### `room-code:{roomCode}` — STRING
+
+The value is the corresponding `roomId`. This reverse index is used only at
+the invite/join boundary; internal room APIs use `roomId`.
 
 ### `room:{roomId}:participants` — SET
 
@@ -58,7 +64,14 @@ create a new guest session.
 
 ## Atomic operations
 
-`RoomRepository.saveIfAbsent` uses one Lua script to reserve the room ID.
+`RoomRepository.tryCreate` uses one Lua script to reserve both the room ID and
+room code, then creates the room, its code index, the host participant HASH,
+participants SET, and nickname SET together. A room therefore cannot be
+visible without its creator already registered as host.
+
+`RoomRepository.saveIfAbsent` reserves the room ID and room code together. It
+is retained for repository-level operations; the room creation use case calls
+`tryCreate`.
 
 `ParticipantRepository.tryAdd` uses one Lua script to check and update all of
 the following as a single Redis operation:
