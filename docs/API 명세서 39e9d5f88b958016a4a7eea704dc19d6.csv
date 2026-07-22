@@ -21,7 +21,14 @@ No,몸으로 말해요,프 -> 백,API,제시어 조회,출제자가 이번 라�
 No,몸으로 말해요,프 -> 백,API,정답 채팅 제출,채팅으로 정답을 시도하고 정답 여부를 즉시 응답받음,POST,,/api/games/{gameId}/charades/guesses,미구현,미구현,방 참가자,필요
 No,몸으로 말해요,백 -> 프,WS Event,채팅 메세지 브로드캐스트,제출된 채팅 내용을 방 참가자 전체에 실시간 전파,,chat:message-received,/ws/rooms/{roomId},미구현,미구현,방 참가자,필요
 No,손동작 스킬 배틀,프 -> AI,WebSocket,AI 게임 소켓 연결 확인,손동작 좌표 연속 전송용 AI 서버 소켓 연결 수립,,connect,/ws/ai/games/{gameId},미구현,미구현,방 참가자,필요
-No,손동작 스킬 배틀,프 -> AI -> 프,API,라운드 손동작 시퀀스 조회,이번 라운드에 완성 가능한 후보 스킬(손동작 콤보) 조회,GET,,/ai/games/{gameId}/ninja/sequence,미구현,미구현,방 참가자,필요
+No,손동작 스킬 배틀,프 -> 백,API,라운드 요구 스킬 조회,이번 라운드에 완성해야 하는 손동작(스킬) 조회 — AI 판정과 매칭할 gesture 라벨·이펙트 정보 포함,GET,,/api/games/{gameId}/ninja/rounds/{round}/skill,미구현,미구현,방 참가자,필요
 No,손동작 스킬 배틀,프 -> AI,WS Event,손동작 미디어파이프 좌표 전송,손 랜드마크 좌표를 프레임마다 연속 전송,,gesture:frame,/ws/ai/games/{gameId},미구현,미구현,방 참가자,필요
-No,손동작 스킬 배틀,AI -> 프,WS Event,손동작 시퀀스 판정 결과,완성된 콤보와 공격 판정 결과를 비동기로 수신,,gesture:sequence-judged,/ws/ai/games/{gameId},미구현,미구현,방 참가자,필요
-No,손동작 스킬 배틀,프 -> 백,API,게임 라운드 결과 저장,프론트가 중계한 AI의 손동작 콤보 판정 결과를 라운드 결과로 Redis에 반영,POST,,/api/games/{gameId}/result,미구현,미구현,방 참가자,필요
+No,손동작 스킬 배틀,AI -> 프,WS Event,손동작 판정 결과,프레임마다 분류한 손동작(단일 포즈) 라벨을 비동기로 수신 — 콤보 시퀀스가 아닌 단일 포즈 판정이며 공격권 판정은 Spring이 별도로 함,,gesture:pose-judged,/ws/ai/games/{gameId},미구현,미구현,방 참가자,필요
+No,손동작 스킬 배틀,프 -> 백,API,손동작 완성 판정 제출(공격권 선점),AI가 판정한 손동작이 이번 라운드 요구 스킬과 일치하면 공격권 선점을 시도 — 동시 완성 시 Redis 원자 연산으로 최초 도달자만 성공,POST,,/api/games/{gameId}/ninja/rounds/{round}/attack,미구현,미구현,방 참가자,필요
+No,손동작 스킬 배틀,프 -> 백,API,공격 대상 지정,공격권을 획득한 참가자가 대상을 지정 — 스킬 데미지를 HP에 반영하고 탈락 여부까지 판정,POST,,/api/games/{gameId}/ninja/rounds/{round}/target,미구현,미구현,방 참가자(공격권 보유자),필요
+No,손동작 스킬 배틀,프 -> 백,API,게임 상태 스냅샷 조회,재접속 시 현재 라운드/생존자/HP를 다시 동기화하기 위한 조회 — 끊긴 동안 놓친 WS 이벤트를 REST로 보강,GET,,/api/games/{gameId}/ninja/state,미구현,미구현,방 참가자,필요
+No,손동작 스킬 배틀,백 -> 프,WS Event,라운드 시작 전파,라운드 번호/제한시간 전파 — 이번 라운드 요구 스킬은 REST GET으로 별도 조회,,ninja:round-started,/ws/rooms/{roomId},미구현,미구현,방 참가자,필요
+No,손동작 스킬 배틀,백 -> 프,WS Event,공격권 선점 전파,공격자가 결정되어 대상 지정을 기다리는 중임을 전파,,ninja:attack-won,/ws/rooms/{roomId},미구현,미구현,방 참가자,필요
+No,손동작 스킬 배틀,백 -> 프,WS Event,공격 결과 전파,데미지/HP 변화/탈락 여부를 전파,,ninja:attack-resolved,/ws/rooms/{roomId},미구현,미구현,방 참가자,필요
+No,손동작 스킬 배틀,백 -> 프,WS Event,라운드 타임아웃 전파,라운드 내 아무도 손동작을 완성하지 못해 공격 없이 종료됨을 전파,,ninja:round-timeout,/ws/rooms/{roomId},미구현,미구현,방 참가자,필요
+No,손동작 스킬 배틀,백 -> 프,WS Event,게임 종료 전파,최후 1인 생존으로 게임 종료되며 최종 순위를 전파,,ninja:game-ended,/ws/rooms/{roomId},미구현,미구현,방 참가자,필요
