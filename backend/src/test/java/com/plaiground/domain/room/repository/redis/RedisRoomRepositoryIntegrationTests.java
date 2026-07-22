@@ -7,6 +7,7 @@ import com.plaiground.domain.room.domain.Participant;
 import com.plaiground.domain.room.domain.Room;
 import com.plaiground.domain.room.domain.RoomStatus;
 import com.plaiground.domain.room.repository.ConnectionRepository;
+import com.plaiground.domain.room.repository.HeartbeatRefreshResult;
 import com.plaiground.domain.room.repository.JoinParticipantResult;
 import com.plaiground.domain.room.repository.ParticipantRepository;
 import com.plaiground.domain.room.repository.RoomRepository;
@@ -272,14 +273,17 @@ class RedisRoomRepositoryIntegrationTests {
 
     @Test
     void refreshesAndRemovesHeartbeat() {
-        UUID participantId = UUID.randomUUID();
-        UUID roomId = UUID.randomUUID();
+        Room room = room(4);
+        roomRepository.saveIfAbsent(room);
+        Participant participant = participant("heartbeat 참가자");
+        participantRepository.tryAdd(room.roomId(), participant);
 
-        connectionRepository.refreshHeartbeat(
-            participantId,
-            roomId,
+        assertThat(connectionRepository.refreshHeartbeat(
+            participant.participantId(),
+            room.roomId(),
             Duration.ofSeconds(15)
-        );
+        )).isEqualTo(HeartbeatRefreshResult.SUCCESS);
+        UUID participantId = participant.participantId();
         assertThat(connectionRepository.isAlive(participantId)).isTrue();
         assertThat(redisTemplate.getExpire(
             RedisRoomKeys.heartbeat(participantId)
