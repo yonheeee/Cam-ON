@@ -15,8 +15,6 @@ public interface RoomRepository {
 
     Optional<Room> findByCode(String roomCode);
 
-    LeaveRoomResult leave(UUID roomId, UUID participantId);
-
     void updateHost(UUID roomId, UUID hostParticipantId);
 
     void updateStatus(UUID roomId, RoomStatus status);

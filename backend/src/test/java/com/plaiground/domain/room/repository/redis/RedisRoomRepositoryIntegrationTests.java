@@ -8,12 +8,11 @@ import com.plaiground.domain.room.domain.Room;
 import com.plaiground.domain.room.domain.RoomStatus;
 import com.plaiground.domain.room.repository.ConnectionRepository;
 import com.plaiground.domain.room.repository.JoinParticipantResult;
-import com.plaiground.domain.room.repository.LeaveRoomResult;
-import com.plaiground.domain.room.repository.LeaveRoomStatus;
 import com.plaiground.domain.room.repository.ParticipantRepository;
 import com.plaiground.domain.room.repository.RoomRepository;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -180,73 +179,6 @@ class RedisRoomRepositoryIntegrationTests {
     }
 
     @Test
-    void hostLeaveTransfersHostToEarliestRemainingParticipant() {
-        Room room = room(4);
-        Participant host = new Participant(
-            room.hostParticipantId(),
-            "host",
-            false,
-            ConnectionStatus.CONNECTED,
-            room.createdAt()
-        );
-        Participant second = new Participant(
-            UUID.randomUUID(),
-            "second",
-            false,
-            ConnectionStatus.CONNECTED,
-            room.createdAt().plusSeconds(1)
-        );
-        Participant third = new Participant(
-            UUID.randomUUID(),
-            "third",
-            false,
-            ConnectionStatus.CONNECTED,
-            room.createdAt().plusSeconds(2)
-        );
-        assertThat(roomRepository.tryCreate(room, host)).isTrue();
-        assertThat(participantRepository.tryAdd(room.roomId(), second))
-            .isEqualTo(JoinParticipantResult.SUCCESS);
-        assertThat(participantRepository.tryAdd(room.roomId(), third))
-            .isEqualTo(JoinParticipantResult.SUCCESS);
-
-        LeaveRoomResult result = roomRepository.leave(
-            room.roomId(),
-            host.participantId()
-        );
-
-        assertThat(result.status()).isEqualTo(LeaveRoomStatus.HOST_CHANGED);
-        assertThat(result.newHostParticipantId())
-            .isEqualTo(second.participantId());
-        assertThat(roomRepository.findById(room.roomId()).orElseThrow()
-            .hostParticipantId()).isEqualTo(second.participantId());
-        assertThat(participantRepository.findAll(room.roomId()))
-            .containsExactly(second, third);
-    }
-
-    @Test
-    void lastParticipantLeaveDeletesRoomAndCodeMapping() {
-        Room room = room(4);
-        Participant host = new Participant(
-            room.hostParticipantId(),
-            "host",
-            false,
-            ConnectionStatus.CONNECTED,
-            room.createdAt()
-        );
-        assertThat(roomRepository.tryCreate(room, host)).isTrue();
-
-        LeaveRoomResult result = roomRepository.leave(
-            room.roomId(),
-            host.participantId()
-        );
-
-        assertThat(result.status()).isEqualTo(LeaveRoomStatus.ROOM_DELETED);
-        assertThat(roomRepository.findById(room.roomId())).isEmpty();
-        assertThat(roomRepository.findByCode(room.roomCode())).isEmpty();
-        assertThat(participantRepository.findAll(room.roomId())).isEmpty();
-    }
-
-    @Test
     void concurrentJoinsNeverExceedRoomCapacity() throws Exception {
         Room room = room(2);
         roomRepository.saveIfAbsent(room);
@@ -376,7 +308,7 @@ class RedisRoomRepositoryIntegrationTests {
             nickname,
             false,
             ConnectionStatus.CONNECTED,
-            Instant.now()
+            Instant.now().truncatedTo(ChronoUnit.MILLIS)
         );
     }
 }

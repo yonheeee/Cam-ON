@@ -4,8 +4,6 @@ import com.plaiground.domain.room.domain.Room;
 import com.plaiground.domain.room.domain.RoomStatus;
 import com.plaiground.domain.room.domain.Participant;
 import com.plaiground.domain.room.repository.RoomRepository;
-import com.plaiground.domain.room.repository.LeaveRoomResult;
-import com.plaiground.domain.room.repository.LeaveRoomStatus;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -61,7 +59,7 @@ public class RedisRoomRepository implements RoomRepository {
                 'status', ARGV[6],
                 'created_at', ARGV[7])
             redis.call('SET', KEYS[2], ARGV[1])
-            redis.call('ZADD', KEYS[3], ARGV[12], ARGV[4])
+            redis.call('SADD', KEYS[3], ARGV[4])
             redis.call('HSET', KEYS[4],
                 'nickname', ARGV[8],
                 'ready', ARGV[9],
@@ -80,52 +78,9 @@ public class RedisRoomRepository implements RoomRepository {
             return 1
             """, Long.class);
 
-    private static final DefaultRedisScript<String> LEAVE_SCRIPT =
-        new DefaultRedisScript<>("""
-            if redis.call('EXISTS', KEYS[1]) == 0 then
-                return 'ROOM_NOT_FOUND'
-            end
-
-            local participantId = ARGV[1]
-            local participantKey = ARGV[2] .. participantId
-            if redis.call('ZSCORE', KEYS[2], participantId) == false
-                or redis.call('EXISTS', participantKey) == 0 then
-                return 'PARTICIPANT_NOT_FOUND'
-            end
-
-            local previousHostId = redis.call(
-                'HGET', KEYS[1], 'host_participant_id'
-            )
-            local nickname = redis.call('HGET', participantKey, 'nickname')
-            redis.call('ZREM', KEYS[2], participantId)
-            if nickname then
-                redis.call('SREM', KEYS[3], nickname)
-            end
-            redis.call('DEL', participantKey)
-            redis.call('DEL', ARGV[3] .. participantId .. ':alive')
-
-            if redis.call('ZCARD', KEYS[2]) == 0 then
-                local roomCode = redis.call('HGET', KEYS[1], 'room_code')
-                if roomCode then
-                    redis.call('DEL', ARGV[4] .. roomCode)
-                end
-                redis.call('DEL', KEYS[1], KEYS[2], KEYS[3])
-                return 'ROOM_DELETED|' .. previousHostId
-            end
-
-            if previousHostId == participantId then
-                local nextHosts = redis.call('ZRANGE', KEYS[2], 0, 0)
-                local newHostId = nextHosts[1]
-                redis.call('HSET', KEYS[1], 'host_participant_id', newHostId)
-                return 'HOST_CHANGED|' .. previousHostId .. '|' .. newHostId
-            end
-
-            return 'LEFT|' .. previousHostId
-            """, String.class);
-
     private static final DefaultRedisScript<Long> DELETE_SCRIPT =
         new DefaultRedisScript<>("""
-            local members = redis.call('ZRANGE', KEYS[2], 0, -1)
+            local members = redis.call('SMEMBERS', KEYS[2])
             for _, participantId in ipairs(members) do
                 redis.call('DEL', ARGV[1] .. participantId)
                 redis.call('DEL', ARGV[2] .. participantId .. ':alive')
@@ -186,7 +141,6 @@ public class RedisRoomRepository implements RoomRepository {
             host.nickname(),
             Boolean.toString(host.ready()),
             host.connectionStatus().name(),
-            host.joinedAt().toString(),
             Long.toString(host.joinedAt().toEpochMilli())
         );
         return Long.valueOf(1L).equals(result);
@@ -221,34 +175,6 @@ public class RedisRoomRepository implements RoomRepository {
             return Optional.empty();
         }
         return findById(UUID.fromString(roomId));
-    }
-
-    @Override
-    public LeaveRoomResult leave(UUID roomId, UUID participantId) {
-        String result = redisTemplate.execute(
-            LEAVE_SCRIPT,
-            List.of(
-                RedisRoomKeys.room(roomId),
-                RedisRoomKeys.participants(roomId),
-                RedisRoomKeys.nicknames(roomId)
-            ),
-            participantId.toString(),
-            RedisRoomKeys.participantPrefix(roomId),
-            "session:",
-            "room-code:"
-        );
-        if (result == null) {
-            throw new IllegalStateException("Redis returned no leave result");
-        }
-        String[] values = result.split("\\|");
-        LeaveRoomStatus status = LeaveRoomStatus.valueOf(values[0]);
-        UUID previousHostId = values.length > 1
-            ? UUID.fromString(values[1])
-            : null;
-        UUID newHostId = values.length > 2
-            ? UUID.fromString(values[2])
-            : null;
-        return new LeaveRoomResult(status, previousHostId, newHostId);
     }
 
     @Override

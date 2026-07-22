@@ -24,11 +24,10 @@ Example: `room:550e8400-e29b-41d4-a716-446655440000`
 The value is the corresponding `roomId`. This reverse index is used only at
 the invite/join boundary; internal room APIs use `roomId`.
 
-### `room:{roomId}:participants` — ZSET
+### `room:{roomId}:participants` — SET
 
-Contains participant UUID strings in join order. The sorted-set score is the
-participant's `joined_at` epoch milliseconds. The earliest remaining member is
-selected with `ZRANGE 0 0` when the host leaves.
+Contains participant UUID strings. Join order is determined from each
+participant HASH's `joined_at` value when host ownership must be transferred.
 
 ### `room:{roomId}:participant:{participantId}` — HASH
 
@@ -37,7 +36,7 @@ selected with `ZRANGE 0 0` when the host leaves.
 | `nickname` | `String` | Display nickname |
 | `connection_status` | `ConnectionStatus` | Connection state |
 | `ready` | `boolean` | Ready state |
-| `joined_at` | `Instant` | ISO-8601 join time |
+| `joined_at` | `Instant` | Epoch-millisecond join time |
 
 ### `room:{roomId}:nicknames` — SET
 
@@ -67,7 +66,7 @@ create a new guest session.
 
 `RoomRepository.tryCreate` uses one Lua script to reserve both the room ID and
 room code, then creates the room, its code index, the host participant HASH,
-participants ZSET, and nickname SET together. A room therefore cannot be
+participants SET, and nickname SET together. A room therefore cannot be
 visible without its creator already registered as host.
 
 `RoomRepository.saveIfAbsent` reserves the room ID and room code together. It
@@ -87,7 +86,7 @@ the following as a single Redis operation:
 Room and participant field updates also check existence inside Lua so that an
 update racing with room deletion cannot recreate a partial HASH.
 
-`RoomRepository.leave` removes the participant and heartbeat, transfers host
+`ParticipantRepository.leave` removes the participant and heartbeat, transfers host
 ownership to the earliest remaining participant, or deletes the room and code
 mapping when no participant remains. These decisions and mutations run in one
 Lua script so concurrent leaves cannot appoint a participant who already left.
@@ -95,5 +94,7 @@ Lua script so concurrent leaves cannot appoint a participant who already left.
 ## Serialization
 
 All keys, HASH fields, and values use strings through `StringRedisTemplate`.
-UUID and `Instant` values use their standard string forms, so data remains
-readable with `redis-cli` and is not coupled to Java native serialization.
+UUID values use their standard string forms. Participant `joined_at` values use
+epoch milliseconds so Lua can compare join order numerically; other `Instant`
+values use ISO-8601 strings. Data remains readable with `redis-cli` and is not
+coupled to Java native serialization.

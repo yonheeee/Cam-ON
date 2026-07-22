@@ -139,7 +139,7 @@ class RoomServiceTest {
     }
 
     @Test
-    void joinsRoomByCodeAndReturnsCurrentSnapshot() {
+    void joinsRoomByIdAndReturnsCurrentSnapshot() {
         UUID hostId = UUID.randomUUID();
         UUID participantId = UUID.randomUUID();
         Room room = new Room(
@@ -161,7 +161,7 @@ class RoomServiceTest {
         when(sessionRepository.findByParticipantId(participantId)).thenReturn(
             Optional.of(new GuestSession(participantId, "guest", NOW))
         );
-        when(roomRepository.findByCode("AB23CD")).thenReturn(Optional.of(room));
+        when(roomRepository.findById(room.roomId())).thenReturn(Optional.of(room));
         when(participantRepository.tryAdd(
             room.roomId(),
             new Participant(
@@ -172,7 +172,6 @@ class RoomServiceTest {
                 NOW
             )
         )).thenReturn(JoinParticipantResult.SUCCESS);
-        when(roomRepository.findById(room.roomId())).thenReturn(Optional.of(room));
         when(participantRepository.findAll(room.roomId())).thenReturn(List.of(
             host,
             new Participant(
@@ -186,7 +185,7 @@ class RoomServiceTest {
 
         JoinRoomResponse response = roomService.joinRoom(
             participantId,
-            new JoinRoomRequest("AB23CD")
+            new JoinRoomRequest(room.roomId())
         );
 
         assertThat(response.room().roomId()).isEqualTo(room.roomId());
@@ -210,13 +209,13 @@ class RoomServiceTest {
         when(sessionRepository.findByParticipantId(participantId)).thenReturn(
             Optional.of(new GuestSession(participantId, "guest", NOW))
         );
-        when(roomRepository.findByCode("AB23CD")).thenReturn(Optional.of(room));
+        when(roomRepository.findById(room.roomId())).thenReturn(Optional.of(room));
         when(participantRepository.tryAdd(any(UUID.class), any(Participant.class)))
             .thenReturn(JoinParticipantResult.ROOM_FULL);
 
         assertThatThrownBy(() -> roomService.joinRoom(
             participantId,
-            new JoinRoomRequest("AB23CD")
+            new JoinRoomRequest(room.roomId())
         )).isInstanceOfSatisfying(BusinessException.class, exception ->
             assertThat(exception.errorCode()).isEqualTo(ErrorCode.ROOM_FULL)
         );
@@ -300,11 +299,13 @@ class RoomServiceTest {
         UUID roomId = UUID.randomUUID();
         UUID hostId = UUID.randomUUID();
         UUID newHostId = UUID.randomUUID();
-        when(roomRepository.leave(roomId, hostId)).thenReturn(
+        when(participantRepository.leave(roomId, hostId)).thenReturn(
             new LeaveRoomResult(
-                LeaveRoomStatus.HOST_CHANGED,
-                hostId,
-                newHostId
+                    LeaveRoomStatus.SUCCESS,
+                    hostId,
+                    hostId,
+                    newHostId,
+                    false
             )
         );
 
@@ -326,11 +327,13 @@ class RoomServiceTest {
     void rejectsLeaveWhenParticipantIsNotInRoom() {
         UUID roomId = UUID.randomUUID();
         UUID participantId = UUID.randomUUID();
-        when(roomRepository.leave(roomId, participantId)).thenReturn(
+        when(participantRepository.leave(roomId, participantId)).thenReturn(
             new LeaveRoomResult(
-                LeaveRoomStatus.PARTICIPANT_NOT_FOUND,
-                null,
-                null
+                    LeaveRoomStatus.PARTICIPANT_NOT_FOUND,
+                    participantId,
+                    null,
+                    null,
+                    false
             )
         );
 

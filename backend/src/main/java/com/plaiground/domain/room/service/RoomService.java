@@ -99,7 +99,7 @@ public class RoomService {
         GuestSession guestSession = sessionRepository
             .findByParticipantId(participantId)
             .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED));
-        Room room = roomRepository.findByCode(request.roomCode())
+        Room room = roomRepository.findById(request.roomId())
             .orElseThrow(() -> new BusinessException(ErrorCode.ROOM_NOT_FOUND));
         Participant participant = new Participant(
             participantId,
@@ -137,7 +137,7 @@ public class RoomService {
     }
 
     public void leaveRoom(UUID roomId, UUID participantId) {
-        LeaveRoomResult result = roomRepository.leave(roomId, participantId);
+        LeaveRoomResult result = participantRepository.leave(roomId, participantId);
         if (result.status() == LeaveRoomStatus.ROOM_NOT_FOUND) {
             throw new BusinessException(ErrorCode.ROOM_NOT_FOUND);
         }
@@ -145,12 +145,15 @@ public class RoomService {
             throw new BusinessException(ErrorCode.ROOM_ACCESS_DENIED);
         }
 
+        UUID newHostParticipantId = result.hostChanged()
+            ? result.newHostParticipantId()
+            : null;
         roomEventPublisher.publishMemberLeft(
             roomId,
             participantId,
-            result.newHostParticipantId()
+            newHostParticipantId
         );
-        if (result.status() == LeaveRoomStatus.HOST_CHANGED) {
+        if (result.hostChanged()) {
             roomEventPublisher.publishHostChanged(
                 roomId,
                 result.previousHostParticipantId(),
