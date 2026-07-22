@@ -12,6 +12,7 @@ import com.plaiground.domain.room.repository.ParticipantRepository;
 import com.plaiground.domain.room.repository.RoomRepository;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -262,7 +263,7 @@ class RedisRoomRepositoryIntegrationTests {
             nickname,
             false,
             ConnectionStatus.CONNECTED,
-            Instant.now()
+            Instant.now().truncatedTo(ChronoUnit.MILLIS)
         );
     }
 }

@@ -3,6 +3,8 @@ package com.plaiground.domain.room.repository.redis;
 import com.plaiground.domain.room.domain.ConnectionStatus;
 import com.plaiground.domain.room.domain.Participant;
 import com.plaiground.domain.room.repository.JoinParticipantResult;
+import com.plaiground.domain.room.repository.LeaveRoomResult;
+import com.plaiground.domain.room.repository.LeaveRoomStatus;
 import com.plaiground.domain.room.repository.ParticipantRepository;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -92,6 +94,60 @@ public class RedisParticipantRepository implements ParticipantRepository {
             return 1
             """, Long.class);
 
+    private static final DefaultRedisScript<String> LEAVE_SCRIPT =
+        new DefaultRedisScript<>("""
+            if redis.call('EXISTS', KEYS[1]) == 0 then
+                return 'ROOM_NOT_FOUND|||false'
+            end
+            if redis.call('SISMEMBER', KEYS[2], ARGV[1]) == 0 then
+                return 'PARTICIPANT_NOT_FOUND|||false'
+            end
+
+            local previousHost = redis.call('HGET', KEYS[1], 'host_token') or ''
+            local nickname = redis.call('HGET', KEYS[3], 'nickname')
+            if nickname then
+                redis.call('SREM', KEYS[4], nickname)
+            end
+            redis.call('SREM', KEYS[2], ARGV[1])
+            redis.call('DEL', KEYS[3], KEYS[5])
+
+            local remaining = redis.call('SMEMBERS', KEYS[2])
+            if #remaining == 0 then
+                redis.call('DEL', KEYS[1], KEYS[2], KEYS[4])
+                return 'SUCCESS|' .. previousHost .. '||true'
+            end
+
+            if previousHost ~= ARGV[1] then
+                return 'SUCCESS|' .. previousHost .. '|' .. previousHost .. '|false'
+            end
+
+            local newHost = nil
+            local earliestJoinedAt = nil
+            for _, participantId in ipairs(remaining) do
+                local joinedAt = tonumber(redis.call(
+                    'HGET',
+                    ARGV[2] .. participantId,
+                    'joined_at'
+                ))
+                if joinedAt and (
+                    earliestJoinedAt == nil
+                    or joinedAt < earliestJoinedAt
+                    or (joinedAt == earliestJoinedAt and participantId < newHost)
+                ) then
+                    earliestJoinedAt = joinedAt
+                    newHost = participantId
+                end
+            end
+
+            if not newHost then
+                redis.call('DEL', KEYS[1], KEYS[2], KEYS[4])
+                return 'SUCCESS|' .. previousHost .. '||true'
+            end
+
+            redis.call('HSET', KEYS[1], 'host_token', newHost)
+            return 'SUCCESS|' .. previousHost .. '|' .. newHost .. '|false'
+            """, String.class);
+
     private final StringRedisTemplate redisTemplate;
 
     public RedisParticipantRepository(StringRedisTemplate redisTemplate) {
@@ -112,7 +168,7 @@ public class RedisParticipantRepository implements ParticipantRepository {
             participant.nickname(),
             Boolean.toString(participant.ready()),
             participant.connectionStatus().name(),
-            participant.joinedAt().toString()
+            Long.toString(participant.joinedAt().toEpochMilli())
         );
         return toJoinResult(result);
     }
@@ -186,6 +242,23 @@ public class RedisParticipantRepository implements ParticipantRepository {
         );
     }
 
+    @Override
+    public LeaveRoomResult leave(UUID roomId, UUID participantId) {
+        String result = redisTemplate.execute(
+            LEAVE_SCRIPT,
+            List.of(
+                RedisRoomKeys.room(roomId),
+                RedisRoomKeys.participants(roomId),
+                RedisRoomKeys.participant(roomId, participantId),
+                RedisRoomKeys.nicknames(roomId),
+                RedisRoomKeys.heartbeat(participantId)
+            ),
+            participantId.toString(),
+            RedisRoomKeys.participantPrefix(roomId)
+        );
+        return toLeaveResult(participantId, result);
+    }
+
     private Optional<Participant> findParticipant(
         UUID roomId,
         UUID participantId
@@ -202,7 +275,7 @@ public class RedisParticipantRepository implements ParticipantRepository {
             required(values, NICKNAME),
             Boolean.parseBoolean(required(values, READY)),
             ConnectionStatus.valueOf(required(values, CONNECTION_STATUS)),
-            Instant.parse(required(values, JOINED_AT))
+            Instant.ofEpochMilli(Long.parseLong(required(values, JOINED_AT)))
         ));
     }
 
@@ -243,6 +316,35 @@ public class RedisParticipantRepository implements ParticipantRepository {
             return JoinParticipantResult.ALREADY_JOINED;
         }
         throw new IllegalStateException("Unknown Redis join result: " + result);
+    }
+
+    private static LeaveRoomResult toLeaveResult(
+        UUID participantId,
+        String result
+    ) {
+        if (result == null) {
+            throw new IllegalStateException("Redis returned no leave result");
+        }
+        String[] fields = result.split("\\|", -1);
+        if (fields.length != 4) {
+            throw new IllegalStateException("Invalid Redis leave result: " + result);
+        }
+
+        LeaveRoomStatus status = LeaveRoomStatus.valueOf(fields[0]);
+        return new LeaveRoomResult(
+            status,
+            participantId,
+            parseUuid(fields[1]),
+            parseUuid(fields[2]),
+            Boolean.parseBoolean(fields[3])
+        );
+    }
+
+    private static UUID parseUuid(String value) {
+        if (value.isBlank()) {
+            return null;
+        }
+        return UUID.fromString(value);
     }
 
     private static String required(Map<Object, Object> values, String field) {

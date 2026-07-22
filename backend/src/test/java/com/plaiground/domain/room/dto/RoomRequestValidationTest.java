@@ -6,6 +6,7 @@ import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
 import java.util.Set;
+import java.util.UUID;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -39,15 +40,16 @@ class RoomRequestValidationTest {
     }
 
     @Test
-    void acceptsSixCharacterUppercaseRoomCode() {
-        assertThat(validator.validate(new JoinRoomRequest("AB12CD"))).isEmpty();
+    void acceptsRoomId() {
+        assertThat(validator.validate(new JoinRoomRequest(UUID.randomUUID())))
+            .isEmpty();
     }
 
     @Test
-    void rejectsInvalidRoomCode() {
-        assertThat(validator.validate(new JoinRoomRequest("abc123")))
+    void rejectsNullRoomId() {
+        assertThat(validator.validate(new JoinRoomRequest(null)))
             .extracting(violation -> violation.getPropertyPath().toString())
-            .contains("roomCode");
+            .contains("roomId");
     }
 
     @Test
