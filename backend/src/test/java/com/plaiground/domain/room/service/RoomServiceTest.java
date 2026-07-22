@@ -15,10 +15,13 @@ import com.plaiground.domain.room.dto.CreateRoomRequest;
 import com.plaiground.domain.room.dto.CreateRoomResponse;
 import com.plaiground.domain.room.dto.JoinRoomRequest;
 import com.plaiground.domain.room.dto.JoinRoomResponse;
+import com.plaiground.domain.room.dto.UpdateReadyRequest;
 import com.plaiground.domain.room.repository.JoinParticipantResult;
 import com.plaiground.domain.room.repository.ParticipantRepository;
 import com.plaiground.domain.room.repository.LeaveRoomResult;
 import com.plaiground.domain.room.repository.LeaveRoomStatus;
+import com.plaiground.domain.room.repository.ReadyUpdateResult;
+import com.plaiground.domain.room.repository.ReadyUpdateStatus;
 import com.plaiground.domain.room.ws.RoomEventPublisher;
 import com.plaiground.domain.room.repository.RoomRepository;
 import com.plaiground.domain.session.domain.GuestSession;
@@ -339,5 +342,53 @@ class RoomServiceTest {
                 assertThat(exception.errorCode())
                     .isEqualTo(ErrorCode.ROOM_ACCESS_DENIED)
             );
+    }
+
+    @Test
+    void updatesReadyAndPublishesAllReadyState() {
+        UUID roomId = UUID.randomUUID();
+        UUID participantId = UUID.randomUUID();
+        when(participantRepository.updateReady(roomId, participantId, true))
+            .thenReturn(new ReadyUpdateResult(
+                ReadyUpdateStatus.SUCCESS,
+                true,
+                true
+            ));
+
+        var response = roomService.updateReady(
+            roomId,
+            participantId,
+            new UpdateReadyRequest(true)
+        );
+
+        assertThat(response.ready()).isTrue();
+        assertThat(response.allReady()).isTrue();
+        verify(roomEventPublisher).publishMemberReadyUpdated(
+            roomId,
+            participantId,
+            true,
+            true
+        );
+    }
+
+    @Test
+    void rejectsReadyUpdateAfterRoomStarted() {
+        UUID roomId = UUID.randomUUID();
+        UUID participantId = UUID.randomUUID();
+        when(participantRepository.updateReady(roomId, participantId, true))
+            .thenReturn(new ReadyUpdateResult(
+                ReadyUpdateStatus.ROOM_ALREADY_STARTED,
+                false,
+                false
+            ));
+
+        assertThatThrownBy(() -> roomService.updateReady(
+            roomId,
+            participantId,
+            new UpdateReadyRequest(true)
+        )).isInstanceOfSatisfying(BusinessException.class, exception ->
+            assertThat(exception.errorCode())
+                .isEqualTo(ErrorCode.ROOM_ALREADY_STARTED)
+        );
     }
 }

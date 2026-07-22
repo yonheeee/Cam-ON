@@ -10,11 +10,15 @@ import com.plaiground.domain.room.dto.JoinRoomRequest;
 import com.plaiground.domain.room.dto.JoinRoomResponse;
 import com.plaiground.domain.room.dto.ParticipantResponse;
 import com.plaiground.domain.room.dto.RoomSnapshotResponse;
+import com.plaiground.domain.room.dto.UpdateReadyRequest;
+import com.plaiground.domain.room.dto.UpdateReadyResponse;
 import com.plaiground.domain.room.repository.RoomRepository;
 import com.plaiground.domain.room.repository.JoinParticipantResult;
 import com.plaiground.domain.room.repository.ParticipantRepository;
 import com.plaiground.domain.room.repository.LeaveRoomResult;
 import com.plaiground.domain.room.repository.LeaveRoomStatus;
+import com.plaiground.domain.room.repository.ReadyUpdateResult;
+import com.plaiground.domain.room.repository.ReadyUpdateStatus;
 import com.plaiground.domain.room.ws.RoomEventPublisher;
 import com.plaiground.domain.session.domain.GuestSession;
 import com.plaiground.domain.session.repository.SessionRepository;
@@ -159,6 +163,39 @@ public class RoomService {
                 result.newHostParticipantId()
             );
         }
+    }
+
+    public UpdateReadyResponse updateReady(
+        UUID roomId,
+        UUID participantId,
+        UpdateReadyRequest request
+    ) {
+        ReadyUpdateResult result = participantRepository.updateReady(
+            roomId,
+            participantId,
+            request.ready()
+        );
+        if (result.status() == ReadyUpdateStatus.ROOM_NOT_FOUND) {
+            throw new BusinessException(ErrorCode.ROOM_NOT_FOUND);
+        }
+        if (result.status() == ReadyUpdateStatus.PARTICIPANT_NOT_FOUND) {
+            throw new BusinessException(ErrorCode.ROOM_ACCESS_DENIED);
+        }
+        if (result.status() == ReadyUpdateStatus.ROOM_ALREADY_STARTED) {
+            throw new BusinessException(ErrorCode.ROOM_ALREADY_STARTED);
+        }
+
+        roomEventPublisher.publishMemberReadyUpdated(
+            roomId,
+            participantId,
+            result.ready(),
+            result.allReady()
+        );
+        return new UpdateReadyResponse(
+            participantId,
+            result.ready(),
+            result.allReady()
+        );
     }
 
     private CreateRoomResponse toCreateRoomResponse(

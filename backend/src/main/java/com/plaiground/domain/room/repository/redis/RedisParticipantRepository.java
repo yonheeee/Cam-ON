@@ -6,6 +6,8 @@ import com.plaiground.domain.room.repository.JoinParticipantResult;
 import com.plaiground.domain.room.repository.LeaveRoomResult;
 import com.plaiground.domain.room.repository.LeaveRoomStatus;
 import com.plaiground.domain.room.repository.ParticipantRepository;
+import com.plaiground.domain.room.repository.ReadyUpdateResult;
+import com.plaiground.domain.room.repository.ReadyUpdateStatus;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -84,6 +86,40 @@ public class RedisParticipantRepository implements ParticipantRepository {
             end
             return #members
             """, Long.class);
+
+    private static final DefaultRedisScript<String> UPDATE_READY_SCRIPT =
+        new DefaultRedisScript<>("""
+            if redis.call('EXISTS', KEYS[1]) == 0 then
+                return 'ROOM_NOT_FOUND|false|false'
+            end
+            if redis.call('HGET', KEYS[1], 'status') ~= 'WAITING' then
+                return 'ROOM_ALREADY_STARTED|false|false'
+            end
+            if redis.call('SISMEMBER', KEYS[2], ARGV[1]) == 0
+                or redis.call('EXISTS', KEYS[3]) == 0 then
+                return 'PARTICIPANT_NOT_FOUND|false|false'
+            end
+
+            redis.call('HSET', KEYS[3], 'ready', ARGV[2])
+
+            local allReady = true
+            local members = redis.call('SMEMBERS', KEYS[2])
+            if #members == 0 then
+                allReady = false
+            end
+            for _, memberId in ipairs(members) do
+                local memberReady = redis.call(
+                    'HGET', ARGV[3] .. memberId, 'ready'
+                )
+                if memberReady ~= 'true' then
+                    allReady = false
+                    break
+                end
+            end
+
+            return 'SUCCESS|' .. ARGV[2] .. '|'
+                .. tostring(allReady)
+            """, String.class);
 
     private static final DefaultRedisScript<Long> UPDATE_IF_EXISTS_SCRIPT =
         new DefaultRedisScript<>("""
@@ -232,13 +268,23 @@ public class RedisParticipantRepository implements ParticipantRepository {
     }
 
     @Override
-    public void updateReady(UUID roomId, UUID participantId, boolean ready) {
-        updateParticipantField(
-            roomId,
-            participantId,
-            READY,
-            Boolean.toString(ready)
+    public ReadyUpdateResult updateReady(
+        UUID roomId,
+        UUID participantId,
+        boolean ready
+    ) {
+        String result = redisTemplate.execute(
+            UPDATE_READY_SCRIPT,
+            List.of(
+                RedisRoomKeys.room(roomId),
+                RedisRoomKeys.participants(roomId),
+                RedisRoomKeys.participant(roomId, participantId)
+            ),
+            participantId.toString(),
+            Boolean.toString(ready),
+            RedisRoomKeys.participantPrefix(roomId)
         );
+        return toReadyUpdateResult(result);
     }
 
     @Override
@@ -391,6 +437,23 @@ public class RedisParticipantRepository implements ParticipantRepository {
             parseUuid(fields[1]),
             parseUuid(fields[2]),
             Boolean.parseBoolean(fields[3])
+        );
+    }
+
+    private static ReadyUpdateResult toReadyUpdateResult(String result) {
+        if (result == null) {
+            throw new IllegalStateException("Redis returned no ready result");
+        }
+        String[] fields = result.split("\\|", -1);
+        if (fields.length != 3) {
+            throw new IllegalStateException(
+                "Invalid Redis ready result: " + result
+            );
+        }
+        return new ReadyUpdateResult(
+            ReadyUpdateStatus.valueOf(fields[0]),
+            Boolean.parseBoolean(fields[1]),
+            Boolean.parseBoolean(fields[2])
         );
     }
 

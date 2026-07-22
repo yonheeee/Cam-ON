@@ -3,6 +3,7 @@ No,세션,프 -> 백,API,사용자 세션 생성,닉네임 입력 후 게스트 
 No,방,프 -> 백,API,방 생성,새 방을 만들고 생성자가 방장이 됨,POST,,/api/rooms,미구현,미구현,사용자,필요
 No,방,프 -> 백,API,방 참가,코드/링크로 기존 방에 입장,POST,,/api/rooms/join,미구현,미구현,사용자,필요
 No,방,프 -> 백,API,방 나가기,현재 방에서 자발적으로 퇴장,DELETE,,/api/rooms/{roomId}/members/me,미구현,미구현,방 참가자,필요
+No,방,프 -> 백,API,준비 상태 변경,현재 참가자의 준비 완료 상태를 변경,PATCH,,/api/rooms/{roomId}/members/me/ready,구현,미구현,방 참가자,필요
 No,방,프 -> 백,API,게임 시작,방장이 대기방에서 확정한 코스대로 진행 시작,POST,,/api/rooms/{roomId}/start,미구현,미구현,방장,필요
 No,방,프->백->프,WebSocket,방 실시간 연결,방 상태 동기화·시그널링용 STOMP 연결 수립,,connect,/ws/rooms/{roomId},미구현,미구현,방 참가자,필요
 No,방,프->백->프,WS Event,WebRTC Offer 전달,화상통화 연결을 위한 offer SDP 중계,,webrtc:offer,/ws/rooms/{roomId},미구현,미구현,방 참가자,필요
@@ -11,7 +12,7 @@ No,방,프->백->프,WS Event,ICE Candidate 전달,WebRTC 연결 후보 정보 �
 No,방,백 -> 프,WS Event,멤버 입장 전파,새 참가자 입장을 다른 참가자들에게 알림,,member:joined,/ws/rooms/{roomId},미구현,미구현,방 참가자,필요
 No,방,백 -> 프,WS Event,멤버 퇴장 전파,참가자 퇴장(자발적/강퇴/타임아웃)을 알림,,member:left,/ws/rooms/{roomId},미구현,미구현,방 참가자,필요
 No,방,백 -> 프,WS Event,게임 선택 변경 전파,대기방에서 코스(게임 목록/순서) 설정이 바뀐 것을 알림,,member:game-updated,/ws/rooms/{roomId},미구현,미구현,방 참가자,필요
-No,방,백 -> 프,WS Event,준비 상태 변경 전파,참가자의 준비 완료 상태 변경을 알림,,member:ready-updated,/ws/rooms/{roomId},미구현,미구현,방 참가자,필요
+No,방,백 -> 프,WS Event,준비 상태 변경 전파,참가자의 준비 완료 상태와 전원 준비 여부를 알림,,member:ready-updated,/ws/rooms/{roomId},구현,미구현,방 참가자,필요
 No,방,백 -> 프,WS Event,게임 시작 전파,코스의 다음 게임(세션)이 시작됨을 알림,,game:started,/ws/rooms/{roomId},미구현,미구현,방 참가자,필요
 No,게임 공통,백 -> 프,WS Event,게임 라운드 결과 브로드캐스트,저장된 라운드 결과를 방 참가자 전체에 실시간 전파,,game:round-result,/ws/rooms/{roomId},미구현,미구현,방 참가자,필요
 No,물건 가져오기,프 -> 백,API,이번 라운드 제시 물건 조회,이번 라운드에 찾아야 할 물건(제시어)을 Spring이 MySQL에서 뽑아 응답,GET,,/api/games/{gameId}/fetch-object/mission,미구현,미구현,방 참가자,필요

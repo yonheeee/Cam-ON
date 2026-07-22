@@ -10,6 +10,7 @@ import com.plaiground.domain.room.repository.ConnectionRepository;
 import com.plaiground.domain.room.repository.HeartbeatRefreshResult;
 import com.plaiground.domain.room.repository.JoinParticipantResult;
 import com.plaiground.domain.room.repository.ParticipantRepository;
+import com.plaiground.domain.room.repository.ReadyUpdateStatus;
 import com.plaiground.domain.room.repository.RoomRepository;
 import java.time.Duration;
 import java.time.Instant;
@@ -268,6 +269,32 @@ class RedisRoomRepositoryIntegrationTests {
             room.roomId(),
             participant("게스트")
         )).isEqualTo(JoinParticipantResult.SUCCESS);
+    }
+
+    @Test
+    void updatesReadyAndCalculatesAllReadyAtomically() {
+        Room room = room(4);
+        roomRepository.saveIfAbsent(room);
+        Participant first = participant("first");
+        Participant second = participant("second");
+        participantRepository.tryAdd(room.roomId(), first);
+        participantRepository.tryAdd(room.roomId(), second);
+
+        var firstResult = participantRepository.updateReady(
+            room.roomId(),
+            first.participantId(),
+            true
+        );
+        var secondResult = participantRepository.updateReady(
+            room.roomId(),
+            second.participantId(),
+            true
+        );
+
+        assertThat(firstResult.status()).isEqualTo(ReadyUpdateStatus.SUCCESS);
+        assertThat(firstResult.allReady()).isFalse();
+        assertThat(secondResult.status()).isEqualTo(ReadyUpdateStatus.SUCCESS);
+        assertThat(secondResult.allReady()).isTrue();
     }
 
     @Test
