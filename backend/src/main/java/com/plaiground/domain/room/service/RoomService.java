@@ -13,6 +13,9 @@ import com.plaiground.domain.room.dto.RoomSnapshotResponse;
 import com.plaiground.domain.room.repository.RoomRepository;
 import com.plaiground.domain.room.repository.JoinParticipantResult;
 import com.plaiground.domain.room.repository.ParticipantRepository;
+import com.plaiground.domain.room.repository.LeaveRoomResult;
+import com.plaiground.domain.room.repository.LeaveRoomStatus;
+import com.plaiground.domain.room.ws.RoomEventPublisher;
 import com.plaiground.domain.session.domain.GuestSession;
 import com.plaiground.domain.session.repository.SessionRepository;
 import com.plaiground.global.exception.BusinessException;
@@ -33,6 +36,7 @@ public class RoomService {
     private final SessionRepository sessionRepository;
     private final RoomCodeGenerator roomCodeGenerator;
     private final RoomInviteLinkGenerator inviteLinkGenerator;
+    private final RoomEventPublisher roomEventPublisher;
     private final Clock clock;
 
     public RoomService(
@@ -41,6 +45,7 @@ public class RoomService {
         SessionRepository sessionRepository,
         RoomCodeGenerator roomCodeGenerator,
         RoomInviteLinkGenerator inviteLinkGenerator,
+        RoomEventPublisher roomEventPublisher,
         Clock jwtClock
     ) {
         this.roomRepository = roomRepository;
@@ -48,6 +53,7 @@ public class RoomService {
         this.sessionRepository = sessionRepository;
         this.roomCodeGenerator = roomCodeGenerator;
         this.inviteLinkGenerator = inviteLinkGenerator;
+        this.roomEventPublisher = roomEventPublisher;
         this.clock = jwtClock;
     }
 
@@ -111,6 +117,12 @@ public class RoomService {
             throw new BusinessException(toErrorCode(result));
         }
 
+        roomEventPublisher.publishMemberJoined(
+            room.roomId(),
+            participant.participantId(),
+            participant.nickname()
+        );
+
         Room currentRoom = roomRepository.findById(room.roomId())
             .orElseThrow(() -> new BusinessException(ErrorCode.ROOM_NOT_FOUND));
         return new JoinRoomResponse(toRoomSnapshot(currentRoom), null);
@@ -122,6 +134,29 @@ public class RoomService {
         participantRepository.findById(roomId, participantId)
             .orElseThrow(() -> new BusinessException(ErrorCode.ROOM_ACCESS_DENIED));
         return toRoomSnapshot(room);
+    }
+
+    public void leaveRoom(UUID roomId, UUID participantId) {
+        LeaveRoomResult result = roomRepository.leave(roomId, participantId);
+        if (result.status() == LeaveRoomStatus.ROOM_NOT_FOUND) {
+            throw new BusinessException(ErrorCode.ROOM_NOT_FOUND);
+        }
+        if (result.status() == LeaveRoomStatus.PARTICIPANT_NOT_FOUND) {
+            throw new BusinessException(ErrorCode.ROOM_ACCESS_DENIED);
+        }
+
+        roomEventPublisher.publishMemberLeft(
+            roomId,
+            participantId,
+            result.newHostParticipantId()
+        );
+        if (result.status() == LeaveRoomStatus.HOST_CHANGED) {
+            roomEventPublisher.publishHostChanged(
+                roomId,
+                result.previousHostParticipantId(),
+                result.newHostParticipantId()
+            );
+        }
     }
 
     private CreateRoomResponse toCreateRoomResponse(

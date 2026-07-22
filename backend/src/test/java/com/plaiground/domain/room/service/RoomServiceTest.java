@@ -17,6 +17,9 @@ import com.plaiground.domain.room.dto.JoinRoomRequest;
 import com.plaiground.domain.room.dto.JoinRoomResponse;
 import com.plaiground.domain.room.repository.JoinParticipantResult;
 import com.plaiground.domain.room.repository.ParticipantRepository;
+import com.plaiground.domain.room.repository.LeaveRoomResult;
+import com.plaiground.domain.room.repository.LeaveRoomStatus;
+import com.plaiground.domain.room.ws.RoomEventPublisher;
 import com.plaiground.domain.room.repository.RoomRepository;
 import com.plaiground.domain.session.domain.GuestSession;
 import com.plaiground.domain.session.repository.SessionRepository;
@@ -41,6 +44,7 @@ class RoomServiceTest {
     private SessionRepository sessionRepository;
     private RoomCodeGenerator roomCodeGenerator;
     private RoomInviteLinkGenerator inviteLinkGenerator;
+    private RoomEventPublisher roomEventPublisher;
     private RoomService roomService;
 
     @BeforeEach
@@ -50,12 +54,14 @@ class RoomServiceTest {
         sessionRepository = mock(SessionRepository.class);
         roomCodeGenerator = mock(RoomCodeGenerator.class);
         inviteLinkGenerator = mock(RoomInviteLinkGenerator.class);
+        roomEventPublisher = mock(RoomEventPublisher.class);
         roomService = new RoomService(
             roomRepository,
             participantRepository,
             sessionRepository,
             roomCodeGenerator,
             inviteLinkGenerator,
+            roomEventPublisher,
             Clock.fixed(NOW, ZoneOffset.UTC)
         );
     }
@@ -287,5 +293,51 @@ class RoomServiceTest {
             ConnectionStatus.CONNECTED,
             joinedAt
         );
+    }
+
+    @Test
+    void publishesLeaveAndHostChangeEventsAfterHostLeaves() {
+        UUID roomId = UUID.randomUUID();
+        UUID hostId = UUID.randomUUID();
+        UUID newHostId = UUID.randomUUID();
+        when(roomRepository.leave(roomId, hostId)).thenReturn(
+            new LeaveRoomResult(
+                LeaveRoomStatus.HOST_CHANGED,
+                hostId,
+                newHostId
+            )
+        );
+
+        roomService.leaveRoom(roomId, hostId);
+
+        verify(roomEventPublisher).publishMemberLeft(
+            roomId,
+            hostId,
+            newHostId
+        );
+        verify(roomEventPublisher).publishHostChanged(
+            roomId,
+            hostId,
+            newHostId
+        );
+    }
+
+    @Test
+    void rejectsLeaveWhenParticipantIsNotInRoom() {
+        UUID roomId = UUID.randomUUID();
+        UUID participantId = UUID.randomUUID();
+        when(roomRepository.leave(roomId, participantId)).thenReturn(
+            new LeaveRoomResult(
+                LeaveRoomStatus.PARTICIPANT_NOT_FOUND,
+                null,
+                null
+            )
+        );
+
+        assertThatThrownBy(() -> roomService.leaveRoom(roomId, participantId))
+            .isInstanceOfSatisfying(BusinessException.class, exception ->
+                assertThat(exception.errorCode())
+                    .isEqualTo(ErrorCode.ROOM_ACCESS_DENIED)
+            );
     }
 }

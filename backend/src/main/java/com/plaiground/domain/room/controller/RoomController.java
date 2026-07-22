@@ -15,6 +15,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -62,5 +63,14 @@ public class RoomController {
             roomId,
             principal.participantId()
         )));
+    }
+
+    @DeleteMapping("/{roomId}/members/me")
+    public ResponseEntity<Void> leaveRoom(
+        @AuthenticationPrincipal GuestPrincipal principal,
+        @PathVariable UUID roomId
+    ) {
+        roomService.leaveRoom(roomId, principal.participantId());
+        return ResponseEntity.noContent().build();
     }
 }

@@ -39,18 +39,18 @@ public class RedisParticipantRepository implements ParticipantRepository {
             if redis.call('HGET', KEYS[1], 'status') ~= 'WAITING' then
                 return 3
             end
-            if redis.call('SISMEMBER', KEYS[2], ARGV[1]) == 1 then
+            if redis.call('ZSCORE', KEYS[2], ARGV[1]) ~= false then
                 return 5
             end
             local maxPlayers = tonumber(redis.call('HGET', KEYS[1], 'max_players'))
-            if not maxPlayers or redis.call('SCARD', KEYS[2]) >= maxPlayers then
+            if not maxPlayers or redis.call('ZCARD', KEYS[2]) >= maxPlayers then
                 return 2
             end
             if redis.call('SISMEMBER', KEYS[4], ARGV[2]) == 1 then
                 return 4
             end
 
-            redis.call('SADD', KEYS[2], ARGV[1])
+            redis.call('ZADD', KEYS[2], ARGV[6], ARGV[1])
             redis.call('HSET', KEYS[3],
                 'nickname', ARGV[2],
                 'ready', ARGV[3],
@@ -66,14 +66,14 @@ public class RedisParticipantRepository implements ParticipantRepository {
             if nickname then
                 redis.call('SREM', KEYS[3], nickname)
             end
-            redis.call('SREM', KEYS[1], ARGV[1])
+            redis.call('ZREM', KEYS[1], ARGV[1])
             redis.call('DEL', KEYS[2])
             return 1
             """, Long.class);
 
     private static final DefaultRedisScript<Long> RESET_READY_SCRIPT =
         new DefaultRedisScript<>("""
-            local members = redis.call('SMEMBERS', KEYS[1])
+            local members = redis.call('ZRANGE', KEYS[1], 0, -1)
             for _, participantId in ipairs(members) do
                 local participantKey = ARGV[1] .. participantId
                 if redis.call('EXISTS', participantKey) == 1 then
@@ -112,7 +112,8 @@ public class RedisParticipantRepository implements ParticipantRepository {
             participant.nickname(),
             Boolean.toString(participant.ready()),
             participant.connectionStatus().name(),
-            participant.joinedAt().toString()
+            participant.joinedAt().toString(),
+            Long.toString(participant.joinedAt().toEpochMilli())
         );
         return toJoinResult(result);
     }
@@ -124,8 +125,10 @@ public class RedisParticipantRepository implements ParticipantRepository {
 
     @Override
     public List<Participant> findAll(UUID roomId) {
-        Set<String> participantIds = redisTemplate.opsForSet().members(
-            RedisRoomKeys.participants(roomId)
+        Set<String> participantIds = redisTemplate.opsForZSet().range(
+            RedisRoomKeys.participants(roomId),
+            0,
+            -1
         );
         if (participantIds == null || participantIds.isEmpty()) {
             return List.of();

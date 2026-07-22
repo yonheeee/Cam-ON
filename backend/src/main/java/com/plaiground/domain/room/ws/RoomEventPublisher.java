@@ -2,6 +2,9 @@ package com.plaiground.domain.room.ws;
 
 import com.plaiground.global.ws.StompBroadcaster;
 import com.plaiground.global.ws.StompEvent;
+import com.plaiground.domain.room.ws.payload.HostChangedPayload;
+import com.plaiground.domain.room.ws.payload.MemberJoinedPayload;
+import com.plaiground.domain.room.ws.payload.MemberLeftPayload;
 import java.time.Instant;
 import java.util.UUID;
 import org.springframework.stereotype.Component;
@@ -23,6 +26,49 @@ public class RoomEventPublisher {
                 roomId,
                 Instant.now(),
                 payload
+            )
+        );
+    }
+
+    public void publishMemberJoined(
+        UUID roomId,
+        UUID participantId,
+        String nickname
+    ) {
+        publish(
+            roomId,
+            "MEMBER_JOINED",
+            new MemberJoinedPayload(participantId, nickname)
+        );
+    }
+
+    public void publishMemberLeft(
+        UUID roomId,
+        UUID participantId,
+        UUID newHostParticipantId
+    ) {
+        publish(
+            roomId,
+            "MEMBER_LEFT",
+            new MemberLeftPayload(
+                participantId,
+                "LEFT",
+                newHostParticipantId
+            )
+        );
+    }
+
+    public void publishHostChanged(
+        UUID roomId,
+        UUID previousHostParticipantId,
+        UUID newHostParticipantId
+    ) {
+        publish(
+            roomId,
+            "HOST_CHANGED",
+            new HostChangedPayload(
+                previousHostParticipantId,
+                newHostParticipantId
             )
         );
     }

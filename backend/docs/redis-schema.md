@@ -24,10 +24,11 @@ Example: `room:550e8400-e29b-41d4-a716-446655440000`
 The value is the corresponding `roomId`. This reverse index is used only at
 the invite/join boundary; internal room APIs use `roomId`.
 
-### `room:{roomId}:participants` — SET
+### `room:{roomId}:participants` — ZSET
 
-Contains participant UUID strings. `findAll` reads participant HASH values and
-sorts them by `joined_at`; the SET itself does not represent join order.
+Contains participant UUID strings in join order. The sorted-set score is the
+participant's `joined_at` epoch milliseconds. The earliest remaining member is
+selected with `ZRANGE 0 0` when the host leaves.
 
 ### `room:{roomId}:participant:{participantId}` — HASH
 
@@ -66,7 +67,7 @@ create a new guest session.
 
 `RoomRepository.tryCreate` uses one Lua script to reserve both the room ID and
 room code, then creates the room, its code index, the host participant HASH,
-participants SET, and nickname SET together. A room therefore cannot be
+participants ZSET, and nickname SET together. A room therefore cannot be
 visible without its creator already registered as host.
 
 `RoomRepository.saveIfAbsent` reserves the room ID and room code together. It
@@ -85,6 +86,11 @@ the following as a single Redis operation:
 
 Room and participant field updates also check existence inside Lua so that an
 update racing with room deletion cannot recreate a partial HASH.
+
+`RoomRepository.leave` removes the participant and heartbeat, transfers host
+ownership to the earliest remaining participant, or deletes the room and code
+mapping when no participant remains. These decisions and mutations run in one
+Lua script so concurrent leaves cannot appoint a participant who already left.
 
 ## Serialization
 
