@@ -177,7 +177,6 @@ class RedisParticipantTimeoutRepositoryIntegrationTests {
         Room room = new Room(
             roomId,
             "AB23CD",
-            "테스트 방",
             hostId,
             4,
             RoomStatus.WAITING,

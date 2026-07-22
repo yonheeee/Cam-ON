@@ -18,7 +18,6 @@ public class RedisRoomRepository implements RoomRepository {
 
     private static final String ROOM_ID = "room_id";
     private static final String ROOM_CODE = "room_code";
-    private static final String TITLE = "title";
     private static final String HOST_PARTICIPANT_ID = "host_participant_id";
     private static final String MAX_PLAYERS = "max_players";
     private static final String STATUS = "status";
@@ -34,11 +33,10 @@ public class RedisRoomRepository implements RoomRepository {
             redis.call('HSET', KEYS[1],
                 'room_id', ARGV[1],
                 'room_code', ARGV[2],
-                'title', ARGV[3],
-                'host_participant_id', ARGV[4],
-                'max_players', ARGV[5],
-                'status', ARGV[6],
-                'created_at', ARGV[7])
+                'host_participant_id', ARGV[3],
+                'max_players', ARGV[4],
+                'status', ARGV[5],
+                'created_at', ARGV[6])
             redis.call('SET', KEYS[2], ARGV[1])
             return 1
             """, Long.class);
@@ -53,19 +51,18 @@ public class RedisRoomRepository implements RoomRepository {
             redis.call('HSET', KEYS[1],
                 'room_id', ARGV[1],
                 'room_code', ARGV[2],
-                'title', ARGV[3],
-                'host_participant_id', ARGV[4],
-                'max_players', ARGV[5],
-                'status', ARGV[6],
-                'created_at', ARGV[7])
+                'host_participant_id', ARGV[3],
+                'max_players', ARGV[4],
+                'status', ARGV[5],
+                'created_at', ARGV[6])
             redis.call('SET', KEYS[2], ARGV[1])
-            redis.call('SADD', KEYS[3], ARGV[4])
+            redis.call('SADD', KEYS[3], ARGV[3])
             redis.call('HSET', KEYS[4],
-                'nickname', ARGV[8],
-                'ready', ARGV[9],
-                'connection_status', ARGV[10],
-                'joined_at', ARGV[11])
-            redis.call('SADD', KEYS[5], ARGV[8])
+                'nickname', ARGV[7],
+                'ready', ARGV[8],
+                'connection_status', ARGV[9],
+                'joined_at', ARGV[10])
+            redis.call('SADD', KEYS[5], ARGV[7])
             return 1
             """, Long.class);
 
@@ -111,7 +108,6 @@ public class RedisRoomRepository implements RoomRepository {
             ),
             room.roomId().toString(),
             room.roomCode(),
-            room.title(),
             room.hostParticipantId().toString(),
             Integer.toString(room.maxPlayers()),
             room.status().name(),
@@ -133,7 +129,6 @@ public class RedisRoomRepository implements RoomRepository {
             ),
             room.roomId().toString(),
             room.roomCode(),
-            room.title(),
             room.hostParticipantId().toString(),
             Integer.toString(room.maxPlayers()),
             room.status().name(),
@@ -158,7 +153,6 @@ public class RedisRoomRepository implements RoomRepository {
         return Optional.of(new Room(
             UUID.fromString(required(values, ROOM_ID)),
             required(values, ROOM_CODE),
-            required(values, TITLE),
             UUID.fromString(required(values, HOST_PARTICIPANT_ID)),
             Integer.parseInt(required(values, MAX_PLAYERS)),
             RoomStatus.valueOf(required(values, STATUS)),
