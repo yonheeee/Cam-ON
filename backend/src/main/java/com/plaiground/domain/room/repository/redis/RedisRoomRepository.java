@@ -141,7 +141,7 @@ public class RedisRoomRepository implements RoomRepository {
             host.nickname(),
             Boolean.toString(host.ready()),
             host.connectionStatus().name(),
-            host.joinedAt().toString()
+            Long.toString(host.joinedAt().toEpochMilli())
         );
         return Long.valueOf(1L).equals(result);
     }

@@ -93,7 +93,7 @@ public class RoomService {
         GuestSession guestSession = sessionRepository
             .findByParticipantId(participantId)
             .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED));
-        Room room = roomRepository.findByCode(request.roomCode())
+        Room room = roomRepository.findById(request.roomId())
             .orElseThrow(() -> new BusinessException(ErrorCode.ROOM_NOT_FOUND));
         Participant participant = new Participant(
             participantId,

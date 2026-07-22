@@ -102,8 +102,12 @@ public class RedisParticipantRepository implements ParticipantRepository {
             if redis.call('SISMEMBER', KEYS[2], ARGV[1]) == 0 then
                 return 'PARTICIPANT_NOT_FOUND|||false'
             end
+            if ARGV[4] == 'true' and redis.call('EXISTS', KEYS[5]) == 1 then
+                return 'HEARTBEAT_ACTIVE|||false'
+            end
 
-            local previousHost = redis.call('HGET', KEYS[1], 'host_token') or ''
+            local previousHost = redis.call('HGET', KEYS[1], 'host_participant_id') or ''
+            local roomCode = redis.call('HGET', KEYS[1], 'room_code')
             local nickname = redis.call('HGET', KEYS[3], 'nickname')
             if nickname then
                 redis.call('SREM', KEYS[4], nickname)
@@ -114,6 +118,9 @@ public class RedisParticipantRepository implements ParticipantRepository {
             local remaining = redis.call('SMEMBERS', KEYS[2])
             if #remaining == 0 then
                 redis.call('DEL', KEYS[1], KEYS[2], KEYS[4])
+                if roomCode then
+                    redis.call('DEL', ARGV[5] .. roomCode)
+                end
                 return 'SUCCESS|' .. previousHost .. '||true'
             end
 
@@ -122,7 +129,9 @@ public class RedisParticipantRepository implements ParticipantRepository {
             end
 
             local newHost = nil
+            local earliestParticipant = nil
             local earliestJoinedAt = nil
+            local earliestAliveJoinedAt = nil
             for _, participantId in ipairs(remaining) do
                 local joinedAt = tonumber(redis.call(
                     'HGET',
@@ -132,19 +141,45 @@ public class RedisParticipantRepository implements ParticipantRepository {
                 if joinedAt and (
                     earliestJoinedAt == nil
                     or joinedAt < earliestJoinedAt
-                    or (joinedAt == earliestJoinedAt and participantId < newHost)
+                    or (
+                        joinedAt == earliestJoinedAt
+                        and participantId < earliestParticipant
+                    )
                 ) then
                     earliestJoinedAt = joinedAt
+                    earliestParticipant = participantId
+                end
+                if joinedAt
+                    and redis.call(
+                        'EXISTS',
+                        ARGV[3] .. participantId .. ':alive'
+                    ) == 1
+                    and (
+                        earliestAliveJoinedAt == nil
+                        or joinedAt < earliestAliveJoinedAt
+                        or (
+                            joinedAt == earliestAliveJoinedAt
+                            and participantId < newHost
+                        )
+                    ) then
+                    earliestAliveJoinedAt = joinedAt
                     newHost = participantId
                 end
             end
 
+            if ARGV[4] ~= 'true' or not newHost then
+                newHost = earliestParticipant
+            end
+
             if not newHost then
                 redis.call('DEL', KEYS[1], KEYS[2], KEYS[4])
+                if roomCode then
+                    redis.call('DEL', ARGV[5] .. roomCode)
+                end
                 return 'SUCCESS|' .. previousHost .. '||true'
             end
 
-            redis.call('HSET', KEYS[1], 'host_token', newHost)
+            redis.call('HSET', KEYS[1], 'host_participant_id', newHost)
             return 'SUCCESS|' .. previousHost .. '|' .. newHost .. '|false'
             """, String.class);
 
@@ -244,6 +279,22 @@ public class RedisParticipantRepository implements ParticipantRepository {
 
     @Override
     public LeaveRoomResult leave(UUID roomId, UUID participantId) {
+        return leave(roomId, participantId, false);
+    }
+
+    @Override
+    public LeaveRoomResult leaveIfHeartbeatExpired(
+        UUID roomId,
+        UUID participantId
+    ) {
+        return leave(roomId, participantId, true);
+    }
+
+    private LeaveRoomResult leave(
+        UUID roomId,
+        UUID participantId,
+        boolean heartbeatMustBeExpired
+    ) {
         String result = redisTemplate.execute(
             LEAVE_SCRIPT,
             List.of(
@@ -254,7 +305,10 @@ public class RedisParticipantRepository implements ParticipantRepository {
                 RedisRoomKeys.heartbeat(participantId)
             ),
             participantId.toString(),
-            RedisRoomKeys.participantPrefix(roomId)
+            RedisRoomKeys.participantPrefix(roomId),
+            RedisRoomKeys.heartbeatPrefix(),
+            Boolean.toString(heartbeatMustBeExpired),
+            RedisRoomKeys.roomCodePrefix()
         );
         return toLeaveResult(participantId, result);
     }
