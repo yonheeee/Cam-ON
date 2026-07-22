@@ -22,21 +22,21 @@ class RoomRequestValidationTest {
     @Test
     void acceptsValidCreateRoomRequest() {
         Set<ConstraintViolation<CreateRoomRequest>> violations = validator.validate(
-            new CreateRoomRequest("즐거운 게임방", 4)
+            new CreateRoomRequest(4)
         );
 
         assertThat(violations).isEmpty();
     }
 
     @Test
-    void rejectsBlankTitleAndInvalidPlayerCount() {
+    void rejectsInvalidPlayerCount() {
         Set<ConstraintViolation<CreateRoomRequest>> violations = validator.validate(
-            new CreateRoomRequest(" ", 5)
+            new CreateRoomRequest(5)
         );
 
         assertThat(violations)
             .extracting(violation -> violation.getPropertyPath().toString())
-            .contains("title", "maxPlayers");
+            .containsExactly("maxPlayers");
     }
 
     @Test

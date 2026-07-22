@@ -70,7 +70,6 @@ public class RoomService {
             Room room = new Room(
                 UUID.randomUUID(),
                 roomCodeGenerator.generate(),
-                request.title(),
                 participantId,
                 request.maxPlayers(),
                 RoomStatus.WAITING,
@@ -195,7 +194,6 @@ public class RoomService {
         return new RoomSnapshotResponse(
             room.roomId(),
             room.roomCode(),
-            room.title(),
             room.maxPlayers(),
             room.status(),
             room.hostParticipantId(),

@@ -81,7 +81,7 @@ class RoomServiceTest {
 
         CreateRoomResponse response = roomService.createRoom(
             participantId,
-            new CreateRoomRequest("테스트 방", 4)
+            new CreateRoomRequest(4)
         );
 
         ArgumentCaptor<Room> roomCaptor = ArgumentCaptor.forClass(Room.class);
@@ -114,7 +114,7 @@ class RoomServiceTest {
 
         assertThatThrownBy(() -> roomService.createRoom(
             participantId,
-            new CreateRoomRequest("테스트 방", 4)
+            new CreateRoomRequest(4)
         )).isInstanceOfSatisfying(BusinessException.class, exception ->
             assertThat(exception.errorCode()).isEqualTo(ErrorCode.UNAUTHORIZED)
         );
@@ -132,7 +132,7 @@ class RoomServiceTest {
 
         CreateRoomResponse response = roomService.createRoom(
             participantId,
-            new CreateRoomRequest("테스트 방", 4)
+            new CreateRoomRequest(4)
         );
 
         assertThat(response.room().roomCode()).isEqualTo("EF45GH");
@@ -145,7 +145,6 @@ class RoomServiceTest {
         Room room = new Room(
             UUID.randomUUID(),
             "AB23CD",
-            "game room",
             hostId,
             4,
             RoomStatus.WAITING,
@@ -200,7 +199,6 @@ class RoomServiceTest {
         Room room = new Room(
             UUID.randomUUID(),
             "AB23CD",
-            "full room",
             UUID.randomUUID(),
             2,
             RoomStatus.WAITING,
@@ -272,7 +270,6 @@ class RoomServiceTest {
         return new Room(
             UUID.randomUUID(),
             "AB23CD",
-            "game room",
             hostId,
             4,
             RoomStatus.WAITING,

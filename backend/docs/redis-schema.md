@@ -11,7 +11,6 @@ when `RoomRepository.delete(roomId)` is called.
 | --- | --- | --- |
 | `room_id` | `UUID` | REST path identifier |
 | `room_code` | `String` | Six-character invite/join code |
-| `title` | `String` | Room title |
 | `host_participant_id` | `UUID` | Current host participant ID |
 | `max_players` | `int` | Maximum participants |
 | `status` | `RoomStatus` | `WAITING`, `PLAYING`, or `FINISHED` |

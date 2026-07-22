@@ -120,7 +120,6 @@ class RedisRoomRepositoryIntegrationTests {
         Room duplicateCodeRoom = new Room(
             UUID.randomUUID(),
             room.roomCode(),
-            "another room",
             UUID.randomUUID(),
             4,
             RoomStatus.WAITING,
@@ -298,7 +297,6 @@ class RedisRoomRepositoryIntegrationTests {
         return new Room(
             UUID.randomUUID(),
             "AB23CD",
-            "테스트 방",
             hostId,
             maxPlayers,
             RoomStatus.WAITING,
