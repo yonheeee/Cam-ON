@@ -13,7 +13,11 @@ public interface ParticipantRepository {
 
     List<Participant> findAll(UUID roomId);
 
-    void updateReady(UUID roomId, UUID participantId, boolean ready);
+    ReadyUpdateResult updateReady(
+        UUID roomId,
+        UUID participantId,
+        boolean ready
+    );
 
     void resetAllReady(UUID roomId);
 

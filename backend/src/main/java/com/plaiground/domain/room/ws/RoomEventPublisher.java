@@ -5,6 +5,7 @@ import com.plaiground.global.ws.StompEvent;
 import com.plaiground.domain.room.ws.payload.HostChangedPayload;
 import com.plaiground.domain.room.ws.payload.MemberJoinedPayload;
 import com.plaiground.domain.room.ws.payload.MemberLeftPayload;
+import com.plaiground.domain.room.ws.payload.MemberReadyPayload;
 import java.time.Instant;
 import java.util.UUID;
 import org.springframework.stereotype.Component;
@@ -70,6 +71,19 @@ public class RoomEventPublisher {
                 previousHostParticipantId,
                 newHostParticipantId
             )
+        );
+    }
+
+    public void publishMemberReadyUpdated(
+        UUID roomId,
+        UUID participantId,
+        boolean ready,
+        boolean allReady
+    ) {
+        publish(
+            roomId,
+            "member:ready-updated",
+            new MemberReadyPayload(participantId, ready, allReady)
         );
     }
 }

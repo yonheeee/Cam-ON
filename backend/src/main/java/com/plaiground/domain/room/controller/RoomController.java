@@ -5,6 +5,8 @@ import com.plaiground.domain.room.dto.CreateRoomResponse;
 import com.plaiground.domain.room.dto.JoinRoomRequest;
 import com.plaiground.domain.room.dto.JoinRoomResponse;
 import com.plaiground.domain.room.dto.RoomSnapshotResponse;
+import com.plaiground.domain.room.dto.UpdateReadyRequest;
+import com.plaiground.domain.room.dto.UpdateReadyResponse;
 import com.plaiground.domain.room.service.RoomService;
 import com.plaiground.global.apiresponse.ApiResponse;
 import com.plaiground.global.security.GuestPrincipal;
@@ -17,6 +19,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -72,5 +75,18 @@ public class RoomController {
     ) {
         roomService.leaveRoom(roomId, principal.participantId());
         return ResponseEntity.noContent().build();
+    }
+
+    @PatchMapping("/{roomId}/members/me/ready")
+    public ResponseEntity<ApiResponse<UpdateReadyResponse>> updateReady(
+        @AuthenticationPrincipal GuestPrincipal principal,
+        @PathVariable UUID roomId,
+        @Valid @RequestBody UpdateReadyRequest request
+    ) {
+        return ResponseEntity.ok(ApiResponse.ok(roomService.updateReady(
+            roomId,
+            principal.participantId(),
+            request
+        )));
     }
 }

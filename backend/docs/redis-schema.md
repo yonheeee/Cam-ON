@@ -85,6 +85,12 @@ the following as a single Redis operation:
 Room and participant field updates also check existence inside Lua so that an
 update racing with room deletion cannot recreate a partial HASH.
 
+`ParticipantRepository.updateReady` uses one Lua script to verify the room is
+waiting and the caller is still a participant, update that participant's
+`ready` field, and calculate whether every current participant is ready. The
+returned `ready` and `allReady` values therefore describe the same atomic Redis
+state that is published through STOMP.
+
 `ParticipantRepository.leave` removes the participant and heartbeat, transfers host
 ownership to the earliest remaining participant, or deletes the room and code
 mapping when no participant remains. These decisions and mutations run in one
