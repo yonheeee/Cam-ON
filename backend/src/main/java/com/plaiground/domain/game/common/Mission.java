@@ -34,8 +34,8 @@ public class Mission {
     @JoinColumn(name = "game_id", nullable = false)
     private Game game;
 
-    // HAND_POSE / OBJECT / CHARADES. HAND_POSE는 실제 콤보 판정엔 안 쓰이고
-    // skill_gesture 쪽 데이터가 그 역할을 대신한다 — 남아있지만 용도가 애매한 타입.
+    // HAND_POSE / OBJECT / CHARADES. HAND_POSE는 이제 아예 안 쓰임 — 닌자 라운드가 요구하는 건
+    // skill 하나이고, round:{n}이 mission_id 대신 skill_id를 직접 참조한다.
     @Column(name = "mission_type", nullable = false)
     private String missionType;
 
