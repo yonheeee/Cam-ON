@@ -26,4 +26,9 @@ public interface ParticipantRepository {
     void remove(UUID roomId, UUID participantId);
 
     LeaveRoomResult leave(UUID roomId, UUID participantId);
+
+    LeaveRoomResult leaveIfHeartbeatExpired(
+        UUID roomId,
+        UUID participantId
+    );
 }

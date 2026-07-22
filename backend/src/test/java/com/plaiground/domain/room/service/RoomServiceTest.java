@@ -133,7 +133,7 @@ class RoomServiceTest {
     }
 
     @Test
-    void joinsRoomByCodeAndReturnsCurrentSnapshot() {
+    void joinsRoomByIdAndReturnsCurrentSnapshot() {
         UUID hostId = UUID.randomUUID();
         UUID participantId = UUID.randomUUID();
         Room room = new Room(
@@ -155,7 +155,7 @@ class RoomServiceTest {
         when(sessionRepository.findByParticipantId(participantId)).thenReturn(
             Optional.of(new GuestSession(participantId, "guest", NOW))
         );
-        when(roomRepository.findByCode("AB23CD")).thenReturn(Optional.of(room));
+        when(roomRepository.findById(room.roomId())).thenReturn(Optional.of(room));
         when(participantRepository.tryAdd(
             room.roomId(),
             new Participant(
@@ -166,7 +166,6 @@ class RoomServiceTest {
                 NOW
             )
         )).thenReturn(JoinParticipantResult.SUCCESS);
-        when(roomRepository.findById(room.roomId())).thenReturn(Optional.of(room));
         when(participantRepository.findAll(room.roomId())).thenReturn(List.of(
             host,
             new Participant(
@@ -180,7 +179,7 @@ class RoomServiceTest {
 
         JoinRoomResponse response = roomService.joinRoom(
             participantId,
-            new JoinRoomRequest("AB23CD")
+            new JoinRoomRequest(room.roomId())
         );
 
         assertThat(response.room().roomId()).isEqualTo(room.roomId());
@@ -204,13 +203,13 @@ class RoomServiceTest {
         when(sessionRepository.findByParticipantId(participantId)).thenReturn(
             Optional.of(new GuestSession(participantId, "guest", NOW))
         );
-        when(roomRepository.findByCode("AB23CD")).thenReturn(Optional.of(room));
+        when(roomRepository.findById(room.roomId())).thenReturn(Optional.of(room));
         when(participantRepository.tryAdd(any(UUID.class), any(Participant.class)))
             .thenReturn(JoinParticipantResult.ROOM_FULL);
 
         assertThatThrownBy(() -> roomService.joinRoom(
             participantId,
-            new JoinRoomRequest("AB23CD")
+            new JoinRoomRequest(room.roomId())
         )).isInstanceOfSatisfying(BusinessException.class, exception ->
             assertThat(exception.errorCode()).isEqualTo(ErrorCode.ROOM_FULL)
         );
