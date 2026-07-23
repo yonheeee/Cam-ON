@@ -1,5 +1,6 @@
 package com.plaiground.domain.room.service;
 
+import com.plaiground.domain.media.service.LiveKitTokenService;
 import com.plaiground.domain.room.domain.ConnectionStatus;
 import com.plaiground.domain.room.domain.Participant;
 import com.plaiground.domain.room.domain.Room;
@@ -41,6 +42,7 @@ public class RoomService {
     private final RoomCodeGenerator roomCodeGenerator;
     private final RoomInviteLinkGenerator inviteLinkGenerator;
     private final RoomEventPublisher roomEventPublisher;
+    private final LiveKitTokenService liveKitTokenService;
     private final Clock clock;
 
     public RoomService(
@@ -50,6 +52,7 @@ public class RoomService {
         RoomCodeGenerator roomCodeGenerator,
         RoomInviteLinkGenerator inviteLinkGenerator,
         RoomEventPublisher roomEventPublisher,
+        LiveKitTokenService liveKitTokenService,
         Clock jwtClock
     ) {
         this.roomRepository = roomRepository;
@@ -58,6 +61,7 @@ public class RoomService {
         this.roomCodeGenerator = roomCodeGenerator;
         this.inviteLinkGenerator = inviteLinkGenerator;
         this.roomEventPublisher = roomEventPublisher;
+        this.liveKitTokenService = liveKitTokenService;
         this.clock = jwtClock;
     }
 
@@ -128,7 +132,14 @@ public class RoomService {
 
         Room currentRoom = roomRepository.findById(room.roomId())
             .orElseThrow(() -> new BusinessException(ErrorCode.ROOM_NOT_FOUND));
-        return new JoinRoomResponse(toRoomSnapshot(currentRoom), null);
+        return new JoinRoomResponse(
+            toRoomSnapshot(currentRoom),
+            liveKitTokenService.createRoomJoinToken(
+                room.roomId(),
+                participant.participantId(),
+                participant.nickname()
+            )
+        );
     }
 
     public RoomSnapshotResponse getRoom(UUID roomId, UUID participantId) {
@@ -156,13 +167,6 @@ public class RoomService {
             participantId,
             newHostParticipantId
         );
-        if (result.hostChanged()) {
-            roomEventPublisher.publishHostChanged(
-                roomId,
-                result.previousHostParticipantId(),
-                result.newHostParticipantId()
-            );
-        }
     }
 
     public UpdateReadyResponse updateReady(
@@ -205,7 +209,11 @@ public class RoomService {
         return new CreateRoomResponse(
             toRoomSnapshot(room, List.of(host)),
             inviteLinkGenerator.generate(room.roomCode()),
-            null
+            liveKitTokenService.createRoomJoinToken(
+                room.roomId(),
+                host.participantId(),
+                host.nickname()
+            )
         );
     }
 
