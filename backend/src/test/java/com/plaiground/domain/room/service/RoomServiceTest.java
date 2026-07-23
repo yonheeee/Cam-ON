@@ -7,6 +7,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.plaiground.domain.media.service.LiveKitTokenService;
 import com.plaiground.domain.room.domain.ConnectionStatus;
 import com.plaiground.domain.room.domain.Participant;
 import com.plaiground.domain.room.domain.Room;
@@ -48,6 +49,7 @@ class RoomServiceTest {
     private RoomCodeGenerator roomCodeGenerator;
     private RoomInviteLinkGenerator inviteLinkGenerator;
     private RoomEventPublisher roomEventPublisher;
+    private LiveKitTokenService liveKitTokenService;
     private RoomService roomService;
 
     @BeforeEach
@@ -58,6 +60,7 @@ class RoomServiceTest {
         roomCodeGenerator = mock(RoomCodeGenerator.class);
         inviteLinkGenerator = mock(RoomInviteLinkGenerator.class);
         roomEventPublisher = mock(RoomEventPublisher.class);
+        liveKitTokenService = mock(LiveKitTokenService.class);
         roomService = new RoomService(
             roomRepository,
             participantRepository,
@@ -65,6 +68,7 @@ class RoomServiceTest {
             roomCodeGenerator,
             inviteLinkGenerator,
             roomEventPublisher,
+            liveKitTokenService,
             Clock.fixed(NOW, ZoneOffset.UTC)
         );
     }
@@ -295,7 +299,7 @@ class RoomServiceTest {
     }
 
     @Test
-    void publishesLeaveAndHostChangeEventsAfterHostLeaves() {
+    void publishesNewHostInLeaveEventAfterHostLeaves() {
         UUID roomId = UUID.randomUUID();
         UUID hostId = UUID.randomUUID();
         UUID newHostId = UUID.randomUUID();
@@ -312,11 +316,6 @@ class RoomServiceTest {
         roomService.leaveRoom(roomId, hostId);
 
         verify(roomEventPublisher).publishMemberLeft(
-            roomId,
-            hostId,
-            newHostId
-        );
-        verify(roomEventPublisher).publishHostChanged(
             roomId,
             hostId,
             newHostId

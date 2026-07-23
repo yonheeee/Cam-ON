@@ -14,4 +14,12 @@ public class StompBroadcaster {
     public void send(String destination, Object payload) {
         messagingTemplate.convertAndSend(destination, payload);
     }
+
+    public void sendToUser(
+        String user,
+        String destination,
+        Object payload
+    ) {
+        messagingTemplate.convertAndSendToUser(user, destination, payload);
+    }
 }

@@ -38,7 +38,7 @@ public class RoomEventPublisher {
     ) {
         publish(
             roomId,
-            "MEMBER_JOINED",
+            "member:joined",
             new MemberJoinedPayload(participantId, nickname)
         );
     }
@@ -48,12 +48,45 @@ public class RoomEventPublisher {
         UUID participantId,
         UUID newHostParticipantId
     ) {
+        publishMemberLeft(
+            roomId,
+            participantId,
+            newHostParticipantId,
+            "LEFT"
+        );
+    }
+
+    public void publishToParticipant(
+        UUID roomId,
+        UUID participantId,
+        String eventName,
+        Object payload
+    ) {
+        broadcaster.sendToUser(
+            participantId.toString(),
+            "/queue/rooms/" + roomId,
+            new StompEvent<>(
+                UUID.randomUUID(),
+                eventName,
+                roomId,
+                Instant.now(),
+                payload
+            )
+        );
+    }
+
+    public void publishMemberLeft(
+        UUID roomId,
+        UUID participantId,
+        UUID newHostParticipantId,
+        String reason
+    ) {
         publish(
             roomId,
-            "MEMBER_LEFT",
+            "member:left",
             new MemberLeftPayload(
                 participantId,
-                "LEFT",
+                reason,
                 newHostParticipantId
             )
         );
@@ -66,7 +99,7 @@ public class RoomEventPublisher {
     ) {
         publish(
             roomId,
-            "HOST_CHANGED",
+            "host:changed",
             new HostChangedPayload(
                 previousHostParticipantId,
                 newHostParticipantId
