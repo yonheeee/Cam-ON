@@ -11,6 +11,8 @@ public interface ParticipantRepository {
 
     Optional<Participant> findById(UUID roomId, UUID participantId);
 
+    Optional<UUID> findCurrentRoomId(UUID participantId);
+
     List<Participant> findAll(UUID roomId);
 
     ReadyUpdateResult updateReady(

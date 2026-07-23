@@ -69,6 +69,9 @@ public class RoomService {
         UUID participantId,
         CreateRoomRequest request
     ) {
+        if (participantRepository.findCurrentRoomId(participantId).isPresent()) {
+            throw new BusinessException(ErrorCode.ALREADY_JOINED);
+        }
         GuestSession guestSession = sessionRepository
             .findByParticipantId(participantId)
             .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED));
@@ -107,7 +110,7 @@ public class RoomService {
         GuestSession guestSession = sessionRepository
             .findByParticipantId(participantId)
             .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED));
-        Room room = roomRepository.findById(request.roomId())
+        Room room = roomRepository.findByCode(request.roomCode())
             .orElseThrow(() -> new BusinessException(ErrorCode.ROOM_NOT_FOUND));
         Participant participant = new Participant(
             participantId,

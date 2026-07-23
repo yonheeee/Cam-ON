@@ -13,6 +13,9 @@ const ROUND_DURATION_SECONDS = 30;
 // 아직 없어서 GET .../state를 폴링한다. 상태 모양(반환 타입)은 그대로 두고 나중에 STOMP
 // 구독으로 갈아끼우면 되도록, 이 훅 밖(NinjaGamePanel)에는 폴링 여부가 안 드러나게 했다.
 export function useNinjaRound(
+  roomId: string,
+  gameId: number,
+  accessToken: string,
   participantId: string | null,
   comboLabel: string | null,
   comboConfidence: number,
@@ -59,7 +62,7 @@ export function useNinjaRound(
   const poll = useCallback(async () => {
     if (!participantId) return;
     try {
-      const state = await ninjaApi.getState(participantId);
+      const state = await ninjaApi.getState(gameId, accessToken);
       if (!mountedRef.current) return;
       setRound(state.round || null);
       setTotalRounds(state.totalRounds || null);
@@ -70,7 +73,7 @@ export function useNinjaRound(
     } catch {
       // 세션이 아직 없으면 404 — 조용히 무시하고 다음 폴링을 기다린다.
     }
-  }, [participantId]);
+  }, [participantId, gameId, accessToken]);
 
   useEffect(() => {
     if (!participantId) return;
@@ -86,7 +89,7 @@ export function useNinjaRound(
     }
     let cancelled = false;
     ninjaApi
-      .getRoundSkill(round, participantId)
+      .getRoundSkill(gameId, round, accessToken)
       .then((skill) => {
         if (!cancelled) setRequiredSkill(skill);
       })
@@ -100,7 +103,7 @@ export function useNinjaRound(
     return () => {
       cancelled = true;
     };
-  }, [participantId, round]);
+  }, [participantId, round, gameId, accessToken]);
 
   // 시퀀스 완성 시 공격 제출 — 같은 라운드에 두 번 쏘지 않도록 마지막으로 제출한 라운드를 기억.
   const attackedRoundRef = useRef<number | null>(null);
@@ -110,25 +113,25 @@ export function useNinjaRound(
     attackedRoundRef.current = round;
 
     ninjaApi
-      .submitAttack(round, requiredSkill.skillId, participantId)
+      .submitAttack(gameId, round, requiredSkill.skillId, accessToken)
       .then(() => poll())
       .catch((err: unknown) => {
         // 이미 다른 참가자가 선점(NINJA_ALREADY_CLAIMED)한 것도 정상적인 결과라 에러로만 표시.
         setError(err instanceof NinjaApiError ? err.message : '공격 제출 실패');
       });
-  }, [completed, participantId, requiredSkill, round, poll]);
+  }, [completed, participantId, requiredSkill, round, poll, gameId, accessToken]);
 
   const submitTarget = useCallback(
     async (targetToken: string) => {
       if (!participantId || round == null) return;
       try {
-        await ninjaApi.submitTarget(round, targetToken, participantId);
+        await ninjaApi.submitTarget(gameId, round, targetToken, accessToken);
         await poll(); // 다음 폴링까지 안 기다리고 HP/라운드 전환을 바로 반영
       } catch (err) {
         setError(err instanceof NinjaApiError ? err.message : '대상 지정 실패');
       }
     },
-    [participantId, round, poll],
+    [participantId, round, poll, gameId, accessToken],
   );
 
   // 공격권을 획득했는데 생존한 상대가 정확히 한 명이면(2인전 등) 굳이 고를 필요가 없어서 자동으로
@@ -148,7 +151,7 @@ export function useNinjaRound(
       setSeeding(true);
       setError(null);
       try {
-        await ninjaApi.seed(participantTokens, totalRoundsInput);
+        await ninjaApi.seed(roomId, gameId, participantTokens, totalRoundsInput, accessToken);
         // 새 게임도 라운드 번호가 1부터 다시 시작되는데, 이 ref들이 이전 판 값(예: 1)을 그대로
         // 들고 있으면 "같은 라운드 번호엔 한 번만 제출"이라는 중복 방지 로직이 새 판의 그 라운드를
         // 스킵해버린다 — 리셋해야 새 판에서도 정상적으로 공격/대상 지정이 제출된다.
@@ -161,7 +164,7 @@ export function useNinjaRound(
         setSeeding(false);
       }
     },
-    [poll],
+    [poll, roomId, gameId, accessToken],
   );
 
   const [resetting, setResetting] = useState(false);
@@ -169,7 +172,7 @@ export function useNinjaRound(
     setResetting(true);
     setError(null);
     try {
-      await ninjaApi.reset();
+      await ninjaApi.reset(roomId, accessToken);
       attackedRoundRef.current = null;
       targetedRoundRef.current = null;
       await poll();
@@ -178,7 +181,7 @@ export function useNinjaRound(
     } finally {
       setResetting(false);
     }
-  }, [poll]);
+  }, [poll, roomId, accessToken]);
 
   const isMyAttack = participantId !== null && currentAttackerToken === participantId;
   const gameEnded = ranking.length > 0;

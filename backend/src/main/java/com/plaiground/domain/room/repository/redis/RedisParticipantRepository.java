@@ -46,6 +46,9 @@ public class RedisParticipantRepository implements ParticipantRepository {
             if redis.call('SISMEMBER', KEYS[2], ARGV[1]) == 1 then
                 return 5
             end
+            if redis.call('EXISTS', KEYS[5]) == 1 then
+                return 5
+            end
             local maxPlayers = tonumber(redis.call('HGET', KEYS[1], 'max_players'))
             if not maxPlayers or redis.call('SCARD', KEYS[2]) >= maxPlayers then
                 return 2
@@ -61,6 +64,7 @@ public class RedisParticipantRepository implements ParticipantRepository {
                 'connection_status', ARGV[4],
                 'joined_at', ARGV[5])
             redis.call('SADD', KEYS[4], ARGV[2])
+            redis.call('SET', KEYS[5], ARGV[6])
             return 0
             """, Long.class);
 
@@ -72,6 +76,9 @@ public class RedisParticipantRepository implements ParticipantRepository {
             end
             redis.call('SREM', KEYS[1], ARGV[1])
             redis.call('DEL', KEYS[2])
+            if redis.call('GET', KEYS[4]) == ARGV[2] then
+                redis.call('DEL', KEYS[4])
+            end
             return 1
             """, Long.class);
 
@@ -150,6 +157,9 @@ public class RedisParticipantRepository implements ParticipantRepository {
             end
             redis.call('SREM', KEYS[2], ARGV[1])
             redis.call('DEL', KEYS[3], KEYS[5])
+            if redis.call('GET', KEYS[6]) == ARGV[6] then
+                redis.call('DEL', KEYS[6])
+            end
 
             local remaining = redis.call('SMEMBERS', KEYS[2])
             if #remaining == 0 then
@@ -233,13 +243,15 @@ public class RedisParticipantRepository implements ParticipantRepository {
                 RedisRoomKeys.room(roomId),
                 RedisRoomKeys.participants(roomId),
                 RedisRoomKeys.participant(roomId, participant.participantId()),
-                RedisRoomKeys.nicknames(roomId)
+                RedisRoomKeys.nicknames(roomId),
+                RedisRoomKeys.participantRoom(participant.participantId())
             ),
             participant.participantId().toString(),
             participant.nickname(),
             Boolean.toString(participant.ready()),
             participant.connectionStatus().name(),
-            Long.toString(participant.joinedAt().toEpochMilli())
+            Long.toString(participant.joinedAt().toEpochMilli()),
+            roomId.toString()
         );
         return toJoinResult(result);
     }
@@ -247,6 +259,16 @@ public class RedisParticipantRepository implements ParticipantRepository {
     @Override
     public Optional<Participant> findById(UUID roomId, UUID participantId) {
         return findParticipant(roomId, participantId);
+    }
+
+    @Override
+    public Optional<UUID> findCurrentRoomId(UUID participantId) {
+        String roomId = redisTemplate.opsForValue().get(
+            RedisRoomKeys.participantRoom(participantId)
+        );
+        return roomId == null
+            ? Optional.empty()
+            : Optional.of(UUID.fromString(roomId));
     }
 
     @Override
@@ -317,9 +339,11 @@ public class RedisParticipantRepository implements ParticipantRepository {
             List.of(
                 RedisRoomKeys.participants(roomId),
                 RedisRoomKeys.participant(roomId, participantId),
-                RedisRoomKeys.nicknames(roomId)
+                RedisRoomKeys.nicknames(roomId),
+                RedisRoomKeys.participantRoom(participantId)
             ),
-            participantId.toString()
+            participantId.toString(),
+            roomId.toString()
         );
     }
 
@@ -348,13 +372,15 @@ public class RedisParticipantRepository implements ParticipantRepository {
                 RedisRoomKeys.participants(roomId),
                 RedisRoomKeys.participant(roomId, participantId),
                 RedisRoomKeys.nicknames(roomId),
-                RedisRoomKeys.heartbeat(participantId)
+                RedisRoomKeys.heartbeat(participantId),
+                RedisRoomKeys.participantRoom(participantId)
             ),
             participantId.toString(),
             RedisRoomKeys.participantPrefix(roomId),
             RedisRoomKeys.heartbeatPrefix(),
             Boolean.toString(heartbeatMustBeExpired),
-            RedisRoomKeys.roomCodePrefix()
+            RedisRoomKeys.roomCodePrefix(),
+            roomId.toString()
         );
         return toLeaveResult(participantId, result);
     }

@@ -2,6 +2,11 @@ package com.plaiground.dev;
 
 import com.plaiground.domain.game.ninja.service.NinjaGameService;
 import com.plaiground.global.apiresponse.ApiResponse;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -11,6 +16,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.context.annotation.Profile;
 
 // TEMP — 방장이 대기방에서 코스를 확정하고 게임을 시작하면 자동으로 열려야 할 세션을,
 // 그 흐름이 없는 지금은 이 엔드포인트로 수동 트리거한다. room 도메인은 이제 실제로 있어서
@@ -18,6 +24,7 @@ import org.springframework.web.bind.annotation.RestController;
 // 고정 테스트 방 개념은 없앴다. course/session 도메인의 "게임 시작" 흐름이 생기면 이 컨트롤러를
 // 지우고 그쪽이 NinjaGameService.startSession()을 직접 호출하면 된다.
 @Slf4j
+@Profile("local")
 @RestController
 @RequestMapping("/api/dev/ninja")
 public class DevNinjaSeedController {
@@ -31,27 +38,37 @@ public class DevNinjaSeedController {
     }
 
     @PostMapping("/seed")
-    public ApiResponse<Void> seed(@RequestBody DevSeedRequest request) {
+    public ApiResponse<Void> seed(@Valid @RequestBody DevSeedRequest request) {
         int totalRounds = request.totalRounds() == null ? DEFAULT_TOTAL_ROUNDS : request.totalRounds();
         Set<String> participantTokens = new LinkedHashSet<>(request.participantTokens());
         log.info("[Controller] POST dev/ninja/seed : roomId={} participantTokens={} totalRounds={}",
             request.roomId(), participantTokens, totalRounds);
 
-        ninjaGameService.startSession(request.roomId(), participantTokens, totalRounds);
+        ninjaGameService.startSession(
+            request.roomId(),
+            request.gameId(),
+            participantTokens,
+            totalRounds
+        );
 
         return ApiResponse.ok(null);
     }
 
     @PostMapping("/reset")
-    public ApiResponse<Void> reset(@RequestBody DevResetRequest request) {
+    public ApiResponse<Void> reset(@Valid @RequestBody DevResetRequest request) {
         log.info("[Controller] POST dev/ninja/reset : roomId={}", request.roomId());
         ninjaGameService.resetSession(request.roomId());
         return ApiResponse.ok(null);
     }
 
-    record DevSeedRequest(UUID roomId, List<String> participantTokens, Integer totalRounds) {
+    record DevSeedRequest(
+        @NotNull UUID roomId,
+        @NotNull @Positive Long gameId,
+        @NotEmpty List<String> participantTokens,
+        @Min(1) Integer totalRounds
+    ) {
     }
 
-    record DevResetRequest(UUID roomId) {
+    record DevResetRequest(@NotNull UUID roomId) {
     }
 }

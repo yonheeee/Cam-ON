@@ -14,6 +14,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.plaiground.domain.game.common.ws.GameEventPublisher;
 import com.plaiground.domain.game.ninja.domain.Effect;
 import com.plaiground.domain.game.ninja.domain.Gesture;
 import com.plaiground.domain.game.ninja.domain.Skill;
@@ -64,6 +65,8 @@ class NinjaGameServiceTest {
     @Mock
     private NinjaEventPublisher eventPublisher;
     @Mock
+    private GameEventPublisher gameEventPublisher;
+    @Mock
     private TaskScheduler taskScheduler;
 
     private NinjaGameService service;
@@ -77,7 +80,14 @@ class NinjaGameServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new NinjaGameService(roomRepository, skillRepository, ninjaRedis, eventPublisher, taskScheduler);
+        service = new NinjaGameService(
+            roomRepository,
+            skillRepository,
+            ninjaRedis,
+            eventPublisher,
+            gameEventPublisher,
+            taskScheduler
+        );
 
         Room room = new Room(roomId, roomCode, UUID.randomUUID(), 4, RoomStatus.PLAYING, seq, Instant.now());
         when(roomRepository.findById(roomId)).thenReturn(Optional.of(room));
@@ -322,7 +332,7 @@ class NinjaGameServiceTest {
         when(skillRepository.findAllIds()).thenReturn(List.of(10L, 20L, 30L));
         when(ninjaRedis.getSkillIdForRound(roomCode, seq, 1)).thenReturn(10L);
 
-        service.startSession(roomId, tokens, 5);
+        service.startSession(roomId, 3L, tokens, 5);
 
         // 이전 판 잔여 데이터(공격권/HP/순위 등)가 새 게임에 섞여 들어가는 걸 막기 위해
         // 스킬 셔플보다 먼저 세션을 통째로 지워야 한다.
@@ -331,11 +341,17 @@ class NinjaGameServiceTest {
         inOrder.verify(ninjaRedis).saveSkillOrder(eq(roomCode), eq(seq), any());
 
         verify(ninjaRedis).setTotalRounds(roomCode, seq, 5);
+        verify(ninjaRedis).setGameId(roomCode, seq, 3L);
         verify(ninjaRedis).saveSkillOrder(eq(roomCode), eq(seq),
             argThat(list -> list.size() == 3 && list.containsAll(List.of(10L, 20L, 30L))));
         verify(ninjaRedis).initAlivePlayers(roomCode, seq, tokens);
         verify(ninjaRedis).initPlayerHp(roomCode, seq, tokens, 100);
+        verify(gameEventPublisher).publishStarted(roomId, 3L, seq, 5);
         verify(ninjaRedis).openRound(eq(roomCode), eq(seq), eq(1), eq(10L), any(Instant.class));
         verify(eventPublisher).publish(eq(roomId), eq("ninja:round-started"), any());
+
+        InOrder eventOrder = inOrder(gameEventPublisher, eventPublisher);
+        eventOrder.verify(gameEventPublisher).publishStarted(roomId, 3L, seq, 5);
+        eventOrder.verify(eventPublisher).publish(eq(roomId), eq("ninja:round-started"), any());
     }
 }

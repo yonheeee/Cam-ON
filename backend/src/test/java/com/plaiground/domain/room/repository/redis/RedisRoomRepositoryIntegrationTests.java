@@ -98,6 +98,8 @@ class RedisRoomRepositoryIntegrationTests {
         assertThat(roomRepository.findById(room.roomId())).isEmpty();
         assertThat(roomRepository.findByCode(room.roomCode())).isEmpty();
         assertThat(participantRepository.findAll(room.roomId())).isEmpty();
+        assertThat(participantRepository.findCurrentRoomId(participant.participantId()))
+            .isEmpty();
         assertThat(connectionRepository.isAlive(participant.participantId()))
             .isFalse();
     }
@@ -114,6 +116,8 @@ class RedisRoomRepositoryIntegrationTests {
         );
 
         assertThat(roomRepository.tryCreate(room, host)).isTrue();
+        assertThat(participantRepository.findCurrentRoomId(host.participantId()))
+            .contains(room.roomId());
         assertThat(roomRepository.findByCode(room.roomCode())).contains(room);
         assertThat(participantRepository.findAll(room.roomId()))
             .containsExactly(host);
@@ -238,6 +242,8 @@ class RedisRoomRepositoryIntegrationTests {
         roomRepository.saveIfAbsent(room);
         Participant participant = participant("게스트");
         participantRepository.tryAdd(room.roomId(), participant);
+        assertThat(participantRepository.findCurrentRoomId(participant.participantId()))
+            .contains(room.roomId());
 
         participantRepository.updateReady(
             room.roomId(),
@@ -266,6 +272,8 @@ class RedisRoomRepositoryIntegrationTests {
 
         participantRepository.remove(room.roomId(), participant.participantId());
         assertThat(participantRepository.findAll(room.roomId())).isEmpty();
+        assertThat(participantRepository.findCurrentRoomId(participant.participantId()))
+            .isEmpty();
         assertThat(participantRepository.tryAdd(
             room.roomId(),
             participant("게스트")

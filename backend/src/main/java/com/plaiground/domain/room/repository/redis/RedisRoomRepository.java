@@ -63,6 +63,7 @@ public class RedisRoomRepository implements RoomRepository {
                 'connection_status', ARGV[9],
                 'joined_at', ARGV[10])
             redis.call('SADD', KEYS[5], ARGV[7])
+            redis.call('SET', KEYS[6], ARGV[1])
             return 1
             """, Long.class);
 
@@ -78,9 +79,14 @@ public class RedisRoomRepository implements RoomRepository {
     private static final DefaultRedisScript<Long> DELETE_SCRIPT =
         new DefaultRedisScript<>("""
             local members = redis.call('SMEMBERS', KEYS[2])
+            local roomId = redis.call('HGET', KEYS[1], 'room_id')
             for _, participantId in ipairs(members) do
                 redis.call('DEL', ARGV[1] .. participantId)
                 redis.call('DEL', ARGV[2] .. participantId .. ':alive')
+                local participantRoomKey = ARGV[4] .. participantId
+                if redis.call('GET', participantRoomKey) == roomId then
+                    redis.call('DEL', participantRoomKey)
+                end
             end
 
             local roomCode = redis.call('HGET', KEYS[1], 'room_code')
@@ -125,7 +131,8 @@ public class RedisRoomRepository implements RoomRepository {
                 RedisRoomKeys.roomCode(room.roomCode()),
                 RedisRoomKeys.participants(room.roomId()),
                 RedisRoomKeys.participant(room.roomId(), host.participantId()),
-                RedisRoomKeys.nicknames(room.roomId())
+                RedisRoomKeys.nicknames(room.roomId()),
+                RedisRoomKeys.participantRoom(host.participantId())
             ),
             room.roomId().toString(),
             room.roomCode(),
@@ -199,7 +206,8 @@ public class RedisRoomRepository implements RoomRepository {
             ),
             RedisRoomKeys.participantPrefix(roomId),
             "session:",
-            "room-code:"
+            "room-code:",
+            RedisRoomKeys.participantRoomPrefix()
         );
     }
 

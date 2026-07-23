@@ -2,7 +2,6 @@ import { useLocalParticipant, useParticipants } from '@livekit/components-react'
 import { useEffect, useState } from 'react';
 import { useGestureBoardStore } from '../../gesture/store/gestureBoardStore';
 import { useNinjaRound } from '../hooks/useNinjaRound';
-import { resolveParticipantId, useParticipantId } from '../lib/participantId';
 import './NinjaGamePanel.css';
 
 const DEFAULT_TOTAL_ROUNDS = 5;
@@ -13,10 +12,16 @@ const ATTACK_TARGET_TIMER_SECONDS = 30;
 // 완성되면: (1) TEST_ROOM_ID 대신 실제 roomId를 props로 받고, (2) 이 안의 "시작" 버튼과
 // ninjaApi.seed 호출을 지우고 그 도메인의 게임 시작 흐름이 대신하면 된다 — useNinjaRound
 // 이하는 안 바뀐다.
-export function NinjaGamePanel() {
+interface NinjaGamePanelProps {
+  roomId: string;
+  gameId: number;
+  accessToken: string;
+}
+
+export function NinjaGamePanel({ roomId, gameId, accessToken }: NinjaGamePanelProps) {
   const { localParticipant } = useLocalParticipant();
   const participants = useParticipants();
-  const { id: myParticipantId, error: participantIdError } = useParticipantId(localParticipant.identity);
+  const myParticipantId = localParticipant.identity || null;
   const comboEntry = useGestureBoardStore((state) => state.entries[localParticipant.identity]);
   const comboLabel = comboEntry?.comboLabel ?? null;
   const comboConfidence = comboEntry?.confidence ?? 0;
@@ -42,22 +47,14 @@ export function NinjaGamePanel() {
     seed,
     resetGame,
     resetting,
-  } = useNinjaRound(myParticipantId, comboLabel, comboConfidence);
+  } = useNinjaRound(roomId, gameId, accessToken, myParticipantId, comboLabel, comboConfidence);
 
   const [otherParticipantIds, setOtherParticipantIds] = useState<Record<string, string>>({});
 
   // 다른 참가자들의 LiveKit identity → 결정적 참가자 UUID. 대상 지정 UI와 "시작" 버튼에 필요.
   useEffect(() => {
-    let cancelled = false;
     const others = participants.filter((p) => p.identity !== localParticipant.identity);
-    Promise.all(others.map(async (p) => [p.identity, await resolveParticipantId(p.identity)] as const)).then(
-      (entries) => {
-        if (!cancelled) setOtherParticipantIds(Object.fromEntries(entries));
-      },
-    );
-    return () => {
-      cancelled = true;
-    };
+    setOtherParticipantIds(Object.fromEntries(others.map((p) => [p.identity, p.identity])));
   }, [participants, localParticipant.identity]);
 
   const gameStarted = round !== null;
@@ -84,14 +81,12 @@ export function NinjaGamePanel() {
       </button>
 
     <div className="ninja-panel">
-      <h2>닌자 게임 (테스트방 고정)</h2>
+      <h2>닌자 게임</h2>
 
       <p className="ninja-panel__debug">
         identity: {localParticipant.identity || '(아직 없음)'} / participantId:{' '}
         {myParticipantId ? myParticipantId.slice(0, 8) : '(계산 중...)'}
       </p>
-      {participantIdError && <p className="ninja-panel__error">참가자 ID 계산 실패: {participantIdError}</p>}
-
       {!gameStarted && (
         <button
           className="ninja-panel__start"

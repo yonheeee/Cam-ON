@@ -168,6 +168,7 @@ class RoomServiceTest {
         when(sessionRepository.findByParticipantId(participantId)).thenReturn(
             Optional.of(new GuestSession(participantId, "guest", NOW))
         );
+        when(roomRepository.findByCode(room.roomCode())).thenReturn(Optional.of(room));
         when(roomRepository.findById(room.roomId())).thenReturn(Optional.of(room));
         when(participantRepository.tryAdd(
             room.roomId(),
@@ -192,7 +193,7 @@ class RoomServiceTest {
 
         JoinRoomResponse response = roomService.joinRoom(
             participantId,
-            new JoinRoomRequest(room.roomId())
+            new JoinRoomRequest(room.roomCode())
         );
 
         assertThat(response.room().roomId()).isEqualTo(room.roomId());
@@ -216,13 +217,13 @@ class RoomServiceTest {
         when(sessionRepository.findByParticipantId(participantId)).thenReturn(
             Optional.of(new GuestSession(participantId, "guest", NOW))
         );
-        when(roomRepository.findById(room.roomId())).thenReturn(Optional.of(room));
+        when(roomRepository.findByCode(room.roomCode())).thenReturn(Optional.of(room));
         when(participantRepository.tryAdd(any(UUID.class), any(Participant.class)))
             .thenReturn(JoinParticipantResult.ROOM_FULL);
 
         assertThatThrownBy(() -> roomService.joinRoom(
             participantId,
-            new JoinRoomRequest(room.roomId())
+            new JoinRoomRequest(room.roomCode())
         )).isInstanceOfSatisfying(BusinessException.class, exception ->
             assertThat(exception.errorCode()).isEqualTo(ErrorCode.ROOM_FULL)
         );
