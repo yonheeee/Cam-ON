@@ -2,8 +2,6 @@
 // 대기방/방장 도메인이 아직 없어서 roomId(=gameId)는 backend의 DevRoomRepository가
 // 들고 있는 고정 테스트 방 id를 그대로 하드코딩한다 — 방 도메인이 완성되면
 // 이 상수를 실제 방 입장 흐름에서 받아온 roomId로 교체하면 된다(나머지 함수 시그니처는 안 바뀜).
-export const TEST_ROOM_ID = '00000000-0000-0000-0000-000000000001';
-
 // localhost로 하드코딩하면 같은 와이파이의 다른 기기에서 프론트를 열었을 때 "자기 자신의
 // localhost:8080"을 찾아버린다 — 프론트를 접속한 호스트명을 그대로 재사용해서, 백엔드가
 // 프론트와 같은 머신에 떠 있다는 전제 하에 어느 기기에서 열든 항상 맞는 주소를 가리키게 한다.
@@ -87,9 +85,9 @@ export class NinjaApiError extends Error {
   }
 }
 
-async function request<T>(path: string, participantId: string | null, init?: RequestInit): Promise<T> {
+async function request<T>(path: string, accessToken: string, init?: RequestInit): Promise<T> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (participantId) headers['X-Participant-Id'] = participantId;
+  headers.Authorization = `Bearer ${accessToken}`;
 
   const response = await fetch(`${BASE_URL}${path}`, {
     ...init,
@@ -103,36 +101,43 @@ async function request<T>(path: string, participantId: string | null, init?: Req
 }
 
 export const ninjaApi = {
-  getRoundSkill: (round: number, participantId: string) =>
-    request<RoundSkillResponse>(`/api/games/${TEST_ROOM_ID}/ninja/rounds/${round}/skill`, participantId),
+  getRoundSkill: (gameId: number, round: number, accessToken: string) =>
+    request<RoundSkillResponse>(`/api/games/${gameId}/ninja/rounds/${round}/skill`, accessToken),
 
-  getState: (participantId: string) =>
-    request<NinjaStateResponse>(`/api/games/${TEST_ROOM_ID}/ninja/state`, participantId),
+  getState: (gameId: number, accessToken: string) =>
+    request<NinjaStateResponse>(`/api/games/${gameId}/ninja/state`, accessToken),
 
-  submitAttack: (round: number, skillId: number, participantId: string) =>
-    request<AttackResponse>(`/api/games/${TEST_ROOM_ID}/ninja/rounds/${round}/attack`, participantId, {
+  submitAttack: (gameId: number, round: number, skillId: number, accessToken: string) =>
+    request<AttackResponse>(`/api/games/${gameId}/ninja/rounds/${round}/attack`, accessToken, {
       method: 'POST',
       body: JSON.stringify({ skillId }),
     }),
 
-  submitTarget: (round: number, targetToken: string, participantId: string) =>
-    request<TargetResponse>(`/api/games/${TEST_ROOM_ID}/ninja/rounds/${round}/target`, participantId, {
+  submitTarget: (gameId: number, round: number, targetToken: string, accessToken: string) =>
+    request<TargetResponse>(`/api/games/${gameId}/ninja/rounds/${round}/target`, accessToken, {
       method: 'POST',
       body: JSON.stringify({ targetToken }),
     }),
 
   // TEMP — 대기방에서 방장이 "게임 시작"을 누르면 자동으로 열려야 할 세션을 수동으로 튼다.
   // backend의 DevNinjaSeedController(/api/dev/ninja/seed)가 없어지면 이 함수도 같이 지우면 된다.
-  seed: (participantTokens: string[], totalRounds: number) =>
-    request<void>(`/api/dev/ninja/seed`, null, {
+  seed: (
+    roomId: string,
+    gameId: number,
+    participantTokens: string[],
+    totalRounds: number,
+    accessToken: string,
+  ) =>
+    request<void>(`/api/dev/ninja/seed`, accessToken, {
       method: 'POST',
-      body: JSON.stringify({ participantTokens, totalRounds }),
+      body: JSON.stringify({ roomId, gameId, participantTokens, totalRounds }),
     }),
 
   // TEMP — 테스트 중 판을 통째로 리셋하는 버튼용. seed와 마찬가지로 room/course/session
   // 도메인이 생기면 지운다.
-  reset: () =>
-    request<void>(`/api/dev/ninja/reset`, null, {
+  reset: (roomId: string, accessToken: string) =>
+    request<void>(`/api/dev/ninja/reset`, accessToken, {
       method: 'POST',
+      body: JSON.stringify({ roomId }),
     }),
 };

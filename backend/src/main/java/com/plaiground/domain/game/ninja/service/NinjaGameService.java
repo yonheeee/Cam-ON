@@ -1,5 +1,6 @@
 package com.plaiground.domain.game.ninja.service;
 
+import com.plaiground.domain.game.common.ws.GameEventPublisher;
 import com.plaiground.domain.game.ninja.domain.Skill;
 import com.plaiground.domain.game.ninja.dto.AttackRequest;
 import com.plaiground.domain.game.ninja.dto.AttackResponse;
@@ -54,6 +55,7 @@ public class NinjaGameService {
     private final SkillRepository skillRepository;
     private final NinjaRedisRepository ninjaRedis;
     private final NinjaEventPublisher eventPublisher;
+    private final GameEventPublisher gameEventPublisher;
     private final TaskScheduler taskScheduler;
 
     // 라운드 타임아웃은 JVM 메모리에 떠있는 TaskScheduler 타이머로 도는데, "게임 시작"을 다시
@@ -69,12 +71,14 @@ public class NinjaGameService {
         SkillRepository skillRepository,
         NinjaRedisRepository ninjaRedis,
         NinjaEventPublisher eventPublisher,
+        GameEventPublisher gameEventPublisher,
         TaskScheduler taskScheduler
     ) {
         this.roomRepository = roomRepository;
         this.skillRepository = skillRepository;
         this.ninjaRedis = ninjaRedis;
         this.eventPublisher = eventPublisher;
+        this.gameEventPublisher = gameEventPublisher;
         this.taskScheduler = taskScheduler;
     }
 
@@ -86,7 +90,7 @@ public class NinjaGameService {
     private static final int MAX_PLAYERS = 4;
 
     @Transactional
-    public void startSession(UUID roomId, Set<String> participantTokens, int totalRounds) {
+    public void startSession(UUID roomId, Long gameId, Set<String> participantTokens, int totalRounds) {
         if (participantTokens.size() < MIN_PLAYERS) {
             throw new BusinessException(ErrorCode.NINJA_NOT_ENOUGH_PLAYERS);
         }
@@ -108,6 +112,7 @@ public class NinjaGameService {
         cancelPendingTimeout(room.roomCode(), seq);
 
         ninjaRedis.setTotalRounds(room.roomCode(), seq, totalRounds);
+        ninjaRedis.setGameId(room.roomCode(), seq, gameId);
         List<Long> skillIds = new ArrayList<>(skillRepository.findAllIds());
         Collections.shuffle(skillIds);
         ninjaRedis.saveSkillOrder(room.roomCode(), seq, skillIds);
@@ -115,6 +120,12 @@ public class NinjaGameService {
         ninjaRedis.initPlayerHp(room.roomCode(), seq, participantTokens, INITIAL_HP);
         log.info("[Service] startSession : 스킬 {}개 셔플 완료, 초기 HP={}로 세팅", skillIds.size(), INITIAL_HP);
 
+        gameEventPublisher.publishStarted(
+            room.roomId(),
+            gameId,
+            seq,
+            totalRounds
+        );
         startRound(room, seq, 1);
     }
 

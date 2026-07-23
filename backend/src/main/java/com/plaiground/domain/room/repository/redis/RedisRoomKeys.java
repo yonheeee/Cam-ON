@@ -6,6 +6,7 @@ final class RedisRoomKeys {
 
     private static final String ROOM_PREFIX = "room:";
     private static final String ROOM_CODE_PREFIX = "room-code:";
+    private static final String PARTICIPANT_ROOM_PREFIX = "participant-room:";
     private static final String HEARTBEAT_PREFIX = "session:";
 
     private RedisRoomKeys() {
@@ -37,6 +38,14 @@ final class RedisRoomKeys {
 
     static String nicknames(UUID roomId) {
         return room(roomId) + ":nicknames";
+    }
+
+    static String participantRoomPrefix() {
+        return PARTICIPANT_ROOM_PREFIX;
+    }
+
+    static String participantRoom(UUID participantId) {
+        return PARTICIPANT_ROOM_PREFIX + participantId;
     }
 
     static String heartbeatPrefix() {

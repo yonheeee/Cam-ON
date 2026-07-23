@@ -1,9 +1,8 @@
 package com.plaiground.domain.room.dto;
 
-import jakarta.validation.constraints.NotNull;
-import java.util.UUID;
+import jakarta.validation.constraints.NotBlank;
 
 public record JoinRoomRequest(
-    @NotNull UUID roomId
+    @NotBlank String roomCode
 ) {
 }

@@ -6,7 +6,7 @@ import com.plaiground.domain.game.ninja.dto.NinjaStateResponse;
 import com.plaiground.domain.game.ninja.dto.RoundSkillResponse;
 import com.plaiground.domain.game.ninja.dto.TargetRequest;
 import com.plaiground.domain.game.ninja.dto.TargetResponse;
-import com.plaiground.domain.game.ninja.service.NinjaGameService;
+import com.plaiground.domain.game.ninja.service.NinjaGameFacade;
 import com.plaiground.global.apiresponse.ApiResponse;
 import com.plaiground.global.security.GuestPrincipal;
 import jakarta.validation.Valid;
@@ -28,26 +28,31 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/games/{gameId}/ninja")
 public class NinjaController {
 
-    private final NinjaGameService ninjaGameService;
+    private final NinjaGameFacade ninjaGameFacade;
 
-    public NinjaController(NinjaGameService ninjaGameService) {
-        this.ninjaGameService = ninjaGameService;
+    public NinjaController(NinjaGameFacade ninjaGameFacade) {
+        this.ninjaGameFacade = ninjaGameFacade;
     }
 
     @GetMapping("/rounds/{round}/skill")
     public ApiResponse<RoundSkillResponse> getRoundSkill(
-        @PathVariable UUID gameId,
-        @PathVariable int round
+        @PathVariable Long gameId,
+        @PathVariable int round,
+        @AuthenticationPrincipal GuestPrincipal principal
     ) {
         log.info("[Controller] GET rounds/{}/skill : gameId={}", round, gameId);
-        RoundSkillResponse response = ninjaGameService.getRoundSkill(gameId, round);
+        RoundSkillResponse response = ninjaGameFacade.getRoundSkill(
+            gameId,
+            round,
+            principal.participantId()
+        );
         log.info("[Controller] GET rounds/{}/skill 완료 : skillId={} skillName={}", round, response.skillId(), response.skillName());
         return ApiResponse.ok(response);
     }
 
     @PostMapping("/rounds/{round}/attack")
     public ApiResponse<AttackResponse> attack(
-        @PathVariable UUID gameId,
+        @PathVariable Long gameId,
         @PathVariable int round,
         @AuthenticationPrincipal GuestPrincipal principal,
         @Valid @RequestBody AttackRequest request
@@ -55,14 +60,19 @@ public class NinjaController {
         String participantToken = principal.participantId().toString();
         log.info("[Controller] POST rounds/{}/attack : gameId={} participantToken={} skillId={}",
             round, gameId, participantToken, request.skillId());
-        AttackResponse response = ninjaGameService.attack(gameId, round, participantToken, request);
+        AttackResponse response = ninjaGameFacade.attack(
+            gameId,
+            round,
+            principal.participantId(),
+            request
+        );
         log.info("[Controller] POST rounds/{}/attack 완료 : attackerToken={} 공격권 선점 성공", round, response.attackerToken());
         return ApiResponse.ok(response);
     }
 
     @PostMapping("/rounds/{round}/target")
     public ApiResponse<TargetResponse> target(
-        @PathVariable UUID gameId,
+        @PathVariable Long gameId,
         @PathVariable int round,
         @AuthenticationPrincipal GuestPrincipal principal,
         @Valid @RequestBody TargetRequest request
@@ -70,15 +80,26 @@ public class NinjaController {
         String participantToken = principal.participantId().toString();
         log.info("[Controller] POST rounds/{}/target : gameId={} participantToken={} targetToken={}",
             round, gameId, participantToken, request.targetToken());
-        TargetResponse response = ninjaGameService.target(gameId, round, participantToken, request);
+        TargetResponse response = ninjaGameFacade.target(
+            gameId,
+            round,
+            principal.participantId(),
+            request
+        );
         log.info("[Controller] POST rounds/{}/target 완료 : damage={} targetHpAfter={} eliminated={} gameEnded={}",
             round, response.damage(), response.targetHpAfter(), response.targetEliminated(), response.gameEnded());
         return ApiResponse.ok(response);
     }
 
     @GetMapping("/state")
-    public ApiResponse<NinjaStateResponse> getState(@PathVariable UUID gameId) {
-        NinjaStateResponse response = ninjaGameService.getState(gameId);
+    public ApiResponse<NinjaStateResponse> getState(
+        @PathVariable Long gameId,
+        @AuthenticationPrincipal GuestPrincipal principal
+    ) {
+        NinjaStateResponse response = ninjaGameFacade.getState(
+            gameId,
+            principal.participantId()
+        );
         log.debug("[Controller] GET state : gameId={} round={}/{} alive={}",
             gameId, response.round(), response.totalRounds(), response.alivePlayers().size());
         return ApiResponse.ok(response);

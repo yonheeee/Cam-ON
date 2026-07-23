@@ -1,9 +1,13 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { LiveKitRoom, VideoConference } from '@livekit/components-react';
 import { VideoPresets, type RoomOptions } from 'livekit-client';
 import { GesturePanel } from '../../gesture/components/GesturePanel';
 import { GestureBoard } from '../../gesture/components/GestureBoard';
 import { NinjaGamePanel } from '../../ninja/components/NinjaGamePanel';
+import {
+  type GameStartedPayload,
+  useRoomGameStarted,
+} from '../../ninja/hooks/useRoomGameStarted';
 import '@livekit/components-styles';
 import './VideoCallRoom.css';
 
@@ -32,8 +36,24 @@ const roomOptions: RoomOptions = {
 export function VideoCallRoom() {
   const [serverUrl, setServerUrl] = useState('ws://localhost:7880');
   const [token, setToken] = useState('');
+  const [accessToken, setAccessToken] = useState('');
+  const [roomId, setRoomId] = useState('');
+  const [gameId, setGameId] = useState('');
+  const [activeGameId, setActiveGameId] = useState<number | null>(null);
+  const [activeSessionSeq, setActiveSessionSeq] = useState<number | null>(null);
   const [connected, setConnected] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
+
+  const handleGameStarted = useCallback((payload: GameStartedPayload) => {
+    setActiveGameId(payload.gameId);
+    setActiveSessionSeq(payload.sessionSeq);
+  }, []);
+
+  useRoomGameStarted(
+    connected ? roomId : null,
+    connected ? accessToken : null,
+    handleGameStarted,
+  );
 
   if (connected) {
     return (
@@ -57,7 +77,18 @@ export function VideoCallRoom() {
           <VideoConference />
           <GesturePanel />
           <GestureBoard />
-          <NinjaGamePanel />
+          {activeSessionSeq !== null && (
+            <div className="video-call-room__session">
+              진행 세션 {activeSessionSeq}
+            </div>
+          )}
+          {activeGameId !== null && (
+            <NinjaGamePanel
+              roomId={roomId}
+              gameId={activeGameId}
+              accessToken={accessToken}
+            />
+          )}
         </LiveKitRoom>
       </>
     );
@@ -70,7 +101,16 @@ export function VideoCallRoom() {
       <form
         onSubmit={(event) => {
           event.preventDefault();
-          if (serverUrl.trim() && token.trim()) setConnected(true);
+          if (
+            serverUrl.trim()
+            && token.trim()
+            && accessToken.trim()
+            && roomId.trim()
+            && Number(gameId) > 0
+          ) {
+            setActiveGameId(Number(gameId));
+            setConnected(true);
+          }
         }}
       >
         <label>
@@ -78,12 +118,33 @@ export function VideoCallRoom() {
           <input value={serverUrl} onChange={(event) => setServerUrl(event.target.value)} />
         </label>
         <label>
-          Access Token
+          LiveKit Access Token
           <textarea
             value={token}
             onChange={(event) => setToken(event.target.value)}
             rows={4}
             placeholder="node scripts/mint-dev-token.mjs <room> <name> 출력값을 붙여넣기"
+          />
+        </label>
+        <label>
+          Backend Access Token
+          <textarea
+            value={accessToken}
+            onChange={(event) => setAccessToken(event.target.value)}
+            rows={4}
+          />
+        </label>
+        <label>
+          Room ID
+          <input value={roomId} onChange={(event) => setRoomId(event.target.value)} />
+        </label>
+        <label>
+          Game ID
+          <input
+            type="number"
+            min="1"
+            value={gameId}
+            onChange={(event) => setGameId(event.target.value)}
           />
         </label>
         <button type="submit">입장</button>

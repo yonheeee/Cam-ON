@@ -19,6 +19,7 @@ public class NinjaRedisRepository {
     private static final String STARTED_AT_FIELD = "started_at";
     private static final String CURRENT_ROUND_FIELD = "current_round";
     private static final String TOTAL_ROUNDS_FIELD = "total_rounds";
+    private static final String GAME_ID_FIELD = "game_id";
     private static final String ATTACKER_TOKEN_FIELD = "attacker_token";
     private static final String TARGET_TOKEN_FIELD = "target_token";
     private static final String JUDGED_AT_FIELD = "judged_at";
@@ -122,6 +123,15 @@ public class NinjaRedisRepository {
     // 그 흐름이 아직 없어서 지금은 이 메서드로 직접 채운다(예: dev 시드 컨트롤러).
     public void setTotalRounds(String roomCode, int seq, int totalRounds) {
         redis.opsForHash().put(sessionKey(roomCode, seq), TOTAL_ROUNDS_FIELD, String.valueOf(totalRounds));
+    }
+
+    public void setGameId(String roomCode, int seq, Long gameId) {
+        redis.opsForHash().put(sessionKey(roomCode, seq), GAME_ID_FIELD, String.valueOf(gameId));
+    }
+
+    public Long getGameId(String roomCode, int seq) {
+        Object value = redis.opsForHash().get(sessionKey(roomCode, seq), GAME_ID_FIELD);
+        return value == null ? null : Long.valueOf(value.toString());
     }
 
     // --- 라운드 진행 ---
