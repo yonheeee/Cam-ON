@@ -1,10 +1,9 @@
 import { useDataChannel, useParticipants } from '@livekit/components-react';
 import { GESTURE_RESULT_TOPIC, type GestureResultPayload } from '../lib/gestureBroadcast';
-import { SKILL_EFFECT_LABELS } from '../lib/labels';
 import { useGestureBoardStore } from '../store/gestureBoardStore';
 import './GestureBoard.css';
 
-// 참가자 전원의 손동작 판정 결과를 한 화면에 모아 보여준다.
+// 참가자 전원의 손동작(스킬) 판정 결과를 한 화면에 모아 보여준다.
 // 로컬 결과는 GesturePanel이 store에 직접 쓰고, 남의 결과는 여기서 데이터 채널을 구독해 받는다.
 export function GestureBoard() {
   const participants = useParticipants();
@@ -23,16 +22,16 @@ export function GestureBoard() {
 
   return (
     <div className="gesture-board">
-      <h2>참가자별 손동작 판정</h2>
+      <h2>참가자별 스킬 판정</h2>
       <ul>
         {participants.map((participant) => {
           const entry = entries[participant.identity];
-          const isSkill = entry && SKILL_EFFECT_LABELS.has(entry.handSignLabel);
+          const isSkill = Boolean(entry?.comboLabel);
           return (
             <li key={participant.identity} className={isSkill ? 'gesture-board__row--skill' : undefined}>
               <span className="gesture-board__name">{participant.identity}</span>
-              <span>{entry?.handSignLabel ?? '대기 중'}</span>
-              <span>{entry?.fingerGestureLabel ?? '-'}</span>
+              <span>{entry?.comboLabel ?? '대기 중'}</span>
+              <span>{entry ? `${(entry.confidence * 100).toFixed(0)}%` : '-'}</span>
             </li>
           );
         })}

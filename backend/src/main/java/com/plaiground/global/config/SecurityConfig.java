@@ -20,6 +20,10 @@ public class SecurityConfig {
     ) throws Exception {
         http
             .csrf(csrf -> csrf.disable())
+            // CorsConfig의 CorsConfigurationSource 빈을 실제로 태우려면 명시적으로 호출해야 함
+            // (Spring Security가 자동으로 켜주지 않음) — 안 붙이면 프론트(Vite dev 서버) 요청이
+            // preflight 단계에서 다시 막힌다.
+            .cors(cors -> {})
             .sessionManagement(session -> session
                 .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(authorize -> authorize

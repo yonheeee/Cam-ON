@@ -3,6 +3,7 @@ import { LiveKitRoom, VideoConference } from '@livekit/components-react';
 import { VideoPresets, type RoomOptions } from 'livekit-client';
 import { GesturePanel } from '../../gesture/components/GesturePanel';
 import { GestureBoard } from '../../gesture/components/GestureBoard';
+import { NinjaGamePanel } from '../../ninja/components/NinjaGamePanel';
 import '@livekit/components-styles';
 import './VideoCallRoom.css';
 
@@ -32,24 +33,33 @@ export function VideoCallRoom() {
   const [serverUrl, setServerUrl] = useState('ws://localhost:7880');
   const [token, setToken] = useState('');
   const [connected, setConnected] = useState(false);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
 
   if (connected) {
     return (
-      <LiveKitRoom
-        serverUrl={serverUrl}
-        token={token}
-        connect
-        video
-        audio
-        options={roomOptions}
-        data-lk-theme="default"
-        style={{ height: '100vh' }}
-        onDisconnected={() => setConnected(false)}
-      >
-        <VideoConference />
-        <GesturePanel />
-        <GestureBoard />
-      </LiveKitRoom>
+      <>
+        {connectionError && (
+          <div className="video-call-room__connection-error">LiveKit 연결 실패: {connectionError}</div>
+        )}
+        <LiveKitRoom
+          serverUrl={serverUrl}
+          token={token}
+          connect
+          video
+          audio
+          options={roomOptions}
+          data-lk-theme="default"
+          style={{ height: '100vh' }}
+          onConnected={() => setConnectionError(null)}
+          onDisconnected={() => setConnected(false)}
+          onError={(err) => setConnectionError(err.message)}
+        >
+          <VideoConference />
+          <GesturePanel />
+          <GestureBoard />
+          <NinjaGamePanel />
+        </LiveKitRoom>
+      </>
     );
   }
 

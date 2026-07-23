@@ -873,14 +873,19 @@
         <p class="card-desc">라운드 하나 = 키 하나</p>
         <div class="card-detail"><div>
           <table class="field-table">
-            <tr><th>mission_id</th><td>MySQL missions 참조</td></tr>
+            <tr><th>mission_id</th><td>MySQL missions 참조 (물건가져오기·몸으로말해요만 사용)</td></tr>
+            <tr><th>skill_id</th><td>MySQL skill 참조, 이번 라운드 요구 콤보 (닌자만 사용)</td></tr>
             <tr><th>presenter_token</th><td>출제자 (몸으로말해요만 사용)</td></tr>
             <tr><th>started_at</th><td>시작 시각</td></tr>
+            <tr><th>closed</th><td>라운드 종료 사유, "TARGET"|"TIMEOUT" (닌자만 사용)</td></tr>
           </table>
           <p class="note">
             n은 라운드 번호. 별도 status 없음 — 이 키의 존재 자체가 "라운드 진행 중"이고, results 키가 생기면 "종료"다.
             출제자 연결 끊김(몸으로말해요)도 여기에 상태를 따로 두지 않고, presenter_token으로 room:{code}:participant:{token}의
-            connection_status를 조회해서 판단한다.
+            connection_status를 조회해서 판단한다. 닌자의 skill_id는 session:{seq}:skill_order(아래 카드 참고)에서 라운드 번호로
+            가져온 값을 그대로 복사해온 것. closed는 "대상 지정 완료"와 "제한시간 타임아웃"이 동시에 라운드를 끝내려는 경합을
+            HSETNX(먼저 쓰는 쪽만 성공)로 막는 락 — 둘 중 이미 닫은 쪽이 있으면 나머지는 아무 것도 안 함. 콤보 자체(몇 단계짜리
+            시퀀스인지, 지금 몇 번째 단계까지 완성했는지)는 AI/프론트가 들고 있고 Spring은 완성된 순간의 skill_id 하나만 받는다.
           </p>
         </div></div>
       </article>
@@ -962,9 +967,14 @@
               <tr><th>attacker_token</th><td>손동작 제일 빨리 완성</td></tr>
               <tr><th>target_token</th><td>공격 대상으로 지정됨</td></tr>
               <tr><th>skill_id</th><td>MySQL skill 참조 — 완성한 콤보</td></tr>
-              <tr><th>judged_at</th><td>AI 판정 시각</td></tr>
+              <tr><th>judged_at</th><td>서버가 공격권 선점을 확정한 시각(참고용)</td></tr>
             </table>
-            <p class="note">동시 완성 예외는 judged_at 타임스탬프로 선착순 판정. skill_id로 MySQL skill.damage를 조회해 player_hp에서 차감.</p>
+            <p class="note">
+              동시 완성 예외는 클라이언트/AI 타임스탬프를 비교하지 않고, attacker_token 필드에 HSETNX(이미 값이 있으면 실패)로 씀 —
+              Redis 단일 스레드 특성상 가장 먼저 도착한 요청만 성공해서 선착순이 원자적으로 정해진다. target_token도 같은 방식으로
+              한 번만 쓰이게 막아서 재시도/중복 클릭으로 데미지가 두 번 들어가는 걸 방지. skill_id로 MySQL skill.damage를 조회해
+              player_hp에서 차감.
+            </p>
           </div></div>
         </article>
 
@@ -980,6 +990,21 @@
               세션 시작 시 참가자 수에 비례한 초기 HP로 채워짐(요구사항명세서 GAME02_HP01). 공격을 맞을 때마다 attack.skill_id가 가리키는
               skill.damage만큼 HINCRBY로 차감, 라운드마다도 추가로 차감. 0 이하가 되면 alive_players → eliminated로 이동.
               session:{seq}가 끝나면(다음 게임 진행 시) 이 키도 함께 정리됨 — HP는 세션 하나 안에서만 의미 있는 값.
+            </p>
+          </div></div>
+        </article>
+
+        <article class="card card-redis" data-node="skill_order" data-game="ninja" tabindex="0" role="button">
+          <div class="card-head"><span class="tag tag-redis">LIST</span><h3>...:session:{seq}:skill_order</h3></div>
+          <p class="card-desc">라운드별 요구 콤보 배정 순서</p>
+          <div class="card-detail"><div>
+            <table class="field-table">
+              <tr><th>element</th><td>MySQL skill.id (문자열)</td></tr>
+            </table>
+            <p class="note">
+              세션 시작 시 MySQL skill 전체를 한 번 셔플해서 저장. 라운드 n의 요구 콤보는 인덱스 (n-1) % (스킬 개수)로 뽑는다 —
+              round_count가 스킬 개수 이하면 중복 없이 전부 등장. 뽑은 값은 그 라운드의 round:{n}.skill_id로 복사돼 고정된다
+              (이 LIST 자체는 다시 안 건드림).
             </p>
           </div></div>
         </article>
@@ -1344,6 +1369,9 @@
       ['round', 'attack', 'own'],
       ['attack', 'player_hp', 'ref'],
       ['attack', 'skill', 'ref'],
+      ['round', 'skill', 'ref'],
+      ['session', 'skill_order', 'own'],
+      ['skill_order', 'skill', 'ref'],
       ['round', 'submissions', 'own'],
       ['round', 'guesses', 'own'],
       ['skill', 'skill_gesture', 'own'],

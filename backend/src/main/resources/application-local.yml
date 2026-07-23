@@ -3,6 +3,9 @@ logging:
     com.plaiground: DEBUG
 
 spring:
+  jpa:
+    hibernate:
+      ddl-auto: update
   data:
     redis:
       database: 0

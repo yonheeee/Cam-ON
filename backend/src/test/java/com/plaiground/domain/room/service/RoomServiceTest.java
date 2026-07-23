@@ -155,6 +155,7 @@ class RoomServiceTest {
             hostId,
             4,
             RoomStatus.WAITING,
+            1,
             NOW
         );
         Participant host = new Participant(
@@ -209,6 +210,7 @@ class RoomServiceTest {
             UUID.randomUUID(),
             2,
             RoomStatus.WAITING,
+            1,
             NOW
         );
         when(sessionRepository.findByParticipantId(participantId)).thenReturn(
@@ -280,6 +282,7 @@ class RoomServiceTest {
             hostId,
             4,
             RoomStatus.WAITING,
+            1,
             NOW
         );
     }

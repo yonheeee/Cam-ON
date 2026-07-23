@@ -18,7 +18,9 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(BusinessException.class)
     ResponseEntity<ErrorResponse> handleBusinessException(BusinessException exception) {
-        return errorResponse(exception.errorCode());
+        ErrorCode code = exception.errorCode();
+        log.info("[ExceptionHandler] {} : {}", code.name(), code.message());
+        return errorResponse(code);
     }
 
     @ExceptionHandler({

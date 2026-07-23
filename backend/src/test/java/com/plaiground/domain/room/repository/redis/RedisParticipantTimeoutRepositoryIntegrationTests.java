@@ -180,6 +180,7 @@ class RedisParticipantTimeoutRepositoryIntegrationTests {
             hostId,
             4,
             RoomStatus.WAITING,
+            1,
             BASE_TIME
         );
         Participant host = participant(hostId, "방장", BASE_TIME);

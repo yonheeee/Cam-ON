@@ -156,6 +156,9 @@ public class RedisRoomRepository implements RoomRepository {
             UUID.fromString(required(values, HOST_PARTICIPANT_ID)),
             Integer.parseInt(required(values, MAX_PLAYERS)),
             RoomStatus.valueOf(required(values, STATUS)),
+            // TODO: 코스/세션 도메인이 생기면 room 해시에 current_session_seq 필드를 실제로
+            // 저장/조회하도록 채워야 한다. 지금은 코스 개념 자체가 없어서 항상 첫 세션(1)로 취급.
+            1,
             Instant.parse(required(values, CREATED_AT))
         ));
     }

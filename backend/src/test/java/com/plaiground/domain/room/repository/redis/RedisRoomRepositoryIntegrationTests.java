@@ -124,6 +124,7 @@ class RedisRoomRepositoryIntegrationTests {
             UUID.randomUUID(),
             4,
             RoomStatus.WAITING,
+            1,
             room.createdAt()
         );
         Participant anotherHost = new Participant(
@@ -327,6 +328,7 @@ class RedisRoomRepositoryIntegrationTests {
             hostId,
             maxPlayers,
             RoomStatus.WAITING,
+            1,
             Instant.parse("2026-07-21T00:00:00Z")
         );
     }

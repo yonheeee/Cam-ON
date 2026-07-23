@@ -9,6 +9,9 @@ public record Room(
     UUID hostParticipantId,
     int maxPlayers,
     RoomStatus status,
+    // 코스에서 진행 중인 세션 위치(1부터) — room:{code}.current_session_seq. 게임 도메인이 이 값과
+    // roomCode로 room:{code}:session:{seq}:... 키를 조립한다(예: domain/game/ninja).
+    int currentSessionSeq,
     Instant createdAt
 ) {
 }

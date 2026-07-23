@@ -81,6 +81,7 @@ public class RoomService {
                 participantId,
                 request.maxPlayers(),
                 RoomStatus.WAITING,
+                1,
                 createdAt
             );
             Participant host = new Participant(
