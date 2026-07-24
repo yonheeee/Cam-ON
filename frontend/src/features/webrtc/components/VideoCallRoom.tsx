@@ -4,6 +4,7 @@ import { VideoPresets, type RoomOptions } from 'livekit-client';
 import { GesturePanel } from '../../gesture/components/GesturePanel';
 import { GestureBoard } from '../../gesture/components/GestureBoard';
 import { NinjaGamePanel } from '../../ninja/components/NinjaGamePanel';
+import { RoomLobby } from '../../room/components/RoomLobby';
 import {
   type GameStartedPayload,
   useRoomGameStarted,
@@ -34,19 +35,16 @@ const roomOptions: RoomOptions = {
 // LiveKit Cloud 프로젝트 서버 URL — 고정값이라 매번 입력받을 필요 없음.
 const LIVEKIT_SERVER_URL = 'wss://plaiground-gkmfgv1j.livekit.cloud';
 
-// 지금 실제로 구현된 게임은 닌자뿐이라 gameId를 고정한다 — 코스에서 게임을 고르는 흐름이
-// 생기면 그쪽에서 받아오도록 교체.
-const NINJA_GAME_ID = 1;
-
 interface VideoCallRoomProps {
-  // 대기방(RoomLobby)까지 마치고 들어오는 화면이라, 여기 도달한 시점엔 셋 다 이미 확보돼 있다.
+  // 방 생성/입장(RoomGate)까지 마치고 들어오는 화면이라, 여기 도달한 시점엔 넷 다 이미 확보돼 있다.
   accessToken: string;
   token: string;
   roomId: string;
+  participantId: string;
 }
 
-export function VideoCallRoom({ accessToken, token, roomId }: VideoCallRoomProps) {
-  const [activeGameId, setActiveGameId] = useState<number | null>(NINJA_GAME_ID);
+export function VideoCallRoom({ accessToken, token, roomId, participantId }: VideoCallRoomProps) {
+  const [activeGameId, setActiveGameId] = useState<number | null>(null);
   const [activeSessionSeq, setActiveSessionSeq] = useState<number | null>(null);
   const [connectionError, setConnectionError] = useState<string | null>(null);
 
@@ -77,12 +75,15 @@ export function VideoCallRoom({ accessToken, token, roomId }: VideoCallRoomProps
         <VideoConference />
         <GesturePanel />
         <GestureBoard />
+        {activeSessionSeq === null && (
+          <RoomLobby roomId={roomId} accessToken={accessToken} participantId={participantId} />
+        )}
         {activeSessionSeq !== null && (
           <div className="video-call-room__session">
             진행 세션 {activeSessionSeq}
           </div>
         )}
-        {activeGameId !== null && (
+        {activeSessionSeq !== null && activeGameId !== null && (
           <NinjaGamePanel
             roomId={roomId}
             gameId={activeGameId}

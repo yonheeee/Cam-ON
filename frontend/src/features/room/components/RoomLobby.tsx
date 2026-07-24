@@ -4,20 +4,21 @@ interface RoomLobbyProps {
   roomId: string;
   accessToken: string;
   participantId: string;
-  onEnter: () => void;
 }
 
-export function RoomLobby({ roomId, accessToken, participantId, onEnter }: RoomLobbyProps) {
+// 화상통화 화면(VideoCallRoom) 안에 얹혀서 게임 시작 전까지 떠 있는 패널이다 —
+// 별도 화면으로 분리하지 않는 이유는 대기방 단계에서부터 카메라/마이크가 이미 연결돼
+// 있어야 하기 때문(AGENTS.md 준비 상태 = 카메라 권한 완료 AND 인식 테스트 통과).
+export function RoomLobby({ roomId, accessToken, participantId }: RoomLobbyProps) {
   const { room, error, toggleReady } = useRoomLobby(roomId, accessToken);
 
-  if (error) return <p>방 정보를 불러오지 못했습니다: {error}</p>;
-  if (!room) return <p>불러오는 중...</p>;
+  if (error) return <div>방 정보를 불러오지 못했습니다: {error}</div>;
+  if (!room) return <div>불러오는 중...</div>;
 
   const self = room.participants.find((p) => p.participantId === participantId);
 
   return (
     <div>
-      <h1>대기방</h1>
       <p>방 코드: {room.roomCode}</p>
       <ul>
         {room.participants.map((p) => (
@@ -34,9 +35,6 @@ export function RoomLobby({ roomId, accessToken, participantId, onEnter }: RoomL
           {self.ready ? '준비 취소' : '준비 완료'}
         </button>
       )}
-      <button type="button" onClick={onEnter}>
-        입장하기
-      </button>
     </div>
   );
 }
