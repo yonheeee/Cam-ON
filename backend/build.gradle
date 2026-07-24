@@ -6,7 +6,7 @@ plugins {
 
 group = 'com.camon'
 version = '0.0.1-SNAPSHOT'
-description = 'PLAIGROUND backend'
+description = 'Cam-ON backend'
 
 java {
 	toolchain {

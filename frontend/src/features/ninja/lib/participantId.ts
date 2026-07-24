@@ -11,7 +11,7 @@ export async function resolveParticipantId(identity: string): Promise<string> {
   const cached = cache.get(identity);
   if (cached) return cached;
 
-  const data = new TextEncoder().encode(`plaiground-dev:${identity}`);
+  const data = new TextEncoder().encode(`camon-dev:${identity}`);
   const digest = await crypto.subtle.digest('SHA-256', data);
   const bytes = new Uint8Array(digest).slice(0, 16);
   const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');

@@ -39,7 +39,7 @@ class JwtTokenProviderTest {
         JwtTokenProvider provider = provider(
             privateKey,
             publicKey,
-            properties("plaiground-services"),
+            properties("camon-services"),
             Clock.fixed(NOW, ZoneOffset.UTC)
         );
         UUID participantId = UUID.randomUUID();
@@ -48,8 +48,8 @@ class JwtTokenProviderTest {
         Jwt jwt = provider.decode(accessToken);
 
         assertThat(provider.extractParticipantId(accessToken)).isEqualTo(participantId);
-        assertThat(jwt.getClaimAsString("iss")).isEqualTo("plaiground-backend");
-        assertThat(jwt.getAudience()).containsExactly("plaiground-services");
+        assertThat(jwt.getClaimAsString("iss")).isEqualTo("camon-backend");
+        assertThat(jwt.getAudience()).containsExactly("camon-services");
         assertThat(jwt.getIssuedAt()).isEqualTo(NOW);
         assertThat(jwt.getExpiresAt()).isEqualTo(NOW.plus(TTL));
     }
@@ -62,7 +62,7 @@ class JwtTokenProviderTest {
         JwtTokenProvider anotherProvider = provider(
             (RSAPrivateKey) anotherKeyPair.getPrivate(),
             (RSAPublicKey) anotherKeyPair.getPublic(),
-            properties("plaiground-services"),
+            properties("camon-services"),
             Clock.fixed(NOW, ZoneOffset.UTC)
         );
         String accessToken = anotherProvider.createAccessToken(UUID.randomUUID());
@@ -70,7 +70,7 @@ class JwtTokenProviderTest {
         assertThatThrownBy(() -> provider(
             privateKey,
             publicKey,
-            properties("plaiground-services"),
+            properties("camon-services"),
             Clock.systemUTC()
         ).extractParticipantId(accessToken)).isInstanceOf(JwtException.class);
     }
@@ -88,7 +88,7 @@ class JwtTokenProviderTest {
         assertThatThrownBy(() -> provider(
             privateKey,
             publicKey,
-            properties("plaiground-services"),
+            properties("camon-services"),
             Clock.systemUTC()
         ).extractParticipantId(accessToken)).isInstanceOf(JwtException.class);
     }
@@ -99,7 +99,7 @@ class JwtTokenProviderTest {
         JwtTokenProvider issuer = provider(
             privateKey,
             publicKey,
-            properties("plaiground-services"),
+            properties("camon-services"),
             expiredClock
         );
         String accessToken = issuer.createAccessToken(UUID.randomUUID());
@@ -107,7 +107,7 @@ class JwtTokenProviderTest {
         assertThatThrownBy(() -> provider(
             privateKey,
             publicKey,
-            properties("plaiground-services"),
+            properties("camon-services"),
             Clock.systemUTC()
         ).extractParticipantId(accessToken)).isInstanceOf(JwtException.class);
     }
@@ -123,7 +123,7 @@ class JwtTokenProviderTest {
 
     private static JwtProperties properties(String audience) {
         return new JwtProperties(
-            "plaiground-backend",
+            "camon-backend",
             audience,
             TTL,
             null,

@@ -17,7 +17,7 @@ public class OpenApiConfig {
     OpenAPI openApi() {
         return new OpenAPI()
             .info(new Info()
-                .title("PLAIGROUND API")
+                .title("Cam-ON API")
                 .description("방/게임 상태 관리 REST API (Spring 서버). WebSocket(STOMP) 이벤트는 포함되지 않는다.")
                 .version("v0"))
             .addSecurityItem(new SecurityRequirement().addList(BEARER_SCHEME))

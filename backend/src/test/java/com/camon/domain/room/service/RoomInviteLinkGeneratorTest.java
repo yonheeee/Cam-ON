@@ -10,11 +10,11 @@ class RoomInviteLinkGeneratorTest {
     @Test
     void createsInviteLinkWithoutDuplicateSlash() {
         RoomInviteLinkGenerator generator = new RoomInviteLinkGenerator(
-            new RoomProperties("https://plaiground.example/")
+            new RoomProperties("https://camon.example/")
         );
 
         assertThat(generator.generate("AB23CD")).isEqualTo(
-            "https://plaiground.example/rooms/join?code=AB23CD"
+            "https://camon.example/rooms/join?code=AB23CD"
         );
     }
 }

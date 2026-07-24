@@ -1,7 +1,7 @@
 // 동시 접속자 N명(N/4개 방 x 방 정원 4명) 시나리오 부하 테스트 — ROOMS 환경변수로 규모 조절.
 //
 // 실행 (예: 10,000명 = 2,500방):
-//   docker run --rm -i --network plaiground-network --ulimit nofile=65536:65536 \
+//   docker run --rm -i --network camon-network --ulimit nofile=65536:65536 \
 //     -e BASE_URL=http://backend:8080 -e ROOMS=2500 -e TOTAL_ROUNDS=3 \
 //     -e READY_POLL_ATTEMPTS=200 -e STATE_POLL_ATTEMPTS=200 \
 //     grafana/k6 run - < backend/loadtest/ninja-concurrent-load.js

@@ -83,7 +83,7 @@ class RoomServiceTest {
         when(roomRepository.tryCreate(any(Room.class), any(Participant.class)))
             .thenReturn(true);
         when(inviteLinkGenerator.generate("AB23CD")).thenReturn(
-            "https://plaiground.example/rooms/join?code=AB23CD"
+            "https://camon.example/rooms/join?code=AB23CD"
         );
 
         CreateRoomResponse response = roomService.createRoom(
