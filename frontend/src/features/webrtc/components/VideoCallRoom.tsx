@@ -1,10 +1,13 @@
 import { useCallback, useState } from 'react';
+import { useNavigate } from 'react-router';
 import { LiveKitRoom, VideoConference } from '@livekit/components-react';
 import { VideoPresets, type RoomOptions } from 'livekit-client';
 import { GesturePanel } from '../../gesture/components/GesturePanel';
 import { GestureBoard } from '../../gesture/components/GestureBoard';
 import { NinjaGamePanel } from '../../ninja/components/NinjaGamePanel';
 import { RoomLobby } from '../../room/components/RoomLobby';
+import { ChatPanel } from '../../chat/components/ChatPanel';
+import { clearRoom } from '../../room/lib/roomStorage';
 import { ninjaApi, NinjaApiError } from '../../ninja/api/ninjaApi';
 import '@livekit/components-styles';
 import './VideoCallRoom.css';
@@ -46,6 +49,7 @@ interface VideoCallRoomProps {
 }
 
 export function VideoCallRoom({ accessToken, token, roomId, participantId }: VideoCallRoomProps) {
+  const navigate = useNavigate();
   // 게임이 실제로 열려 있는지(NinjaGamePanel이 폴링으로 판단)에 따라 대기방/게임 화면을 전환한다.
   // 손 인식(GesturePanel/GestureBoard)은 게임 중에만 켜서, 대기방에선 비디오/닉네임/준비/방장만 보이게 한다.
   const [gameActive, setGameActive] = useState(false);
@@ -85,6 +89,11 @@ export function VideoCallRoom({ accessToken, token, roomId, participantId }: Vid
         data-lk-theme="default"
         style={{ height: '100vh' }}
         onConnected={() => setConnectionError(null)}
+        onDisconnected={() => {
+          // 연결이 끊기면 이 방 정보는 더 못 쓴다 — 저장된 방 정보를 지우고 방 생성/참가 화면으로 돌려보낸다.
+          clearRoom();
+          navigate('/', { replace: true });
+        }}
         onError={(err) => setConnectionError(err.message)}
       >
         <VideoConference />
@@ -106,6 +115,7 @@ export function VideoCallRoom({ accessToken, token, roomId, participantId }: Vid
           accessToken={accessToken}
           onActiveChange={setGameActive}
         />
+        <ChatPanel />
       </LiveKitRoom>
     </>
   );

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useRoomLobby } from '../hooks/useRoomLobby';
+import './RoomLobby.css';
 
 interface RoomLobbyProps {
   roomId: string;
@@ -24,8 +25,8 @@ export function RoomLobby({
   const { room, error, toggleReady } = useRoomLobby(roomId, accessToken);
   const [copied, setCopied] = useState(false);
 
-  if (error) return <div>방 정보를 불러오지 못했습니다: {error}</div>;
-  if (!room) return <div>불러오는 중...</div>;
+  if (error) return <div className="room-lobby">방 정보를 불러오지 못했습니다: {error}</div>;
+  if (!room) return <div className="room-lobby">불러오는 중...</div>;
 
   const self = room.participants.find((p) => p.participantId === participantId);
 
@@ -40,7 +41,7 @@ export function RoomLobby({
   };
 
   return (
-    <div>
+    <div className="room-lobby">
       <p>
         방 코드: {room.roomCode}{' '}
         <button type="button" onClick={copyCode}>
@@ -69,7 +70,7 @@ export function RoomLobby({
       >
         {starting ? '시작 중...' : '게임 시작'}
       </button>
-      {startError && <p>{startError}</p>}
+      {startError && <p className="room-lobby__error">{startError}</p>}
     </div>
   );
 }
