@@ -34,19 +34,20 @@ const roomOptions: RoomOptions = {
 // LiveKit Cloud 프로젝트 서버 URL — 고정값이라 매번 입력받을 필요 없음.
 const LIVEKIT_SERVER_URL = 'wss://plaiground-gkmfgv1j.livekit.cloud';
 
+// 지금 실제로 구현된 게임은 닌자뿐이라 gameId를 고정한다 — 코스에서 게임을 고르는 흐름이
+// 생기면 그쪽에서 받아오도록 교체.
+const NINJA_GAME_ID = 1;
+
 interface VideoCallRoomProps {
-  // 닉네임 세션(NicknameGate)에서 이미 발급받은 백엔드 accessToken.
+  // 대기방(RoomLobby)까지 마치고 들어오는 화면이라, 여기 도달한 시점엔 셋 다 이미 확보돼 있다.
   accessToken: string;
-  // 방 생성/입장(RoomGate) 응답에서 이미 받은 LiveKit 토큰과 roomId — 더는 직접 입력받지 않는다.
   token: string;
   roomId: string;
 }
 
 export function VideoCallRoom({ accessToken, token, roomId }: VideoCallRoomProps) {
-  const [gameId, setGameId] = useState('');
-  const [activeGameId, setActiveGameId] = useState<number | null>(null);
+  const [activeGameId, setActiveGameId] = useState<number | null>(NINJA_GAME_ID);
   const [activeSessionSeq, setActiveSessionSeq] = useState<number | null>(null);
-  const [connected, setConnected] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
 
   const handleGameStarted = useCallback((payload: GameStartedPayload) => {
@@ -54,74 +55,41 @@ export function VideoCallRoom({ accessToken, token, roomId }: VideoCallRoomProps
     setActiveSessionSeq(payload.sessionSeq);
   }, []);
 
-  useRoomGameStarted(
-    connected ? roomId : null,
-    connected ? accessToken : null,
-    handleGameStarted,
-  );
-
-  if (connected) {
-    return (
-      <>
-        {connectionError && (
-          <div className="video-call-room__connection-error">LiveKit 연결 실패: {connectionError}</div>
-        )}
-        <LiveKitRoom
-          serverUrl={LIVEKIT_SERVER_URL}
-          token={token}
-          connect
-          video
-          audio
-          options={roomOptions}
-          data-lk-theme="default"
-          style={{ height: '100vh' }}
-          onConnected={() => setConnectionError(null)}
-          onDisconnected={() => setConnected(false)}
-          onError={(err) => setConnectionError(err.message)}
-        >
-          <VideoConference />
-          <GesturePanel />
-          <GestureBoard />
-          {activeSessionSeq !== null && (
-            <div className="video-call-room__session">
-              진행 세션 {activeSessionSeq}
-            </div>
-          )}
-          {activeGameId !== null && (
-            <NinjaGamePanel
-              roomId={roomId}
-              gameId={activeGameId}
-              accessToken={accessToken}
-            />
-          )}
-        </LiveKitRoom>
-      </>
-    );
-  }
+  useRoomGameStarted(roomId, accessToken, handleGameStarted);
 
   return (
-    <div className="video-call-room video-call-room--join">
-      <h1>게임 선택</h1>
-      <form
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (Number(gameId) > 0) {
-            setActiveGameId(Number(gameId));
-            setConnected(true);
-          }
-        }}
+    <>
+      {connectionError && (
+        <div className="video-call-room__connection-error">LiveKit 연결 실패: {connectionError}</div>
+      )}
+      <LiveKitRoom
+        serverUrl={LIVEKIT_SERVER_URL}
+        token={token}
+        connect
+        video
+        audio
+        options={roomOptions}
+        data-lk-theme="default"
+        style={{ height: '100vh' }}
+        onConnected={() => setConnectionError(null)}
+        onError={(err) => setConnectionError(err.message)}
       >
-        <label>
-          Game ID
-          <input
-            type="number"
-            min="1"
-            value={gameId}
-            onChange={(event) => setGameId(event.target.value)}
+        <VideoConference />
+        <GesturePanel />
+        <GestureBoard />
+        {activeSessionSeq !== null && (
+          <div className="video-call-room__session">
+            진행 세션 {activeSessionSeq}
+          </div>
+        )}
+        {activeGameId !== null && (
+          <NinjaGamePanel
+            roomId={roomId}
+            gameId={activeGameId}
+            accessToken={accessToken}
           />
-        </label>
-        <button type="submit">입장</button>
-      </form>
-    </div>
+        )}
+      </LiveKitRoom>
+    </>
   );
 }

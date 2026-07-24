@@ -29,6 +29,12 @@ export interface JoinRoomResult {
   livekitToken: string;
 }
 
+export interface UpdateReadyResult {
+  participantId: string;
+  ready: boolean;
+  allReady: boolean;
+}
+
 export class RoomApiError extends Error {
   code?: string;
 
@@ -65,5 +71,14 @@ export const roomApi = {
     request<JoinRoomResult>('/api/rooms/join', accessToken, {
       method: 'POST',
       body: JSON.stringify({ roomCode }),
+    }),
+
+  getRoom: (roomId: string, accessToken: string) =>
+    request<RoomSnapshotResponse>(`/api/rooms/${roomId}`, accessToken),
+
+  updateReady: (roomId: string, ready: boolean, accessToken: string) =>
+    request<UpdateReadyResult>(`/api/rooms/${roomId}/members/me/ready`, accessToken, {
+      method: 'PATCH',
+      body: JSON.stringify({ ready }),
     }),
 };
