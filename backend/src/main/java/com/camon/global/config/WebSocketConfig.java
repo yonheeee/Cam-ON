@@ -1,5 +1,6 @@
 package com.camon.global.config;
 
+import com.camon.domain.room.config.RoomProperties;
 import com.camon.global.ws.RoomHandshakeInterceptor;
 import com.camon.global.ws.StompAuthenticationInterceptor;
 import org.springframework.context.annotation.Configuration;
@@ -16,13 +17,16 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     private final RoomHandshakeInterceptor roomHandshakeInterceptor;
     private final StompAuthenticationInterceptor authenticationInterceptor;
+    private final RoomProperties roomProperties;
 
     public WebSocketConfig(
         RoomHandshakeInterceptor roomHandshakeInterceptor,
-        @Lazy StompAuthenticationInterceptor authenticationInterceptor
+        @Lazy StompAuthenticationInterceptor authenticationInterceptor,
+        RoomProperties roomProperties
     ) {
         this.roomHandshakeInterceptor = roomHandshakeInterceptor;
         this.authenticationInterceptor = authenticationInterceptor;
+        this.roomProperties = roomProperties;
     }
 
     @Override
@@ -36,7 +40,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     public void registerStompEndpoints(StompEndpointRegistry registry) {
         registry.addEndpoint("/ws/rooms/{roomId}")
             .addInterceptors(roomHandshakeInterceptor)
-            .setAllowedOriginPatterns("http://localhost:*");
+            .setAllowedOriginPatterns("http://localhost:*", roomProperties.frontendBaseUrl());
     }
 
     @Override
