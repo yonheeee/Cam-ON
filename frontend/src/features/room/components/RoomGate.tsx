@@ -41,7 +41,9 @@ export function RoomGate() {
 
       const result = mode === 'create'
         ? await roomApi.createRoom(maxPlayers, session.accessToken)
-        : await roomApi.joinRoom(roomCode.trim(), session.accessToken);
+        // 방 코드는 대문자(A-Z, 2-9)로만 생성되는데 백엔드 매칭이 대소문자를 구분한다 —
+        // 소문자로 입력하면 "존재하지 않는 방"이 되므로 대문자로 정규화해서 보낸다.
+        : await roomApi.joinRoom(roomCode.trim().toUpperCase(), session.accessToken);
 
       saveRoom({ roomId: result.room.roomId, livekitToken: result.livekitToken });
       navigate(`/rooms/${result.room.roomId}`);
@@ -97,7 +99,8 @@ export function RoomGate() {
             방 코드
             <input
               value={roomCode}
-              onChange={(event) => setRoomCode(event.target.value)}
+              onChange={(event) => setRoomCode(event.target.value.toUpperCase())}
+              style={{ textTransform: 'uppercase' }}
               disabled={submitting}
             />
           </label>
