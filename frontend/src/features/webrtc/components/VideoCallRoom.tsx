@@ -7,6 +7,7 @@ import { GestureBoard } from '../../gesture/components/GestureBoard';
 import { NinjaGamePanel } from '../../ninja/components/NinjaGamePanel';
 import { RoomLobby } from '../../room/components/RoomLobby';
 import { ChatPanel } from '../../chat/components/ChatPanel';
+import { useRoomHeartbeat } from '../../room/hooks/useRoomHeartbeat';
 import { clearRoom } from '../../room/lib/roomStorage';
 import { ninjaApi, NinjaApiError } from '../../ninja/api/ninjaApi';
 import '@livekit/components-styles';
@@ -50,6 +51,9 @@ interface VideoCallRoomProps {
 
 export function VideoCallRoom({ accessToken, token, roomId, participantId }: VideoCallRoomProps) {
   const navigate = useNavigate();
+  // 방에 머무는 내내 하트비트를 보내 백엔드의 연결 가드(TTL 15초)에 의해 방에서 제거되지 않게 한다.
+  // 이게 없으면 방장이 ~15초 뒤 정리되고 혼자였던 방은 삭제돼 초대 코드가 무효가 된다.
+  useRoomHeartbeat(roomId, accessToken);
   // 게임이 실제로 열려 있는지(NinjaGamePanel이 폴링으로 판단)에 따라 대기방/게임 화면을 전환한다.
   // 손 인식(GesturePanel/GestureBoard)은 게임 중에만 켜서, 대기방에선 비디오/닉네임/준비/방장만 보이게 한다.
   const [gameActive, setGameActive] = useState(false);
