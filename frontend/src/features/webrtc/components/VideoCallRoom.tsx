@@ -31,12 +31,18 @@ const roomOptions: RoomOptions = {
   },
 };
 
-// 토큰을 직접 입력받는 건 로컬 개발 전용이다.
-// 실제 플로우에서는 방 입장 API 응답으로 Spring이 LiveKit 토큰을 내려준다 (TanStack Query로 교체 예정).
-export function VideoCallRoom() {
-  const [serverUrl, setServerUrl] = useState('ws://localhost:7880');
+// LiveKit Cloud 프로젝트 서버 URL — 고정값이라 매번 입력받을 필요 없음.
+const LIVEKIT_SERVER_URL = 'wss://plaiground-gkmfgv1j.livekit.cloud';
+
+interface VideoCallRoomProps {
+  // 닉네임 세션(NicknameGate)에서 이미 발급받은 백엔드 accessToken — 더는 직접 입력받지 않는다.
+  accessToken: string;
+}
+
+// LiveKit 토큰을 직접 입력받는 건 로컬 개발 전용이다.
+// 실제 플로우에서는 방 입장 API 응답의 livekitToken 필드를 그대로 쓰면 된다 (TanStack Query로 교체 예정).
+export function VideoCallRoom({ accessToken }: VideoCallRoomProps) {
   const [token, setToken] = useState('');
-  const [accessToken, setAccessToken] = useState('');
   const [roomId, setRoomId] = useState('');
   const [gameId, setGameId] = useState('');
   const [activeGameId, setActiveGameId] = useState<number | null>(null);
@@ -62,7 +68,7 @@ export function VideoCallRoom() {
           <div className="video-call-room__connection-error">LiveKit 연결 실패: {connectionError}</div>
         )}
         <LiveKitRoom
-          serverUrl={serverUrl}
+          serverUrl={LIVEKIT_SERVER_URL}
           token={token}
           connect
           video
@@ -102,9 +108,7 @@ export function VideoCallRoom() {
         onSubmit={(event) => {
           event.preventDefault();
           if (
-            serverUrl.trim()
-            && token.trim()
-            && accessToken.trim()
+            token.trim()
             && roomId.trim()
             && Number(gameId) > 0
           ) {
@@ -114,24 +118,12 @@ export function VideoCallRoom() {
         }}
       >
         <label>
-          Server URL
-          <input value={serverUrl} onChange={(event) => setServerUrl(event.target.value)} />
-        </label>
-        <label>
           LiveKit Access Token
           <textarea
             value={token}
             onChange={(event) => setToken(event.target.value)}
             rows={4}
             placeholder="node scripts/mint-dev-token.mjs <room> <name> 출력값을 붙여넣기"
-          />
-        </label>
-        <label>
-          Backend Access Token
-          <textarea
-            value={accessToken}
-            onChange={(event) => setAccessToken(event.target.value)}
-            rows={4}
           />
         </label>
         <label>
