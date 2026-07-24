@@ -1,6 +1,6 @@
 spring:
   datasource:
-    url: jdbc:h2:mem:plaiground-test;MODE=MySQL
+    url: jdbc:h2:mem:camon-test;MODE=MySQL
     driver-class-name: org.h2.Driver
     username: sa
     password:

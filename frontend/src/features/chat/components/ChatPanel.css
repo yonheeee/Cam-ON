@@ -1,0 +1,52 @@
+/* 화면 우측 하단 고정 채팅 오버레이. 우측 상단 게임 초기화 버튼과 겹치지 않게 하단에 둔다. */
+.chat-panel {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  width: 280px;
+  height: 300px;
+  display: flex;
+  flex-direction: column;
+  background: rgba(20, 20, 20, 0.9);
+  color: #fff;
+  border-radius: 8px;
+  z-index: 50;
+  font-size: 0.85rem;
+  overflow: hidden;
+}
+
+.chat-panel__messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.chat-panel__message {
+  word-break: break-word;
+}
+
+.chat-panel__nickname {
+  font-weight: 600;
+  color: #6f9fff;
+}
+
+.chat-panel__form {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.5rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.chat-panel__form input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.35rem 0.5rem;
+}
+
+.chat-panel__form button {
+  cursor: pointer;
+  padding: 0.35rem 0.6rem;
+}

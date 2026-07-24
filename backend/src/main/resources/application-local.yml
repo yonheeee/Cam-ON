@@ -1,6 +1,6 @@
 logging:
   level:
-    com.plaiground: DEBUG
+    com.camon: DEBUG
 
 spring:
   jpa:

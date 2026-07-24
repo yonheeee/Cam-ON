@@ -1,24 +1,22 @@
 import { useLocalParticipant, useParticipants } from '@livekit/components-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useGestureBoardStore } from '../../gesture/store/gestureBoardStore';
 import { useNinjaRound } from '../hooks/useNinjaRound';
 import './NinjaGamePanel.css';
 
-const DEFAULT_TOTAL_ROUNDS = 5;
 const ATTACK_TARGET_TIMER_SECONDS = 30;
 
-// 대기방/방장 도메인이 아직 없어서 room은 고정 테스트 id(ninjaApi.TEST_ROOM_ID)로 취급하고,
-// "게임 시작"도 방장 권한 체크 없이 아무나 누르면 바로 세션이 열린다. 방/코스 도메인이
-// 완성되면: (1) TEST_ROOM_ID 대신 실제 roomId를 props로 받고, (2) 이 안의 "시작" 버튼과
-// ninjaApi.seed 호출을 지우고 그 도메인의 게임 시작 흐름이 대신하면 된다 — useNinjaRound
-// 이하는 안 바뀐다.
+// 게임 시작(seed)은 이제 대기방(RoomLobby/VideoCallRoom)에서 트리거한다. 이 패널은 폴링으로
+// 진행 상태만 읽어서 게임이 실제로 열려 있을 때만 렌더링하고, 그 활성 여부를 onActiveChange로
+// 부모에 알려 부모가 대기방/게임 화면 전환과 손 인식 패널 on/off를 결정하게 한다.
 interface NinjaGamePanelProps {
   roomId: string;
   gameId: number;
   accessToken: string;
+  onActiveChange: (active: boolean) => void;
 }
 
-export function NinjaGamePanel({ roomId, gameId, accessToken }: NinjaGamePanelProps) {
+export function NinjaGamePanel({ roomId, gameId, accessToken, onActiveChange }: NinjaGamePanelProps) {
   const { localParticipant } = useLocalParticipant();
   const participants = useParticipants();
   const myParticipantId = localParticipant.identity || null;
@@ -42,9 +40,7 @@ export function NinjaGamePanel({ roomId, gameId, accessToken }: NinjaGamePanelPr
     ranking,
     gameEnded,
     error,
-    seeding,
     submitTarget,
-    seed,
     resetGame,
     resetting,
   } = useNinjaRound(roomId, gameId, accessToken, myParticipantId, comboLabel, comboConfidence);
@@ -57,17 +53,32 @@ export function NinjaGamePanel({ roomId, gameId, accessToken }: NinjaGamePanelPr
     setOtherParticipantIds(Object.fromEntries(others.map((p) => [p.identity, p.identity])));
   }, [participants, localParticipant.identity]);
 
+  // participantId(=LiveKit identity) → 닉네임. 백엔드가 LiveKit 토큰 발급 시 token.setName(nickname)을
+  // 해줘서 각 참가자 .name에 닉네임이 실려 온다. 화면엔 항상 닉네임만 쓰고 id는 내부용으로만 둔다.
+  const nicknameByToken = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const p of participants) {
+      if (p.name) map[p.identity] = p.name;
+    }
+    if (localParticipant.name) map[localParticipant.identity] = localParticipant.name;
+    return map;
+  }, [participants, localParticipant.identity, localParticipant.name]);
+
   const gameStarted = round !== null;
   const currentStep = requiredSkill?.gestures[stepIndex] ?? null;
-  const attackerIdentity =
-    currentAttackerToken != null
-      ? Object.entries(otherParticipantIds).find(([, id]) => id === currentAttackerToken)?.[0]
-      : undefined;
 
   const displayName = (token: string) => {
     if (token === myParticipantId) return '나';
-    return Object.entries(otherParticipantIds).find(([, id]) => id === token)?.[0] ?? token.slice(0, 8);
+    return nicknameByToken[token] ?? '상대';
   };
+
+  // 게임 활성 여부(폴링으로 세션이 열려 있는지)를 부모에 알려 대기방/게임 화면 전환에 쓴다.
+  useEffect(() => {
+    onActiveChange(gameStarted);
+  }, [gameStarted, onActiveChange]);
+
+  // 대기방 단계에서는 이 패널을 통째로 숨긴다(손 인식 UI/게임 UI 없음) — 부모가 대기방을 대신 띄운다.
+  if (!gameStarted) return null;
 
   return (
     <>
@@ -75,34 +86,13 @@ export function NinjaGamePanel({ roomId, gameId, accessToken }: NinjaGamePanelPr
         className="ninja-reset-button"
         disabled={resetting}
         onClick={() => void resetGame()}
-        title="진행 중인 게임을 지우고 다시 시작 버튼이 뜨는 상태로 되돌립니다"
+        title="진행 중인 게임을 지우고 대기방으로 되돌립니다"
       >
         {resetting ? '초기화 중...' : '🔄 게임 초기화'}
       </button>
 
     <div className="ninja-panel">
       <h2>닌자 게임</h2>
-
-      <p className="ninja-panel__debug">
-        identity: {localParticipant.identity || '(아직 없음)'} / participantId:{' '}
-        {myParticipantId ? myParticipantId.slice(0, 8) : '(계산 중...)'}
-      </p>
-      {!gameStarted && (
-        <button
-          className="ninja-panel__start"
-          disabled={seeding || !myParticipantId}
-          onClick={() => {
-            const tokens = [myParticipantId, ...Object.values(otherParticipantIds)].filter(
-              (token): token is string => Boolean(token),
-            );
-            // 인원수(최소 2명) 검증은 서버가 최종적으로 하고, 부족하면 error 메시지로 보여준다 —
-            // 버튼 자체는 누르면 바로 시도되게 막지 않는다.
-            void seed(tokens, DEFAULT_TOTAL_ROUNDS);
-          }}
-        >
-          {seeding ? '시작 중...' : !myParticipantId ? '참가자 ID 준비 중...' : '닌자게임 시작 (테스트)'}
-        </button>
-      )}
 
       {gameStarted && gameEnded && (
         <div className="ninja-panel__ranking">
@@ -132,7 +122,7 @@ export function NinjaGamePanel({ roomId, gameId, accessToken }: NinjaGamePanelPr
               const isMe = token === myParticipantId;
               return (
                 <li key={token} className={isAlive ? '' : 'ninja-panel__hp--dead'}>
-                  {isMe ? '나' : token.slice(0, 8)}: HP {value}
+                  {isMe ? '나' : displayName(token)}: HP {value}
                   {!isAlive && ' (탈락)'}
                 </li>
               );
@@ -191,7 +181,7 @@ export function NinjaGamePanel({ roomId, gameId, accessToken }: NinjaGamePanelPr
 
           {currentAttackerToken && !isMyAttack && (
             <p className="ninja-panel__attacker-info">
-              {attackerIdentity ?? currentAttackerToken.slice(0, 8)} 님이 공격권을 먼저 획득했습니다
+              {displayName(currentAttackerToken)} 님이 공격권을 먼저 획득했습니다
             </p>
           )}
 
@@ -219,9 +209,9 @@ export function NinjaGamePanel({ roomId, gameId, accessToken }: NinjaGamePanelPr
                 return (
                   <>
                     <p>대상을 지정하세요</p>
-                    {aliveOthers.map(([identity, id]) => (
+                    {aliveOthers.map(([, id]) => (
                       <button key={id} onClick={() => void submitTarget(id)}>
-                        {identity}
+                        {displayName(id)}
                       </button>
                     ))}
                   </>

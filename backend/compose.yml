@@ -1,7 +1,7 @@
 services:
   redis:
     image: redis:7.4-alpine
-    container_name: plaiground-redis
+    container_name: camon-redis
     command: redis-server --appendonly no
     ports:
       - "6379:6379"
@@ -11,12 +11,12 @@ services:
       timeout: 3s
       retries: 5
     networks:
-      - plaiground-network
+      - camon-network
     restart: unless-stopped
 
   mysql:
     image: mysql:8.4
-    container_name: plaiground-mysql
+    container_name: camon-mysql
     environment:
       MYSQL_DATABASE: ${MYSQL_DATABASE}
       MYSQL_USER: ${MYSQL_USER}
@@ -32,14 +32,14 @@ services:
       timeout: 5s
       retries: 10
     networks:
-      - plaiground-network
+      - camon-network
     restart: unless-stopped
 
   backend:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: plaiground-backend
+    container_name: camon-backend
     env_file:
       - .env
     environment:
@@ -65,12 +65,12 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
-      - plaiground-network
+      - camon-network
     restart: unless-stopped
 
 networks:
-  plaiground-network:
-    name: plaiground-network
+  camon-network:
+    name: camon-network
 
 volumes:
   mysql-data:

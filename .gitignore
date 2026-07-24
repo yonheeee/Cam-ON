@@ -1,1 +1,3 @@
 ham_log/
+deploy/.env
+*.pem
