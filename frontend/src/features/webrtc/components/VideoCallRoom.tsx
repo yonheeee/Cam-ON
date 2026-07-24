@@ -35,15 +35,14 @@ const roomOptions: RoomOptions = {
 const LIVEKIT_SERVER_URL = 'wss://plaiground-gkmfgv1j.livekit.cloud';
 
 interface VideoCallRoomProps {
-  // 닉네임 세션(NicknameGate)에서 이미 발급받은 백엔드 accessToken — 더는 직접 입력받지 않는다.
+  // 닉네임 세션(NicknameGate)에서 이미 발급받은 백엔드 accessToken.
   accessToken: string;
+  // 방 생성/입장(RoomGate) 응답에서 이미 받은 LiveKit 토큰과 roomId — 더는 직접 입력받지 않는다.
+  token: string;
+  roomId: string;
 }
 
-// LiveKit 토큰을 직접 입력받는 건 로컬 개발 전용이다.
-// 실제 플로우에서는 방 입장 API 응답의 livekitToken 필드를 그대로 쓰면 된다 (TanStack Query로 교체 예정).
-export function VideoCallRoom({ accessToken }: VideoCallRoomProps) {
-  const [token, setToken] = useState('');
-  const [roomId, setRoomId] = useState('');
+export function VideoCallRoom({ accessToken, token, roomId }: VideoCallRoomProps) {
   const [gameId, setGameId] = useState('');
   const [activeGameId, setActiveGameId] = useState<number | null>(null);
   const [activeSessionSeq, setActiveSessionSeq] = useState<number | null>(null);
@@ -102,34 +101,16 @@ export function VideoCallRoom({ accessToken }: VideoCallRoomProps) {
 
   return (
     <div className="video-call-room video-call-room--join">
-      <h1>LiveKit 연결 테스트</h1>
-      <p>scripts/mint-dev-token.mjs로 발급한 토큰을 붙여넣고 입장한다.</p>
+      <h1>게임 선택</h1>
       <form
         onSubmit={(event) => {
           event.preventDefault();
-          if (
-            token.trim()
-            && roomId.trim()
-            && Number(gameId) > 0
-          ) {
+          if (Number(gameId) > 0) {
             setActiveGameId(Number(gameId));
             setConnected(true);
           }
         }}
       >
-        <label>
-          LiveKit Access Token
-          <textarea
-            value={token}
-            onChange={(event) => setToken(event.target.value)}
-            rows={4}
-            placeholder="node scripts/mint-dev-token.mjs <room> <name> 출력값을 붙여넣기"
-          />
-        </label>
-        <label>
-          Room ID
-          <input value={roomId} onChange={(event) => setRoomId(event.target.value)} />
-        </label>
         <label>
           Game ID
           <input
