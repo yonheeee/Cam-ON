@@ -30,6 +30,7 @@ public class SecurityConfig {
                 .requestMatchers("/actuator/health").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/sessions").permitAll()
                 .requestMatchers("/ws/**").permitAll()
+                .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
                 .anyRequest().authenticated())
             .oauth2ResourceServer(resourceServer -> resourceServer
                 .jwt(jwt -> jwt.jwtAuthenticationConverter(authenticationConverter))
