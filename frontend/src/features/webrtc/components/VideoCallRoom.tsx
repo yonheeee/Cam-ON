@@ -35,6 +35,10 @@ const roomOptions: RoomOptions = {
 // LiveKit Cloud 프로젝트 서버 URL — 고정값이라 매번 입력받을 필요 없음.
 const LIVEKIT_SERVER_URL = 'wss://plaiground-gkmfgv1j.livekit.cloud';
 
+// 지금 실제로 구현된 게임은 닌자뿐이라 gameId를 고정한다 — 코스에서 게임을 고르는 흐름이
+// 생기면 그쪽에서 받아오도록 교체.
+const NINJA_GAME_ID = 1;
+
 interface VideoCallRoomProps {
   // 방 생성/입장(RoomGate)까지 마치고 들어오는 화면이라, 여기 도달한 시점엔 넷 다 이미 확보돼 있다.
   accessToken: string;
@@ -44,7 +48,10 @@ interface VideoCallRoomProps {
 }
 
 export function VideoCallRoom({ accessToken, token, roomId, participantId }: VideoCallRoomProps) {
-  const [activeGameId, setActiveGameId] = useState<number | null>(null);
+  // NinjaGamePanel 안의 "시작" 버튼이 게임을 실제로 여는 트리거라, gameId 없이는 그 버튼
+  // 자체가 존재할 수 없다 — activeSessionSeq(WS game:started 수신 여부)로 이 값을 게이팅하면
+  // "시작 버튼이 있어야 게임이 시작되는데 게임이 시작돼야 시작 버튼이 보인다"는 순환 잠금이 된다.
+  const [activeGameId, setActiveGameId] = useState<number | null>(NINJA_GAME_ID);
   const [activeSessionSeq, setActiveSessionSeq] = useState<number | null>(null);
   const [connectionError, setConnectionError] = useState<string | null>(null);
 
@@ -83,7 +90,7 @@ export function VideoCallRoom({ accessToken, token, roomId, participantId }: Vid
             진행 세션 {activeSessionSeq}
           </div>
         )}
-        {activeSessionSeq !== null && activeGameId !== null && (
+        {activeGameId !== null && (
           <NinjaGamePanel
             roomId={roomId}
             gameId={activeGameId}
