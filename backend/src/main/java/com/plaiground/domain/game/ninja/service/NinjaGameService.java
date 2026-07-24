@@ -1,5 +1,7 @@
 package com.plaiground.domain.game.ninja.service;
 
+import com.plaiground.domain.game.common.repository.SaveRoundResult;
+import com.plaiground.domain.game.common.service.GameScoreService;
 import com.plaiground.domain.game.common.ws.GameEventPublisher;
 import com.plaiground.domain.game.ninja.domain.Skill;
 import com.plaiground.domain.game.ninja.dto.AttackRequest;
@@ -56,6 +58,7 @@ public class NinjaGameService {
     private final NinjaRedisRepository ninjaRedis;
     private final NinjaEventPublisher eventPublisher;
     private final GameEventPublisher gameEventPublisher;
+    private final GameScoreService gameScoreService;
     private final TaskScheduler taskScheduler;
 
     // 라운드 타임아웃은 JVM 메모리에 떠있는 TaskScheduler 타이머로 도는데, "게임 시작"을 다시
@@ -72,6 +75,7 @@ public class NinjaGameService {
         NinjaRedisRepository ninjaRedis,
         NinjaEventPublisher eventPublisher,
         GameEventPublisher gameEventPublisher,
+        GameScoreService gameScoreService,
         TaskScheduler taskScheduler
     ) {
         this.roomRepository = roomRepository;
@@ -79,6 +83,7 @@ public class NinjaGameService {
         this.ninjaRedis = ninjaRedis;
         this.eventPublisher = eventPublisher;
         this.gameEventPublisher = gameEventPublisher;
+        this.gameScoreService = gameScoreService;
         this.taskScheduler = taskScheduler;
     }
 
@@ -299,6 +304,7 @@ public class NinjaGameService {
 
     // 다음 라운드로 진행하거나 게임을 종료한다. 게임이 끝났으면 true.
     private boolean advanceOrFinish(Room room, int seq, int round) {
+        saveRoundScore(room, seq, round);
         Set<String> alive = ninjaRedis.getAlivePlayers(room.roomCode(), seq);
         if (alive.size() <= 1) {
             log.info("[Service] advanceOrFinish : round={} 생존자 {}명 — 게임 종료 조건", round, alive.size());
@@ -315,6 +321,24 @@ public class NinjaGameService {
         log.info("[Service] advanceOrFinish : round={} → round={}로 진행 (생존자 {}명)", round, round + 1, alive.size());
         startRound(room, seq, round + 1);
         return false;
+    }
+
+    private void saveRoundScore(Room room, int seq, int round) {
+        List<UUID> participantIdsByRank = buildRanking(room, seq).stream()
+            .map(entry -> UUID.fromString(entry.token()))
+            .toList();
+        SaveRoundResult result = gameScoreService.saveRoundRanking(
+            room.roomId(),
+            seq,
+            round,
+            participantIdsByRank
+        );
+        if (result != SaveRoundResult.SUCCESS
+            && result != SaveRoundResult.ALREADY_SAVED) {
+            throw new IllegalStateException(
+                "Failed to save ninja round score: " + result
+            );
+        }
     }
 
     private void finishGame(Room room, int seq) {

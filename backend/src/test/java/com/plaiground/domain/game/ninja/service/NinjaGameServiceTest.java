@@ -14,6 +14,8 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.plaiground.domain.game.common.repository.SaveRoundResult;
+import com.plaiground.domain.game.common.service.GameScoreService;
 import com.plaiground.domain.game.common.ws.GameEventPublisher;
 import com.plaiground.domain.game.ninja.domain.Effect;
 import com.plaiground.domain.game.ninja.domain.Gesture;
@@ -67,6 +69,8 @@ class NinjaGameServiceTest {
     @Mock
     private GameEventPublisher gameEventPublisher;
     @Mock
+    private GameScoreService gameScoreService;
+    @Mock
     private TaskScheduler taskScheduler;
 
     private NinjaGameService service;
@@ -86,6 +90,7 @@ class NinjaGameServiceTest {
             ninjaRedis,
             eventPublisher,
             gameEventPublisher,
+            gameScoreService,
             taskScheduler
         );
 
@@ -99,6 +104,12 @@ class NinjaGameServiceTest {
         // 형태로는 타입이 안 맞아서, 제네릭 체크를 우회하는 doReturn(...).when(...) 형태를 쓴다.
         ScheduledFuture<?> scheduledFuture = mock(ScheduledFuture.class);
         lenient().doReturn(scheduledFuture).when(taskScheduler).schedule(any(Runnable.class), any(Instant.class));
+        lenient().when(gameScoreService.saveRoundRanking(
+            any(UUID.class),
+            anyInt(),
+            anyInt(),
+            any()
+        )).thenReturn(SaveRoundResult.SUCCESS);
 
         Effect effect = Effect.builder()
             .id(2L).name("골드 버스트").color("#ffd700")
@@ -208,8 +219,12 @@ class NinjaGameServiceTest {
 
     @Test
     void target_appliesDamageAndAdvancesRound_whenSurvivorsRemain() {
-        String attacker = "attacker-token";
-        String target = "target-token";
+        UUID attackerId = UUID.randomUUID();
+        UUID targetId = UUID.randomUUID();
+        UUID thirdId = UUID.randomUUID();
+        String attacker = attackerId.toString();
+        String target = targetId.toString();
+        String third = thirdId.toString();
 
         when(ninjaRedis.getCurrentRound(roomCode, seq)).thenReturn(round);
         when(ninjaRedis.getAttacker(roomCode, seq, round)).thenReturn(attacker);
@@ -219,7 +234,11 @@ class NinjaGameServiceTest {
         when(ninjaRedis.getRoundSkillId(roomCode, seq, round)).thenReturn(10L);
         when(skillRepository.findById(10L)).thenReturn(Optional.of(skill));
         when(ninjaRedis.decrementHp(roomCode, seq, target, 20)).thenReturn(80L);
-        when(ninjaRedis.getAlivePlayers(roomCode, seq)).thenReturn(Set.of(attacker, target, "third-player"));
+        when(ninjaRedis.getAlivePlayers(roomCode, seq)).thenReturn(Set.of(attacker, target, third));
+        when(ninjaRedis.getAllHp(roomCode, seq)).thenReturn(
+            Map.<Object, Object>of(attacker, "100", third, "90", target, "80")
+        );
+        when(ninjaRedis.getEliminatedOrderDesc(roomCode, seq)).thenReturn(List.of());
         when(ninjaRedis.getTotalRounds(roomCode, seq)).thenReturn(10);
         when(ninjaRedis.getSkillIdForRound(roomCode, seq, round + 1)).thenReturn(20L);
 
@@ -234,12 +253,22 @@ class NinjaGameServiceTest {
         verify(eventPublisher).publish(eq(roomId), eq("ninja:attack-resolved"), any());
         verify(eventPublisher).publish(eq(roomId), eq("ninja:round-started"), any());
         verify(ninjaRedis).openRound(eq(roomCode), eq(seq), eq(round + 1), eq(20L), any(Instant.class));
+        verify(gameScoreService).saveRoundRanking(
+            roomId,
+            seq,
+            round,
+            List.of(attackerId, thirdId, targetId)
+        );
     }
 
     @Test
     void target_eliminatesAndEndsGame_whenOnlyOneSurvivorRemains() {
-        String attacker = "attacker-token";
-        String target = "target-token";
+        UUID attackerId = UUID.randomUUID();
+        UUID targetId = UUID.randomUUID();
+        UUID earlierVictimId = UUID.randomUUID();
+        String attacker = attackerId.toString();
+        String target = targetId.toString();
+        String earlierVictim = earlierVictimId.toString();
 
         when(ninjaRedis.getCurrentRound(roomCode, seq)).thenReturn(round);
         when(ninjaRedis.getAttacker(roomCode, seq, round)).thenReturn(attacker);
@@ -251,7 +280,7 @@ class NinjaGameServiceTest {
         when(ninjaRedis.decrementHp(roomCode, seq, target, 20)).thenReturn(-5L);
         when(ninjaRedis.getAlivePlayers(roomCode, seq)).thenReturn(Set.of(attacker));
         when(ninjaRedis.getAllHp(roomCode, seq)).thenReturn(Map.<Object, Object>of(attacker, "60"));
-        when(ninjaRedis.getEliminatedOrderDesc(roomCode, seq)).thenReturn(List.of(target, "earlier-victim"));
+        when(ninjaRedis.getEliminatedOrderDesc(roomCode, seq)).thenReturn(List.of(target, earlierVictim));
 
         TargetResponse response = service.target(roomId, round, attacker, new TargetRequest(target));
 
@@ -267,9 +296,15 @@ class NinjaGameServiceTest {
         GameEndedPayload payload = (GameEndedPayload) payloadCaptor.getValue();
 
         assertThat(payload.ranking()).extracting(RankingEntry::token)
-            .containsExactly(attacker, target, "earlier-victim");
+            .containsExactly(attacker, target, earlierVictim);
         assertThat(payload.ranking()).extracting(RankingEntry::rank)
             .containsExactly(1, 2, 3);
+        verify(gameScoreService).saveRoundRanking(
+            roomId,
+            seq,
+            round,
+            List.of(attackerId, targetId, earlierVictimId)
+        );
     }
 
     @Test
