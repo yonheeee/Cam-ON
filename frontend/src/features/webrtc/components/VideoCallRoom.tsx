@@ -5,10 +5,7 @@ import { GesturePanel } from '../../gesture/components/GesturePanel';
 import { GestureBoard } from '../../gesture/components/GestureBoard';
 import { NinjaGamePanel } from '../../ninja/components/NinjaGamePanel';
 import { RoomLobby } from '../../room/components/RoomLobby';
-import {
-  type GameStartedPayload,
-  useRoomGameStarted,
-} from '../../ninja/hooks/useRoomGameStarted';
+import { ninjaApi, NinjaApiError } from '../../ninja/api/ninjaApi';
 import '@livekit/components-styles';
 import './VideoCallRoom.css';
 
@@ -38,6 +35,7 @@ const LIVEKIT_SERVER_URL = 'wss://plaiground-gkmfgv1j.livekit.cloud';
 // 지금 실제로 구현된 게임은 닌자뿐이라 gameId를 고정한다 — 코스에서 게임을 고르는 흐름이
 // 생기면 그쪽에서 받아오도록 교체.
 const NINJA_GAME_ID = 1;
+const DEFAULT_TOTAL_ROUNDS = 5;
 
 interface VideoCallRoomProps {
   // 방 생성/입장(RoomGate)까지 마치고 들어오는 화면이라, 여기 도달한 시점엔 넷 다 이미 확보돼 있다.
@@ -48,19 +46,29 @@ interface VideoCallRoomProps {
 }
 
 export function VideoCallRoom({ accessToken, token, roomId, participantId }: VideoCallRoomProps) {
-  // NinjaGamePanel 안의 "시작" 버튼이 게임을 실제로 여는 트리거라, gameId 없이는 그 버튼
-  // 자체가 존재할 수 없다 — activeSessionSeq(WS game:started 수신 여부)로 이 값을 게이팅하면
-  // "시작 버튼이 있어야 게임이 시작되는데 게임이 시작돼야 시작 버튼이 보인다"는 순환 잠금이 된다.
-  const [activeGameId, setActiveGameId] = useState<number | null>(NINJA_GAME_ID);
-  const [activeSessionSeq, setActiveSessionSeq] = useState<number | null>(null);
+  // 게임이 실제로 열려 있는지(NinjaGamePanel이 폴링으로 판단)에 따라 대기방/게임 화면을 전환한다.
+  // 손 인식(GesturePanel/GestureBoard)은 게임 중에만 켜서, 대기방에선 비디오/닉네임/준비/방장만 보이게 한다.
+  const [gameActive, setGameActive] = useState(false);
+  const [seeding, setSeeding] = useState(false);
+  const [seedError, setSeedError] = useState<string | null>(null);
   const [connectionError, setConnectionError] = useState<string | null>(null);
 
-  const handleGameStarted = useCallback((payload: GameStartedPayload) => {
-    setActiveGameId(payload.gameId);
-    setActiveSessionSeq(payload.sessionSeq);
-  }, []);
-
-  useRoomGameStarted(roomId, accessToken, handleGameStarted);
+  // 게임 시작 트리거(대기방→게임 자동시작 도메인이 아직 없어서 임시로 프론트가 seed를 호출).
+  const startGame = useCallback(
+    async (participantTokens: string[]) => {
+      setSeeding(true);
+      setSeedError(null);
+      try {
+        await ninjaApi.seed(roomId, NINJA_GAME_ID, participantTokens, DEFAULT_TOTAL_ROUNDS, accessToken);
+        // 세션이 열리면 NinjaGamePanel 폴링이 이를 감지해 onActiveChange(true)로 게임 화면으로 전환된다.
+      } catch (err) {
+        setSeedError(err instanceof NinjaApiError ? err.message : '게임 시작 실패');
+      } finally {
+        setSeeding(false);
+      }
+    },
+    [roomId, accessToken],
+  );
 
   return (
     <>
@@ -80,23 +88,24 @@ export function VideoCallRoom({ accessToken, token, roomId, participantId }: Vid
         onError={(err) => setConnectionError(err.message)}
       >
         <VideoConference />
-        <GesturePanel />
-        <GestureBoard />
-        {activeSessionSeq === null && (
-          <RoomLobby roomId={roomId} accessToken={accessToken} participantId={participantId} />
-        )}
-        {activeSessionSeq !== null && (
-          <div className="video-call-room__session">
-            진행 세션 {activeSessionSeq}
-          </div>
-        )}
-        {activeGameId !== null && (
-          <NinjaGamePanel
+        {gameActive && <GesturePanel />}
+        {gameActive && <GestureBoard />}
+        {!gameActive && (
+          <RoomLobby
             roomId={roomId}
-            gameId={activeGameId}
             accessToken={accessToken}
+            participantId={participantId}
+            onStartGame={startGame}
+            starting={seeding}
+            startError={seedError}
           />
         )}
+        <NinjaGamePanel
+          roomId={roomId}
+          gameId={NINJA_GAME_ID}
+          accessToken={accessToken}
+          onActiveChange={setGameActive}
+        />
       </LiveKitRoom>
     </>
   );

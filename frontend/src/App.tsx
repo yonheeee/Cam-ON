@@ -1,21 +1,14 @@
-import { useState } from 'react';
-import { VideoCallRoom } from './features/webrtc/components/VideoCallRoom';
-import { RoomGate, type RoomReady } from './features/room/components/RoomGate';
+import { Navigate, Route, Routes } from 'react-router';
+import { RoomGate } from './features/room/components/RoomGate';
+import { RoomPage } from './features/room/pages/RoomPage';
 
 function App() {
-  const [ready, setReady] = useState<RoomReady | null>(null);
-
-  if (!ready) {
-    return <RoomGate onReady={setReady} />;
-  }
-
   return (
-    <VideoCallRoom
-      accessToken={ready.session.accessToken}
-      token={ready.livekitToken}
-      roomId={ready.roomId}
-      participantId={ready.session.participantId}
-    />
+    <Routes>
+      <Route path="/" element={<RoomGate />} />
+      <Route path="/rooms/:roomId" element={<RoomPage />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
   );
 }
 

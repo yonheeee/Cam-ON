@@ -1,27 +1,20 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router';
 import { createSession, SessionApiError } from '../../session/api/sessionApi';
-import { saveSession, type StoredSession } from '../../session/lib/sessionStorage';
+import { saveSession } from '../../session/lib/sessionStorage';
 import { roomApi, RoomApiError } from '../api/roomApi';
+import { saveRoom } from '../lib/roomStorage';
 
 // 백엔드 CreateSessionRequest 검증 규칙(@Size(max=8), @Pattern("^[\p{L}\p{N}]+$"))과 동일 —
 // 서버 왕복 없이 바로 피드백 주려고 프론트에도 미러링. 최종 검증은 항상 백엔드가 한다.
 const NICKNAME_PATTERN = /^[\p{L}\p{N}]{1,8}$/u;
 
-export interface RoomReady {
-  session: StoredSession;
-  roomId: string;
-  livekitToken: string;
-}
-
-interface RoomGateProps {
-  onReady: (result: RoomReady) => void;
-}
-
 type Mode = 'create' | 'join';
 
 // 방 생성/입장 없이 닉네임만으로 세션(회원)이 먼저 만들어지는 걸 막기 위해, "방 생성"/"방 입장"을
 // 먼저 고르게 하고 그 안에서 닉네임을 받아 세션 발급 + 방 생성(또는 입장)을 한 번에 처리한다.
-export function RoomGate({ onReady }: RoomGateProps) {
+export function RoomGate() {
+  const navigate = useNavigate();
   const [mode, setMode] = useState<Mode | null>(null);
   const [nickname, setNickname] = useState('');
   const [maxPlayers, setMaxPlayers] = useState(4);
@@ -50,7 +43,8 @@ export function RoomGate({ onReady }: RoomGateProps) {
         ? await roomApi.createRoom(maxPlayers, session.accessToken)
         : await roomApi.joinRoom(roomCode.trim(), session.accessToken);
 
-      onReady({ session, roomId: result.room.roomId, livekitToken: result.livekitToken });
+      saveRoom({ roomId: result.room.roomId, livekitToken: result.livekitToken });
+      navigate(`/rooms/${result.room.roomId}`);
     } catch (err) {
       if (err instanceof SessionApiError || err instanceof RoomApiError) {
         setError(err.message);
