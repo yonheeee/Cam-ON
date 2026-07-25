@@ -45,7 +45,11 @@ export function NicknamePage() {
       const roomId = await enterRoom({ mode, nickname, roomCode, maxPlayers });
       navigate(`/rooms/${roomId}`);
     } catch (err) {
-      if (err instanceof SessionApiError || err instanceof RoomApiError) {
+      if (err instanceof RoomApiError && err.code === 'ROOM_NOT_FOUND') {
+        // 형식은 맞지만 존재하지 않는 코드 — "6자입니다" 같은 형식 안내와 구분해서,
+        // 코드를 잘못 쳤거나 방이 사라졌음을 인지할 수 있게 한다.
+        setError(`코드 ${roomCode}에 해당하는 방을 찾을 수 없어요. 코드를 다시 확인해주세요.`);
+      } else if (err instanceof SessionApiError || err instanceof RoomApiError) {
         setError(err.message);
       } else {
         setError(mode === 'create' ? '방 생성 실패' : '방 입장 실패');

@@ -1,18 +1,9 @@
-/* 화면 우측 하단 고정 채팅 오버레이. 우측 상단 게임 초기화 버튼과 겹치지 않게 하단에 둔다. */
+/* 공통 뼈대 */
 .chat-panel {
-  position: fixed;
-  right: 1rem;
-  bottom: 1rem;
-  width: 280px;
-  height: 300px;
   display: flex;
   flex-direction: column;
-  background: rgba(20, 20, 20, 0.9);
-  color: #fff;
-  border-radius: 8px;
-  z-index: 50;
-  font-size: 0.85rem;
   overflow: hidden;
+  font-size: 0.85rem;
 }
 
 .chat-panel__messages {
@@ -22,6 +13,37 @@
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
+  /* #root가 text-align: center라 상속되면 채팅이 가운데 정렬돼 버린다 */
+  text-align: left;
+  /* 스크롤바를 채팅에 녹아들게 — 가는 두께 + 잉크 반투명 썸, 트랙은 투명 */
+  scrollbar-width: thin;
+  scrollbar-color: rgb(43 24 51 / 0.25) transparent;
+}
+
+.chat-panel__messages::-webkit-scrollbar {
+  width: 6px;
+}
+
+.chat-panel__messages::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.chat-panel__messages::-webkit-scrollbar-thumb {
+  background: rgb(43 24 51 / 0.25);
+  border-radius: 3px;
+}
+
+.chat-panel__messages::-webkit-scrollbar-thumb:hover {
+  background: rgb(43 24 51 / 0.4);
+}
+
+/* 게임 중 다크 오버레이에서는 밝은 썸으로 */
+.chat-panel--floating .chat-panel__messages {
+  scrollbar-color: rgb(255 255 255 / 0.25) transparent;
+}
+
+.chat-panel--floating .chat-panel__messages::-webkit-scrollbar-thumb {
+  background: rgb(255 255 255 / 0.25);
 }
 
 .chat-panel__message {
@@ -30,14 +52,12 @@
 
 .chat-panel__nickname {
   font-weight: 600;
-  color: #6f9fff;
 }
 
 .chat-panel__form {
   display: flex;
   gap: 0.25rem;
   padding: 0.5rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .chat-panel__form input {
@@ -49,4 +69,56 @@
 .chat-panel__form button {
   cursor: pointer;
   padding: 0.35rem 0.6rem;
+}
+
+/* 게임 중 — 우측 하단 고정 다크 오버레이 (기존 스타일). 우측 상단 게임 초기화 버튼과 안 겹치게 하단. */
+.chat-panel--floating {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  width: 280px;
+  height: 300px;
+  background: rgba(20, 20, 20, 0.9);
+  color: #fff;
+  border-radius: 8px;
+  z-index: 50;
+}
+
+.chat-panel--floating .chat-panel__nickname {
+  color: #6f9fff;
+}
+
+.chat-panel--floating .chat-panel__form {
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* 로비 — 사이드바 카드 안에 내장 (Pixel Arcade Plaza 테마) */
+.chat-panel--docked {
+  width: 100%;
+  height: 100%;
+  color: var(--pap-ink);
+  font-family: var(--pap-font-body);
+}
+
+.chat-panel--docked .chat-panel__nickname {
+  color: #1d8b85; /* arcade-teal을 흰 배경에서 읽히게 한 단계 어둡게 */
+}
+
+.chat-panel--docked .chat-panel__form {
+  border-top: 2px dashed rgb(43 24 51 / 0.25);
+}
+
+.chat-panel--docked .chat-panel__form input {
+  border: 2px solid var(--pap-ink);
+  border-radius: 4px;
+  background: var(--pap-white);
+  color: var(--pap-ink);
+}
+
+.chat-panel--docked .chat-panel__form button {
+  border: 2px solid var(--pap-ink);
+  border-radius: 4px;
+  background: var(--pap-play-yellow);
+  color: var(--pap-ink);
+  font-weight: 700;
 }

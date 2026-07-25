@@ -83,6 +83,40 @@
   }
 }
 
+/* 짧은 안내 토스트 (복사 완료 등) */
+.pap-toast {
+  position: fixed;
+  bottom: 36px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--pap-ink);
+  color: var(--pap-white);
+  font-family: var(--pap-font-pixel);
+  font-size: 15px;
+  padding: 10px 20px;
+  border-radius: var(--pap-radius);
+  z-index: 200;
+  animation: pap-toast-in 120ms ease-out;
+  pointer-events: none;
+}
+
+@keyframes pap-toast-in {
+  from {
+    transform: translate(-50%, 6px);
+    opacity: 0;
+  }
+  to {
+    transform: translate(-50%, 0);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pap-toast {
+    animation: none;
+  }
+}
+
 .pap-input {
   font-family: var(--pap-font-pixel);
   font-size: 20px;

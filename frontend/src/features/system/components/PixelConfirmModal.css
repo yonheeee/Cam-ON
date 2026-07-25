@@ -1,0 +1,35 @@
+.confirm-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: min(360px, 90vw);
+  padding: 28px;
+  box-sizing: border-box;
+  text-align: center;
+}
+
+.confirm-modal__title {
+  margin: 0;
+  font-size: 20px;
+}
+
+.confirm-modal__message {
+  margin: 0;
+  font-family: var(--pap-font-body);
+  font-size: 14px;
+  color: var(--pap-ink);
+  opacity: 0.75;
+}
+
+.confirm-modal__actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+.confirm-modal__actions > * {
+  flex: 1;
+  /* "방 나가기"가 좁은 버튼에서 두 줄로 꺾이지 않게 */
+  white-space: nowrap;
+  padding-inline: 14px;
+}

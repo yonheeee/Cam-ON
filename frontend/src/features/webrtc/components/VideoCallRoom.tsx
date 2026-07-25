@@ -1,12 +1,14 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { LiveKitRoom, VideoConference } from '@livekit/components-react';
 import { VideoPresets, type RoomOptions } from 'livekit-client';
 import { GesturePanel } from '../../gesture/components/GesturePanel';
 import { GestureBoard } from '../../gesture/components/GestureBoard';
 import { NinjaGamePanel } from '../../ninja/components/NinjaGamePanel';
-import { RoomLobby } from '../../room/components/RoomLobby';
+import { LobbyScreen } from '../../room/components/LobbyScreen';
 import { ChatPanel } from '../../chat/components/ChatPanel';
+import { useRoomChat } from '../../chat/hooks/useRoomChat';
+import { PixelConfirmModal } from '../../system/components/PixelConfirmModal';
 import { useRoomHeartbeat } from '../../room/hooks/useRoomHeartbeat';
 import { clearRoom } from '../../room/lib/roomStorage';
 import { ninjaApi, NinjaApiError } from '../../ninja/api/ninjaApi';
@@ -42,7 +44,7 @@ const NINJA_GAME_ID = 1;
 const DEFAULT_TOTAL_ROUNDS = 5;
 
 interface VideoCallRoomProps {
-  // 방 생성/입장(RoomGate)까지 마치고 들어오는 화면이라, 여기 도달한 시점엔 넷 다 이미 확보돼 있다.
+  // 방 생성/입장 플로우를 마치고 들어오는 화면이라, 여기 도달한 시점엔 넷 다 이미 확보돼 있다.
   accessToken: string;
   token: string;
   roomId: string;
@@ -52,14 +54,76 @@ interface VideoCallRoomProps {
 export function VideoCallRoom({ accessToken, token, roomId, participantId }: VideoCallRoomProps) {
   const navigate = useNavigate();
   // 방에 머무는 내내 하트비트를 보내 백엔드의 연결 가드(TTL 15초)에 의해 방에서 제거되지 않게 한다.
-  // 이게 없으면 방장이 ~15초 뒤 정리되고 혼자였던 방은 삭제돼 초대 코드가 무효가 된다.
   useRoomHeartbeat(roomId, accessToken);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
+  // 사용자가 스스로 나간 것(확인 팝업 경유)과 예기치 못한 종료를 구분한다 —
+  // 스스로 나가면 바로 메인으로, 예기치 못한 종료면 "방 종료" 팝업(피그마 방 종료 프레임)을 띄운다.
+  const leavingRef = useRef(false);
+  const [closed, setClosed] = useState(false);
+
+  const leaveRoom = useCallback(() => {
+    leavingRef.current = true;
+    clearRoom();
+    navigate('/', { replace: true });
+  }, [navigate]);
+
+  return (
+    <>
+      {connectionError && (
+        <div className="video-call-room__connection-error">LiveKit 연결 실패: {connectionError}</div>
+      )}
+      <LiveKitRoom
+        serverUrl={LIVEKIT_SERVER_URL}
+        token={token}
+        connect
+        video
+        audio
+        options={roomOptions}
+        data-lk-theme="default"
+        style={{ height: '100vh' }}
+        onConnected={() => setConnectionError(null)}
+        onDisconnected={() => {
+          if (leavingRef.current) return; // 의도한 퇴장은 leaveRoom이 정리까지 끝냄
+          clearRoom();
+          setClosed(true);
+        }}
+        onError={(err) => setConnectionError(err.message)}
+      >
+        <RoomContent
+          roomId={roomId}
+          accessToken={accessToken}
+          participantId={participantId}
+          onLeave={leaveRoom}
+        />
+      </LiveKitRoom>
+      {closed && (
+        <PixelConfirmModal
+          title="방 연결이 종료되었어요"
+          message="방이 닫혔거나 연결이 끊어졌습니다."
+          confirmLabel="메인으로"
+          onConfirm={() => navigate('/', { replace: true })}
+        />
+      )}
+    </>
+  );
+}
+
+interface RoomContentProps {
+  roomId: string;
+  accessToken: string;
+  participantId: string;
+  onLeave: () => void;
+}
+
+// LiveKitRoom 컨텍스트 안에서 동작하는 부분 — 대기방(LobbyScreen) ↔ 게임 화면을 전환한다.
+// 채팅 상태는 여기(useRoomChat)가 소유해서 화면 전환으로 패널이 리마운트돼도 내역이 유지된다.
+function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomContentProps) {
   // 게임이 실제로 열려 있는지(NinjaGamePanel이 폴링으로 판단)에 따라 대기방/게임 화면을 전환한다.
-  // 손 인식(GesturePanel/GestureBoard)은 게임 중에만 켜서, 대기방에선 비디오/닉네임/준비/방장만 보이게 한다.
+  // 손 인식(GesturePanel/GestureBoard)은 게임 중에만 켠다.
   const [gameActive, setGameActive] = useState(false);
   const [seeding, setSeeding] = useState(false);
   const [seedError, setSeedError] = useState<string | null>(null);
-  const [connectionError, setConnectionError] = useState<string | null>(null);
+  const { messages, sendMessage } = useRoomChat();
 
   // 게임 시작 트리거(대기방→게임 자동시작 도메인이 아직 없어서 임시로 프론트가 seed를 호출).
   const startGame = useCallback(
@@ -80,47 +144,33 @@ export function VideoCallRoom({ accessToken, token, roomId, participantId }: Vid
 
   return (
     <>
-      {connectionError && (
-        <div className="video-call-room__connection-error">LiveKit 연결 실패: {connectionError}</div>
-      )}
-      <LiveKitRoom
-        serverUrl={LIVEKIT_SERVER_URL}
-        token={token}
-        connect
-        video
-        audio
-        options={roomOptions}
-        data-lk-theme="default"
-        style={{ height: '100vh' }}
-        onConnected={() => setConnectionError(null)}
-        onDisconnected={() => {
-          // 연결이 끊기면 이 방 정보는 더 못 쓴다 — 저장된 방 정보를 지우고 방 생성/참가 화면으로 돌려보낸다.
-          clearRoom();
-          navigate('/', { replace: true });
-        }}
-        onError={(err) => setConnectionError(err.message)}
-      >
-        <VideoConference />
-        {gameActive && <GesturePanel />}
-        {gameActive && <GestureBoard />}
-        {!gameActive && (
-          <RoomLobby
-            roomId={roomId}
-            accessToken={accessToken}
-            participantId={participantId}
-            onStartGame={startGame}
-            starting={seeding}
-            startError={seedError}
-          />
-        )}
-        <NinjaGamePanel
+      {!gameActive && (
+        <LobbyScreen
           roomId={roomId}
-          gameId={NINJA_GAME_ID}
           accessToken={accessToken}
-          onActiveChange={setGameActive}
+          participantId={participantId}
+          onStartGame={startGame}
+          starting={seeding}
+          startError={seedError}
+          onLeave={onLeave}
+          chatMessages={messages}
+          onSendChat={sendMessage}
         />
-        <ChatPanel />
-      </LiveKitRoom>
+      )}
+      {gameActive && (
+        <>
+          <VideoConference />
+          <GesturePanel />
+          <GestureBoard />
+          <ChatPanel variant="floating" messages={messages} onSend={sendMessage} />
+        </>
+      )}
+      <NinjaGamePanel
+        roomId={roomId}
+        gameId={NINJA_GAME_ID}
+        accessToken={accessToken}
+        onActiveChange={setGameActive}
+      />
     </>
   );
 }

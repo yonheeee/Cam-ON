@@ -1,52 +1,44 @@
-import { useDataChannel, useLocalParticipant } from '@livekit/components-react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import type { ChatMessage } from '../hooks/useRoomChat';
 import './ChatPanel.css';
 
-// 방 채팅. 백엔드 채팅 도메인(spec의 chat:message-received)이 아직 미구현이라, 이미 방에 붙어
-// 있는 LiveKit 데이터 채널로 프론트끼리 직접 주고받는다(손동작 인식 브로드캐스트와 같은 방식).
-// 백엔드 채팅이 생기면 이 부분만 STOMP 구독/전송으로 교체하면 된다.
-const CHAT_TOPIC = 'chat';
-const encoder = new TextEncoder();
-const decoder = new TextDecoder();
-
-interface ChatMessage {
-  id: string;
-  nickname: string;
-  text: string;
-  mine: boolean;
+interface ChatPanelProps {
+  messages: ChatMessage[];
+  onSend: (text: string) => void;
+  /** floating: 게임 중 우하단 오버레이(다크) / docked: 로비 사이드바에 내장(Plaza 테마) */
+  variant?: 'floating' | 'docked';
+  /** 닉네임 → 표시 색 (로비에서 플레이어 대표색을 입힐 때). 없으면 기본색 */
+  nicknameColorFor?: (nickname: string) => string | undefined;
 }
 
-export function ChatPanel() {
-  const { localParticipant } = useLocalParticipant();
-  const myNickname = localParticipant.name || '나';
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+// 채팅 UI. 메시지 상태/전송은 useRoomChat 훅이 소유하고 여기는 표시만 한다
+// (로비↔게임 전환으로 리마운트돼도 내역이 유지되게).
+export function ChatPanel({ messages, onSend, variant = 'floating', nicknameColorFor }: ChatPanelProps) {
   const [draft, setDraft] = useState('');
+  const listRef = useRef<HTMLDivElement>(null);
 
-  const { send } = useDataChannel(CHAT_TOPIC, (msg) => {
-    try {
-      const data = JSON.parse(decoder.decode(msg.payload)) as { nickname: string; text: string };
-      setMessages((prev) => [...prev, { ...data, id: crypto.randomUUID(), mine: false }]);
-    } catch {
-      // 채팅이 아닌 다른 payload는 무시.
-    }
-  });
+  // 새 메시지가 오면 맨 아래로 스크롤
+  useEffect(() => {
+    listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
+  }, [messages]);
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
-    const text = draft.trim();
-    if (!text) return;
-    void send(encoder.encode(JSON.stringify({ nickname: myNickname, text })), { reliable: true });
-    // 데이터 채널은 발신자 본인에게는 되돌아오지 않으므로 내 메시지는 로컬에 바로 추가한다.
-    setMessages((prev) => [...prev, { id: crypto.randomUUID(), nickname: myNickname, text, mine: true }]);
+    if (!draft.trim()) return;
+    onSend(draft);
     setDraft('');
   };
 
   return (
-    <div className="chat-panel">
-      <div className="chat-panel__messages">
+    <div className={`chat-panel chat-panel--${variant}`}>
+      <div className="chat-panel__messages" ref={listRef}>
         {messages.map((m) => (
           <div key={m.id} className="chat-panel__message">
-            <span className="chat-panel__nickname">{m.mine ? '나' : m.nickname}</span>: {m.text}
+            {/* 내 메시지도 "나" 대신 닉네임으로 — 색은 로비의 플레이어 대표색을 따른다 */}
+            <span className="chat-panel__nickname" style={{ color: nicknameColorFor?.(m.nickname) }}>
+              {m.nickname}
+            </span>
+            : {m.text}
           </div>
         ))}
       </div>

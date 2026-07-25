@@ -31,7 +31,8 @@ export function JoinRoomPage() {
           className="pap-input entry__input entry__input--code"
           value={code}
           onChange={(event) => {
-            setCode(event.target.value.toUpperCase());
+            // 코드는 영문 대문자+숫자만 — 한글/기호/공백은 입력 자체를 무시 (소문자는 대문자로)
+            setCode(event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6));
             setError(null);
           }}
           maxLength={6}
