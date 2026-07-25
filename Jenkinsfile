@@ -30,12 +30,12 @@ pipeline {
         stage('Backend CI') {
             when {
                 expression {
-                    env.BRANCH_NAME == 'develop-backend'
+                    (env.BRANCH_NAME == 'develop-backend'
                         || env.BRANCH_NAME == 'develop'
                         || env.BRANCH_NAME == 'main'
                         || env.BRANCH_NAME?.startsWith('feature/backend/')
                         || env.BRANCH_NAME?.startsWith('feat/backend/')
-                        || env.BRANCH_NAME?.startsWith('feat/infra/')
+                        || env.BRANCH_NAME?.startsWith('feat/infra/'))
                 }
             }
             steps {
@@ -70,12 +70,12 @@ pipeline {
         stage('Frontend CI') {
             when {
                 expression {
-                    env.BRANCH_NAME == 'develop-frontend'
+                    (env.BRANCH_NAME == 'develop-frontend'
                         || env.BRANCH_NAME == 'develop'
                         || env.BRANCH_NAME == 'main'
                         || env.BRANCH_NAME?.startsWith('feature/frontend/')
                         || env.BRANCH_NAME?.startsWith('feat/frontend/')
-                        || env.BRANCH_NAME?.startsWith('feat/infra/')
+                        || env.BRANCH_NAME?.startsWith('feat/infra/'))
                 }
             }
             steps {
