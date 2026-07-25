@@ -1,35 +1,126 @@
 /* 전체화면 비디오(VideoConference) 위에 얹히는 대기방 오버레이. NinjaGamePanel과 같은 방식의
-   fixed 오버레이라 비디오에 가려지지 않고 항상 보이고 클릭된다. */
+   fixed 오버레이라 비디오에 가려지지 않고 항상 보이고 클릭된다.
+   스타일은 Pixel Arcade Plaza 토큰(theme.css) 기반. */
 .room-lobby {
   position: fixed;
   left: 1rem;
   top: 1rem;
-  width: 300px;
-  background: rgba(20, 20, 20, 0.9);
-  color: #fff;
-  padding: 0.75rem;
-  border-radius: 8px;
+  width: 320px;
+  padding: 16px;
   z-index: 50;
-  font-size: 0.9rem;
+  font-family: var(--pap-font-body);
+  font-size: 14px;
+  box-sizing: border-box;
 }
 
-.room-lobby ul {
+.room-lobby__header {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 4px 10px;
+  padding-bottom: 12px;
+  border-bottom: 2px dashed rgb(43 24 51 / 0.25);
+}
+
+.room-lobby__code-label {
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+.room-lobby__code {
+  font-size: 22px;
+  letter-spacing: 3px;
+}
+
+.room-lobby__copy-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 8px;
+}
+
+/* 패널 안에서 쓰는 작은 픽셀 버튼 변형 */
+.room-lobby__btn-sm {
+  font-size: 13px;
+  padding: 8px 12px;
+  --pap-shadow-offset: 3px;
+}
+
+.room-lobby__participants {
   list-style: none;
-  margin: 0.5rem 0;
+  margin: 12px 0;
   padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
-.room-lobby li {
-  padding: 0.2rem 0;
+.room-lobby__participant {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
-.room-lobby button {
-  margin: 0.25rem 0.25rem 0 0;
-  padding: 0.4rem 0.7rem;
-  cursor: pointer;
+.room-lobby__player-chip {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--pap-ink);
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.room-lobby__player-chip--1 { background: var(--pap-player-1); }
+.room-lobby__player-chip--2 { background: var(--pap-player-2); }
+.room-lobby__player-chip--3 { background: var(--pap-player-3); }
+.room-lobby__player-chip--4 { background: var(--pap-player-4); }
+
+.room-lobby__nickname {
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.room-lobby__host-badge {
+  font-family: var(--pap-font-pixel);
+  font-size: 11px;
+  color: var(--pap-white);
+  background: var(--pap-lavender);
+  border: 2px solid var(--pap-ink);
+  border-radius: 4px;
+  padding: 2px 6px;
+  flex-shrink: 0;
+}
+
+.room-lobby__ready {
+  margin-left: auto;
+  font-size: 12px;
+  opacity: 0.6;
+  flex-shrink: 0;
+}
+
+.room-lobby__ready--done {
+  opacity: 1;
+  font-weight: 700;
+  color: #4a9d23; /* success-lime은 흰 배경에서 안 읽혀서 한 단계 어두운 톤 사용 */
+}
+
+.room-lobby__ready-toggle {
+  margin-bottom: 12px;
+}
+
+.room-lobby__actions {
+  display: flex;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 2px dashed rgb(43 24 51 / 0.25);
+}
+
+.room-lobby__actions > * {
+  flex: 1;
 }
 
 .room-lobby__error {
-  color: #ff6b6b;
-  margin: 0.5rem 0 0;
+  color: var(--pap-festival-coral);
+  font-weight: 600;
+  margin: 8px 0 0;
 }
