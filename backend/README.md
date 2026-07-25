@@ -1,4 +1,4 @@
-# PLAIGROUND Backend
+# Cam-ON Backend
 
 ## Stack
 
@@ -27,7 +27,7 @@ $env:LIVEKIT_API_KEY = "devkey"
 $env:LIVEKIT_API_SECRET = "secret"
 ```
 
-Do not reuse OpenVidu's internal Redis for PLAIGROUND room state.
+Do not reuse OpenVidu's internal Redis for Cam-ON room state.
 
 ## Run
 

@@ -1,5 +1,4 @@
-# temporary-plAIground
-plAIground 임시 깃헙
+# Cam-ON : WebRTC 기반 미니 AI 게임 웹사이트
 
 ## hand-gesture 모델 실행하기
 

@@ -5,8 +5,10 @@ import { KEYPOINT_LABELS } from './labels';
 const layers = weights as DenseLayerWeights[];
 
 // model/keypoint_classifier/keypoint_classifier.py의 KeyPointClassifier.__call__ 포팅.
-export function classifyKeyPoint(preprocessedLandmarkList: number[]): { index: number; label: string } {
+export function classifyKeyPoint(
+  preprocessedLandmarkList: number[],
+): { index: number; label: string; confidence: number } {
   const probabilities = mlpForward(preprocessedLandmarkList, layers);
   const index = argmax(probabilities);
-  return { index, label: KEYPOINT_LABELS[index] };
+  return { index, label: KEYPOINT_LABELS[index], confidence: probabilities[index] };
 }

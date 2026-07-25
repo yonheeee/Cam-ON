@@ -1,12 +1,21 @@
 spring:
   application:
-    name: plaiground-backend
+    name: camon-backend
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:local}
   data:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
+  datasource:
+    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:camon}?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Seoul
+    username: ${DB_USER:camon}
+    password: ${DB_PASSWORD:camon}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: none
 
 server:
   port: ${SERVER_PORT:8080}
@@ -21,3 +30,16 @@ livekit:
   url: ${LIVEKIT_URL:http://localhost:7880}
   api-key: ${LIVEKIT_API_KEY:devkey}
   api-secret: ${LIVEKIT_API_SECRET:secret}
+
+security:
+  jwt:
+    issuer: camon-backend
+    audience: camon-services
+    access-token-ttl: 12h
+    private-key-path: ${JWT_PRIVATE_KEY_PATH:}
+    public-key-path: ${JWT_PUBLIC_KEY_PATH:}
+
+app:
+  frontend-base-url: ${FRONTEND_BASE_URL:http://localhost:5173}
+  connection:
+    heartbeat-ttl: ${ROOM_HEARTBEAT_TTL:15s}

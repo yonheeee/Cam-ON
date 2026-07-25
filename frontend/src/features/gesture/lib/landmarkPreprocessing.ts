@@ -25,13 +25,8 @@ export function preProcessLandmark(landmarkList: Point[]): number[] {
   return flat.map((v) => v / maxValue);
 }
 
-export function preProcessPointHistory(
-  pointHistory: Point[],
-  imageWidth: number,
-  imageHeight: number,
-): number[] {
-  if (pointHistory.length === 0) return [];
-  const [baseX, baseY] = pointHistory[0];
-  const relative = pointHistory.map(([x, y]): Point => [(x - baseX) / imageWidth, (y - baseY) / imageHeight]);
-  return relative.flat();
+// app.py의 combine_two_hand_landmarks 포팅. 양손이 다 보일 때만 호출된다 —
+// Left->Right 순서로 이어붙여 84차원 "조합 포즈" 입력을 만든다.
+export function combineTwoHandLandmarks(left: number[], right: number[]): number[] {
+  return [...left, ...right];
 }

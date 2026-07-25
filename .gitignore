@@ -1,0 +1,6 @@
+ham_log/
+deploy/.env
+deploy/.deployed-images
+deploy/secrets/
+*.pem
+*.ppk

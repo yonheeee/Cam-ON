@@ -1,0 +1,118 @@
+name: deploy
+
+services:
+  redis:
+    image: redis:7.4-alpine
+    container_name: camon-redis
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - camon-network
+    restart: unless-stopped
+
+  mysql:
+    image: mysql:8.4
+    container_name: camon-mysql
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -p$$MYSQL_ROOT_PASSWORD"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - camon-network
+    restart: unless-stopped
+
+  backend:
+    image: ${BACKEND_IMAGE:-camon-backend:local}
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: camon-backend
+    environment:
+      SERVER_PORT: 8080
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: ${MYSQL_DATABASE}
+      DB_USER: ${MYSQL_USER}
+      DB_PASSWORD: ${MYSQL_PASSWORD}
+      LIVEKIT_URL: ${LIVEKIT_URL}
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
+      FRONTEND_BASE_URL: https://${DOMAIN}
+      # 대기방→게임 자동시작 흐름이 아직 없어서 DevNinjaSeedController(닌자 게임을 실제로
+      # 시작시키는 유일한 방법, /api/dev/ninja/seed)가 local 프로필에서만 켜진다. 이 흐름이
+      # 생기기 전까지는 배포 환경도 local 프로필을 그대로 쓴다 — JWT 서명키가 백엔드 재시작마다
+      # 새로 생성되는 대가가 있지만, 게스트 토큰 기반 임시 세션이라 재로그인 정도로 끝난다.
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-local}
+      JWT_PRIVATE_KEY_PATH: /run/secrets/camon/jwt-private.pem
+      JWT_PUBLIC_KEY_PATH: /run/secrets/camon/jwt-public.pem
+    volumes:
+      - ./secrets:/run/secrets/camon:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+    networks:
+      - camon-network
+    restart: unless-stopped
+
+  frontend-builder:
+    image: ${FRONTEND_IMAGE:-camon-web:local}
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: https://${DOMAIN}
+        VITE_WS_BASE_URL: wss://${DOMAIN}
+    volumes:
+      - frontend-dist:/output
+    restart: "no"
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: camon-caddy
+    environment:
+      DOMAIN: ${DOMAIN}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - frontend-dist:/srv:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      frontend-builder:
+        condition: service_completed_successfully
+      backend:
+        condition: service_started
+    networks:
+      - camon-network
+    restart: unless-stopped
+
+networks:
+  camon-network:
+    name: camon-network
+
+volumes:
+  mysql-data:
+  redis-data:
+  frontend-dist:
+  caddy-data:
+  caddy-config:

@@ -1,8 +1,15 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
+import { useNavigate } from 'react-router';
 import { LiveKitRoom, VideoConference } from '@livekit/components-react';
 import { VideoPresets, type RoomOptions } from 'livekit-client';
 import { GesturePanel } from '../../gesture/components/GesturePanel';
 import { GestureBoard } from '../../gesture/components/GestureBoard';
+import { NinjaGamePanel } from '../../ninja/components/NinjaGamePanel';
+import { RoomLobby } from '../../room/components/RoomLobby';
+import { ChatPanel } from '../../chat/components/ChatPanel';
+import { useRoomHeartbeat } from '../../room/hooks/useRoomHeartbeat';
+import { clearRoom } from '../../room/lib/roomStorage';
+import { ninjaApi, NinjaApiError } from '../../ninja/api/ninjaApi';
 import '@livekit/components-styles';
 import './VideoCallRoom.css';
 
@@ -26,17 +33,58 @@ const roomOptions: RoomOptions = {
   },
 };
 
-// 토큰을 직접 입력받는 건 로컬 개발 전용이다.
-// 실제 플로우에서는 방 입장 API 응답으로 Spring이 LiveKit 토큰을 내려준다 (TanStack Query로 교체 예정).
-export function VideoCallRoom() {
-  const [serverUrl, setServerUrl] = useState('ws://localhost:7880');
-  const [token, setToken] = useState('');
-  const [connected, setConnected] = useState(false);
+// LiveKit Cloud 프로젝트 서버 URL — 고정값이라 매번 입력받을 필요 없음.
+const LIVEKIT_SERVER_URL = 'wss://plaiground-gkmfgv1j.livekit.cloud';
 
-  if (connected) {
-    return (
+// 지금 실제로 구현된 게임은 닌자뿐이라 gameId를 고정한다 — 코스에서 게임을 고르는 흐름이
+// 생기면 그쪽에서 받아오도록 교체.
+const NINJA_GAME_ID = 1;
+const DEFAULT_TOTAL_ROUNDS = 5;
+
+interface VideoCallRoomProps {
+  // 방 생성/입장(RoomGate)까지 마치고 들어오는 화면이라, 여기 도달한 시점엔 넷 다 이미 확보돼 있다.
+  accessToken: string;
+  token: string;
+  roomId: string;
+  participantId: string;
+}
+
+export function VideoCallRoom({ accessToken, token, roomId, participantId }: VideoCallRoomProps) {
+  const navigate = useNavigate();
+  // 방에 머무는 내내 하트비트를 보내 백엔드의 연결 가드(TTL 15초)에 의해 방에서 제거되지 않게 한다.
+  // 이게 없으면 방장이 ~15초 뒤 정리되고 혼자였던 방은 삭제돼 초대 코드가 무효가 된다.
+  useRoomHeartbeat(roomId, accessToken);
+  // 게임이 실제로 열려 있는지(NinjaGamePanel이 폴링으로 판단)에 따라 대기방/게임 화면을 전환한다.
+  // 손 인식(GesturePanel/GestureBoard)은 게임 중에만 켜서, 대기방에선 비디오/닉네임/준비/방장만 보이게 한다.
+  const [gameActive, setGameActive] = useState(false);
+  const [seeding, setSeeding] = useState(false);
+  const [seedError, setSeedError] = useState<string | null>(null);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
+
+  // 게임 시작 트리거(대기방→게임 자동시작 도메인이 아직 없어서 임시로 프론트가 seed를 호출).
+  const startGame = useCallback(
+    async (participantTokens: string[]) => {
+      setSeeding(true);
+      setSeedError(null);
+      try {
+        await ninjaApi.seed(roomId, NINJA_GAME_ID, participantTokens, DEFAULT_TOTAL_ROUNDS, accessToken);
+        // 세션이 열리면 NinjaGamePanel 폴링이 이를 감지해 onActiveChange(true)로 게임 화면으로 전환된다.
+      } catch (err) {
+        setSeedError(err instanceof NinjaApiError ? err.message : '게임 시작 실패');
+      } finally {
+        setSeeding(false);
+      }
+    },
+    [roomId, accessToken],
+  );
+
+  return (
+    <>
+      {connectionError && (
+        <div className="video-call-room__connection-error">LiveKit 연결 실패: {connectionError}</div>
+      )}
       <LiveKitRoom
-        serverUrl={serverUrl}
+        serverUrl={LIVEKIT_SERVER_URL}
         token={token}
         connect
         video
@@ -44,40 +92,35 @@ export function VideoCallRoom() {
         options={roomOptions}
         data-lk-theme="default"
         style={{ height: '100vh' }}
-        onDisconnected={() => setConnected(false)}
+        onConnected={() => setConnectionError(null)}
+        onDisconnected={() => {
+          // 연결이 끊기면 이 방 정보는 더 못 쓴다 — 저장된 방 정보를 지우고 방 생성/참가 화면으로 돌려보낸다.
+          clearRoom();
+          navigate('/', { replace: true });
+        }}
+        onError={(err) => setConnectionError(err.message)}
       >
         <VideoConference />
-        <GesturePanel />
-        <GestureBoard />
-      </LiveKitRoom>
-    );
-  }
-
-  return (
-    <div className="video-call-room video-call-room--join">
-      <h1>LiveKit 연결 테스트</h1>
-      <p>scripts/mint-dev-token.mjs로 발급한 토큰을 붙여넣고 입장한다.</p>
-      <form
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (serverUrl.trim() && token.trim()) setConnected(true);
-        }}
-      >
-        <label>
-          Server URL
-          <input value={serverUrl} onChange={(event) => setServerUrl(event.target.value)} />
-        </label>
-        <label>
-          Access Token
-          <textarea
-            value={token}
-            onChange={(event) => setToken(event.target.value)}
-            rows={4}
-            placeholder="node scripts/mint-dev-token.mjs <room> <name> 출력값을 붙여넣기"
+        {gameActive && <GesturePanel />}
+        {gameActive && <GestureBoard />}
+        {!gameActive && (
+          <RoomLobby
+            roomId={roomId}
+            accessToken={accessToken}
+            participantId={participantId}
+            onStartGame={startGame}
+            starting={seeding}
+            startError={seedError}
           />
-        </label>
-        <button type="submit">입장</button>
-      </form>
-    </div>
+        )}
+        <NinjaGamePanel
+          roomId={roomId}
+          gameId={NINJA_GAME_ID}
+          accessToken={accessToken}
+          onActiveChange={setGameActive}
+        />
+        <ChatPanel />
+      </LiveKitRoom>
+    </>
   );
 }

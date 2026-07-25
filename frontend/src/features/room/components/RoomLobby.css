@@ -1,0 +1,35 @@
+/* 전체화면 비디오(VideoConference) 위에 얹히는 대기방 오버레이. NinjaGamePanel과 같은 방식의
+   fixed 오버레이라 비디오에 가려지지 않고 항상 보이고 클릭된다. */
+.room-lobby {
+  position: fixed;
+  left: 1rem;
+  top: 1rem;
+  width: 300px;
+  background: rgba(20, 20, 20, 0.9);
+  color: #fff;
+  padding: 0.75rem;
+  border-radius: 8px;
+  z-index: 50;
+  font-size: 0.9rem;
+}
+
+.room-lobby ul {
+  list-style: none;
+  margin: 0.5rem 0;
+  padding: 0;
+}
+
+.room-lobby li {
+  padding: 0.2rem 0;
+}
+
+.room-lobby button {
+  margin: 0.25rem 0.25rem 0 0;
+  padding: 0.4rem 0.7rem;
+  cursor: pointer;
+}
+
+.room-lobby__error {
+  color: #ff6b6b;
+  margin: 0.5rem 0 0;
+}
