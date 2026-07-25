@@ -54,6 +54,8 @@ services:
       # 생기기 전까지는 배포 환경도 local 프로필을 그대로 쓴다 — JWT 서명키가 백엔드 재시작마다
       # 새로 생성되는 대가가 있지만, 게스트 토큰 기반 임시 세션이라 재로그인 정도로 끝난다.
       SPRING_PROFILES_ACTIVE: local
+      # 공개 배포 환경에서는 API 문서를 통째로 차단한다(스캐너가 dev 엔드포인트를 찾는 진입점이 됨).
+      SWAGGER_ENABLED: "false"
     depends_on:
       redis:
         condition: service_healthy
