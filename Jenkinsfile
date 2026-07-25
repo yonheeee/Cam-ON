@@ -56,6 +56,7 @@ pipeline {
                         chmod +x gradlew
                         REDIS_TEST_HOST=127.0.0.1 \
                         REDIS_TEST_PORT="${redis_port}" \
+                        SPRING_PROFILES_ACTIVE=test \
                         ./gradlew clean test bootJar --no-daemon
                     '''
                 }
