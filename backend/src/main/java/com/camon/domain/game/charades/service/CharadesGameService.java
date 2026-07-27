@@ -366,7 +366,7 @@ public class CharadesGameService {
         return payload;
     }
 
-    public void handlePresenterForcedLeave(
+    public void handleParticipantLeft(
         UUID roomId,
         UUID participantId,
         String reason
@@ -380,8 +380,21 @@ public class CharadesGameService {
             room.roomCode(),
             sessionSeq
         ).orElse(null);
-        if (state == null
-            || state.status() != CharadesTurnStatus.PLAYING
+        if (state == null || state.status() == CharadesTurnStatus.FINISHED) {
+            return;
+        }
+
+        long connectedPlayerCount = participantRepository.findAll(roomId)
+            .stream()
+            .filter(participant ->
+                participant.connectionStatus() == ConnectionStatus.CONNECTED
+            )
+            .count();
+        if (connectedPlayerCount <= 1) {
+            finishGame(room);
+            return;
+        }
+        if (state.status() != CharadesTurnStatus.PLAYING
             || !participantId.equals(state.presenterId())) {
             return;
         }
@@ -514,6 +527,7 @@ public class CharadesGameService {
                 Instant.now()
             )
         );
+        charadesRedis.clear(room.roomCode(), sessionSeq);
     }
 
     private static boolean isScheduledTurn(

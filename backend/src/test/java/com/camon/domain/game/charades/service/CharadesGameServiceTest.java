@@ -8,6 +8,7 @@ import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -45,6 +46,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.scheduling.TaskScheduler;
@@ -710,6 +712,8 @@ class CharadesGameServiceTest {
         UUID presenterId = UUID.randomUUID();
         Participant nextPresenter =
             participant(UUID.randomUUID(), "다음표현자");
+        Participant remainingParticipant =
+            participant(UUID.randomUUID(), "남은참가자");
         Instant expiresAt = Instant.now().plusSeconds(30);
         CharadesGameState playing = new CharadesGameState(
             1, 3, 1, 3, TOPIC_ID, presenterId, 42L,
@@ -741,8 +745,11 @@ class CharadesGameServiceTest {
             .thenReturn(List.of(
                 presenterId,
                 nextPresenter.participantId(),
-                UUID.randomUUID()
+                remainingParticipant.participantId()
             ));
+        when(participantRepository.findAll(roomId)).thenReturn(
+            List.of(nextPresenter, remainingParticipant)
+        );
         when(participantRepository.findById(
             roomId,
             nextPresenter.participantId()
@@ -752,12 +759,12 @@ class CharadesGameServiceTest {
         ArgumentCaptor<Instant> expiresAtCaptor =
             ArgumentCaptor.forClass(Instant.class);
 
-        service.handlePresenterForcedLeave(
+        service.handleParticipantLeft(
             roomId,
             presenterId,
             "TIMEOUT"
         );
-        service.handlePresenterForcedLeave(
+        service.handleParticipantLeft(
             roomId,
             presenterId,
             "TIMEOUT"
@@ -792,6 +799,121 @@ class CharadesGameServiceTest {
             Instant.now().plusSeconds(61)
         );
         assertThat(expiresAtCaptor.getValue()).isNotEqualTo(expiresAt);
+    }
+
+    @Test
+    void keepsGameWhenTwoConnectedParticipantsRemain() {
+        UUID presenterId = UUID.randomUUID();
+        UUID departedParticipantId = UUID.randomUUID();
+        CharadesGameState playing = new CharadesGameState(
+            1, 3, 1, 3, TOPIC_ID, presenterId, 42L,
+            Instant.now().plusSeconds(30),
+            CharadesTurnStatus.PLAYING
+        );
+        when(roomRepository.findById(roomId)).thenReturn(Optional.of(room));
+        when(charadesRedis.findState(ROOM_CODE, SESSION_SEQ))
+            .thenReturn(Optional.of(playing));
+        when(participantRepository.findAll(roomId)).thenReturn(List.of(
+            participant(presenterId, "표현자"),
+            participant(UUID.randomUUID(), "남은참가자")
+        ));
+
+        service.handleParticipantLeft(
+            roomId,
+            departedParticipantId,
+            "LEFT"
+        );
+
+        verify(charadesRedis, never()).transitionStatus(
+            any(),
+            anyInt(),
+            any(CharadesTurnStatus.class),
+            any(CharadesTurnStatus.class)
+        );
+        verify(charadesEventPublisher, never()).publish(
+            eq(roomId),
+            eq("charades:game-ended"),
+            any(CharadesGameEndedPayload.class)
+        );
+        verify(charadesRedis, never()).clear(any(), anyInt());
+    }
+
+    @Test
+    void finishesGameOnceWhenOnlyOneConnectedParticipantRemains() {
+        UUID presenterId = UUID.randomUUID();
+        UUID departedParticipantId = UUID.randomUUID();
+        CharadesGameState playing = new CharadesGameState(
+            2, 3, 1, 3, TOPIC_ID, presenterId, 42L,
+            Instant.now().plusSeconds(30),
+            CharadesTurnStatus.PLAYING
+        );
+        when(roomRepository.findById(roomId)).thenReturn(Optional.of(room));
+        when(charadesRedis.findState(ROOM_CODE, SESSION_SEQ))
+            .thenReturn(
+                Optional.of(playing),
+                Optional.of(playing),
+                Optional.empty()
+            );
+        when(participantRepository.findAll(roomId)).thenReturn(List.of(
+            participant(presenterId, "마지막참가자")
+        ));
+        when(charadesRedis.transitionStatus(
+            ROOM_CODE,
+            SESSION_SEQ,
+            CharadesTurnStatus.PLAYING,
+            CharadesTurnStatus.FINISHED
+        )).thenReturn(true);
+
+        service.handleParticipantLeft(
+            roomId,
+            departedParticipantId,
+            "LEFT"
+        );
+        service.handleParticipantLeft(
+            roomId,
+            departedParticipantId,
+            "LEFT"
+        );
+
+        InOrder order = inOrder(
+            charadesRedis,
+            charadesEventPublisher
+        );
+        order.verify(charadesRedis).transitionStatus(
+            ROOM_CODE,
+            SESSION_SEQ,
+            CharadesTurnStatus.PLAYING,
+            CharadesTurnStatus.FINISHED
+        );
+        order.verify(charadesEventPublisher).publish(
+            eq(roomId),
+            eq("charades:game-ended"),
+            any(CharadesGameEndedPayload.class)
+        );
+        order.verify(charadesRedis).clear(ROOM_CODE, SESSION_SEQ);
+    }
+
+    @Test
+    void rejectsGuessAndTurnProgressAfterCharadesDataIsCleared() {
+        Participant participant =
+            participant(UUID.randomUUID(), "마지막참가자");
+        when(roomRepository.findById(roomId)).thenReturn(Optional.of(room));
+        when(charadesRedis.findState(ROOM_CODE, SESSION_SEQ))
+            .thenReturn(Optional.empty());
+
+        assertBusinessError(
+            () -> service.submitGuess(
+                roomId,
+                GAME_ID,
+                participant,
+                new CharadesGuessRequest("코끼리")
+            ),
+            ErrorCode.CHARADES_SESSION_NOT_FOUND
+        );
+        assertBusinessError(
+            () -> service.startNextTurn(roomId),
+            ErrorCode.CHARADES_SESSION_NOT_FOUND
+        );
     }
 
     private void stubValidStart(

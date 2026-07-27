@@ -1,6 +1,6 @@
 package com.camon.domain.game.charades.service;
 
-import com.camon.domain.room.event.ParticipantForcedLeftEvent;
+import com.camon.domain.room.event.ParticipantLeftEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
@@ -16,8 +16,8 @@ public class CharadesParticipantEventListener {
     }
 
     @EventListener
-    public void onParticipantForcedLeft(ParticipantForcedLeftEvent event) {
-        charadesGameService.handlePresenterForcedLeave(
+    public void onParticipantLeft(ParticipantLeftEvent event) {
+        charadesGameService.handleParticipantLeft(
             event.roomId(),
             event.participantId(),
             event.reason()

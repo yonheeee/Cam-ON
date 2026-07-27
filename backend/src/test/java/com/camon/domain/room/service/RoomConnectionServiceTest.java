@@ -12,7 +12,7 @@ import static org.mockito.Mockito.when;
 import com.camon.domain.room.config.RoomConnectionProperties;
 import com.camon.domain.room.domain.ConnectionStatus;
 import com.camon.domain.room.domain.Participant;
-import com.camon.domain.room.event.ParticipantForcedLeftEvent;
+import com.camon.domain.room.event.ParticipantLeftEvent;
 import com.camon.domain.room.repository.ConnectionRepository;
 import com.camon.domain.room.repository.HeartbeatRefreshResult;
 import com.camon.domain.room.repository.LeaveRoomResult;
@@ -87,7 +87,7 @@ class RoomConnectionServiceTest {
             "TIMEOUT"
         );
         verify(applicationEventPublisher).publishEvent(
-            new ParticipantForcedLeftEvent(
+            new ParticipantLeftEvent(
                 roomId,
                 participantId,
                 "TIMEOUT"
