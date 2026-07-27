@@ -1,0 +1,484 @@
+/* 물건 가져오기 게임 화면 — 로비(LobbyScreen)와 같은 골격의 Pixel Arcade Plaza 테마 */
+.fetch-game {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 20px;
+  box-sizing: border-box;
+  background: var(--pap-plaza-cream);
+  font-family: var(--pap-font-body);
+  text-align: left;
+  z-index: 40;
+}
+
+/* 배경은 임시 단색 — 디자이너의 게임 화면 배경 에셋이 나오면 여기에 입힌다 (랜딩 패턴 참고) */
+
+/* ---- 상단 바: 로고 · 제시어 · 라운드/타이머 ---- */
+.fetch-game__header {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.fetch-game__logo {
+  height: 34px;
+  width: auto;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.fetch-game__mission {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.fetch-game__mission-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--pap-ink);
+  opacity: 0.6;
+  flex-shrink: 0;
+}
+
+/* 제시어 — 방 코드 타일과 같은 결의 강조 박스 */
+.fetch-game__target {
+  font-size: 24px;
+  color: var(--pap-ink);
+  background: var(--pap-play-yellow);
+  border: 3px solid var(--pap-ink);
+  border-radius: 8px;
+  padding: 6px 16px;
+  box-shadow: 3px 3px 0 0 var(--pap-ink);
+  white-space: nowrap;
+}
+
+.fetch-game__status {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-shrink: 0;
+}
+
+.fetch-game__round {
+  font-size: 15px;
+  color: var(--pap-ink);
+}
+
+.fetch-game__timer {
+  font-size: 24px;
+  color: var(--pap-ink);
+  min-width: 64px;
+  text-align: right;
+}
+
+.fetch-game__timer--danger {
+  color: var(--pap-festival-coral);
+  animation: fetch-blink 500ms step-start infinite;
+}
+
+@keyframes fetch-blink {
+  50% { opacity: 0.4; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fetch-game__timer--danger { animation: none; }
+}
+
+/* 라운드 성공 순위 — 이름 바 안 라임 칩 ("1등 · 3.3s") */
+.fetch-game__rank {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--pap-ink);
+  background: var(--pap-success-lime);
+  border: 2px solid var(--pap-ink);
+  border-radius: 4px;
+  padding: 2px 7px;
+  flex-shrink: 0;
+}
+
+/* ---- 본문: 그리드 (로비와 동일 골격) ---- */
+.fetch-game__body {
+  flex: 1;
+  display: flex;
+  gap: 16px;
+  min-height: 0;
+}
+
+.fetch-game__grid {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  grid-auto-rows: 1fr;
+  gap: 16px;
+  min-height: 0;
+}
+
+/* 3인: 세 번째 타일 아랫줄 중앙 (로비와 동일 규칙) */
+.fetch-game__grid--3 > :nth-child(3) {
+  grid-column: 1 / -1;
+  justify-self: center;
+  width: calc(50% - 8px);
+}
+
+.fetch-game__tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border: 4px solid var(--pap-ink);
+  border-radius: 10px;
+  overflow: hidden;
+  background: #1b1230;
+  box-shadow: 5px 5px 0 0 rgb(43 24 51 / 0.25);
+}
+
+.fetch-game__tile--me {
+  border-color: var(--pap-arcade-teal);
+}
+
+.fetch-game__tile--done {
+  border-color: var(--pap-success-lime);
+}
+
+.fetch-game__tile .lk-participant-tile {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+}
+
+.fetch-game__tile .lk-participant-metadata {
+  display: none;
+}
+
+.fetch-game__video {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  object-fit: cover;
+  transform: scaleX(-1); /* 거울 모드 */
+}
+
+/* 내 타일 중앙 ROI — 인식 crop 영역(짧은 변 80%)의 시각화 */
+.fetch-game__roi {
+  position: absolute;
+  top: calc(50% - 20px); /* 이름 바 높이만큼 위로 보정 */
+  left: 50%;
+  height: 62%;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  border: 3px dashed var(--pap-play-yellow);
+  border-radius: 10px;
+  pointer-events: none;
+}
+
+.fetch-game__roi--hot {
+  border-style: solid;
+  border-color: var(--pap-success-lime);
+}
+
+/* 캠 꺼짐 안내 — ROI 대신 표시 */
+.fetch-game__cam-off {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: rgb(255 253 245 / 0.75);
+  font-size: 15px;
+  font-weight: 700;
+  pointer-events: none;
+}
+
+.fetch-game__cam-off-icon {
+  display: inline-flex;
+  transform: scale(2);
+  opacity: 0.7;
+}
+
+/* 성공 배지 — READY! 스티커와 같은 결. 등장 순간 팝 (남의 성공도 눈에 띄게) */
+.fetch-game__badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+  font-size: 13px;
+  color: var(--pap-ink);
+  background: var(--pap-success-lime);
+  border: 2px solid var(--pap-ink);
+  border-radius: 5px;
+  padding: 3px 8px;
+  transform: rotate(3deg);
+  animation: fetch-badge-pop 400ms ease-out;
+}
+
+@keyframes fetch-badge-pop {
+  0% {
+    transform: rotate(3deg) scale(2.2);
+    opacity: 0;
+  }
+  60% {
+    transform: rotate(3deg) scale(0.9);
+    opacity: 1;
+  }
+  100% {
+    transform: rotate(3deg) scale(1);
+  }
+}
+
+/* 성공 전환 순간 타일이 한 번 번쩍 — 배지와 함께 시선을 끈다 */
+.fetch-game__tile--done {
+  animation: fetch-tile-done 600ms ease-out;
+}
+
+@keyframes fetch-tile-done {
+  0% {
+    box-shadow:
+      0 0 0 6px var(--pap-success-lime),
+      5px 5px 0 0 rgb(43 24 51 / 0.25);
+  }
+  100% {
+    box-shadow: 5px 5px 0 0 rgb(43 24 51 / 0.25);
+  }
+}
+
+.fetch-game__tile-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--pap-white);
+  border-top: 3px solid var(--pap-ink);
+  color: var(--pap-ink);
+}
+
+.fetch-game__tile-name {
+  font-weight: 800;
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 누적 점수 — 이름 옆 작은 픽셀 표기, 선두는 👑 */
+.fetch-game__score {
+  font-size: 12px;
+  color: var(--pap-ink);
+  background: var(--pap-plaza-cream);
+  border: 2px solid var(--pap-ink);
+  border-radius: 4px;
+  padding: 2px 6px;
+  flex-shrink: 0;
+}
+
+/* 내 타일 캠/마이크 토글 (로비와 동일 스타일) */
+.fetch-game__controls {
+  display: inline-flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.fetch-game__control {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  color: var(--pap-ink);
+  background: var(--pap-white);
+  border: 2px solid var(--pap-ink);
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.fetch-game__control:hover {
+  background: var(--pap-plaza-cream);
+}
+
+.fetch-game__control--off {
+  color: var(--pap-white);
+  background: var(--pap-festival-coral);
+}
+
+.fetch-game__hint {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--pap-ink);
+  opacity: 0.75;
+  flex-shrink: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- 카운트다운 / GO / 셀레브레이션 오버레이 ---- */
+.fetch-game__countdown {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgb(43 24 51 / 0.35);
+  z-index: 80;
+  pointer-events: none;
+}
+
+.fetch-game__countdown .pap-pixel-title {
+  font-size: 140px;
+  color: var(--pap-white);
+  text-shadow:
+    4px 4px 0 var(--pap-ink),
+    -4px 4px 0 var(--pap-ink),
+    4px -4px 0 var(--pap-ink),
+    -4px -4px 0 var(--pap-ink);
+  animation: fetch-count-pop 1s ease-out;
+}
+
+.fetch-game__countdown--go {
+  background: transparent;
+}
+
+.fetch-game__countdown--go .pap-pixel-title {
+  color: var(--pap-success-lime);
+  animation: fetch-count-pop 700ms ease-out;
+}
+
+@keyframes fetch-count-pop {
+  0% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+  25% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0.92);
+    opacity: 0.9;
+  }
+}
+
+.fetch-game__celebrate {
+  position: fixed;
+  top: 38%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  z-index: 85;
+  pointer-events: none;
+  animation: fetch-celebrate-pop 300ms ease-out;
+}
+
+.fetch-game__celebrate .pap-pixel-title {
+  font-size: 64px;
+  color: var(--pap-success-lime);
+  text-shadow:
+    3px 3px 0 var(--pap-ink),
+    -3px 3px 0 var(--pap-ink),
+    3px -3px 0 var(--pap-ink),
+    -3px -3px 0 var(--pap-ink);
+}
+
+.fetch-game__celebrate-time {
+  font-family: var(--pap-font-pixel);
+  font-size: 20px;
+  color: var(--pap-white);
+  background: var(--pap-ink);
+  padding: 4px 14px;
+  border-radius: 6px;
+}
+
+@keyframes fetch-celebrate-pop {
+  from {
+    transform: translate(-50%, -50%) scale(0.5);
+    opacity: 0;
+  }
+  to {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+  }
+}
+
+/* 타임아웃 — 못 찾은 사람에게 뜨는 코랄 플래시 */
+.fetch-game__timeout {
+  position: fixed;
+  top: 38%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 85;
+  pointer-events: none;
+  animation: fetch-celebrate-pop 300ms ease-out;
+}
+
+.fetch-game__timeout .pap-pixel-title {
+  font-size: 56px;
+  color: var(--pap-festival-coral);
+  text-shadow:
+    3px 3px 0 var(--pap-ink),
+    -3px 3px 0 var(--pap-ink),
+    3px -3px 0 var(--pap-ink),
+    -3px -3px 0 var(--pap-ink);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fetch-game__countdown .pap-pixel-title,
+  .fetch-game__celebrate,
+  .fetch-game__timeout,
+  .fetch-game__badge,
+  .fetch-game__tile--done {
+    animation: none;
+  }
+}
+
+/* ---- 결과 팝업 ---- */
+.fetch-game__result {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: min(380px, 90vw);
+  padding: 28px;
+  box-sizing: border-box;
+  text-align: center;
+}
+
+.fetch-game__result h2 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.fetch-game__result ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--pap-ink);
+}
+
+.fetch-game__winner {
+  font-weight: 800;
+  font-size: 18px;
+  color: var(--pap-festival-coral);
+}
+
+.fetch-game__wait {
+  margin: 0;
+  font-size: 13px;
+  color: var(--pap-ink);
+  opacity: 0.65;
+}

@@ -74,6 +74,12 @@ export function LobbyScreen({
 
   const self = room?.participants.find((p) => p.participantId === participantId);
   const isHost = participantId === room?.hostParticipantId;
+  // 방장을 제외한 전원이 준비 완료인가 — 게임 시작 게이트 (혼자면 바로 시작 가능)
+  const allOthersReady =
+    !!room &&
+    room.participants
+      .filter((p) => p.participantId !== room.hostParticipantId)
+      .every((p) => p.ready);
   // 타일 테두리·표시에 쓸 참가자 정보 (LiveKit identity == participantId)
   const infoByIdentity = new Map(
     (room?.participants ?? []).map((p, index) => [
@@ -303,13 +309,15 @@ export function LobbyScreen({
             </button>
             {/* 주 액션은 하나로 통일 — 방장: 게임 시작 / 참가자: 준비 토글 */}
             {isHost ? (
+              // 공통 요구사항: 전원 준비 완료여야 시작 가능 (방장 본인 제외 — 방장은 시작이 곧 준비)
               <button
                 type="button"
                 className="pap-pixel-btn pap-pixel-btn--coral"
-                disabled={starting || !room}
+                disabled={starting || !room || !allOthersReady}
+                title={allOthersReady ? undefined : '모든 참가자가 준비를 완료해야 시작할 수 있어요'}
                 onClick={() => room && onStartGame(room.participants.map((p) => p.participantId))}
               >
-                {starting ? '시작 중...' : '게임 시작'}
+                {starting ? '시작 중...' : allOthersReady ? '게임 시작' : '준비 대기 중...'}
               </button>
             ) : (
               // 준비되면 눌린 채 고정된 라임 버튼으로 — 누르는 순간의 "철컥" UX.

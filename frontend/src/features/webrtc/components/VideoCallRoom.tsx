@@ -1,7 +1,7 @@
-import { useCallback, useRef, useState } from 'react';
-import { useNavigate } from 'react-router';
-import { LiveKitRoom, VideoConference } from '@livekit/components-react';
-import { VideoPresets, type RoomOptions } from 'livekit-client';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router';
+import { LiveKitRoom, VideoConference, useConnectionState } from '@livekit/components-react';
+import { ConnectionState, VideoPresets, type RoomOptions } from 'livekit-client';
 import { GesturePanel } from '../../gesture/components/GesturePanel';
 import { GestureBoard } from '../../gesture/components/GestureBoard';
 import { NinjaGamePanel } from '../../ninja/components/NinjaGamePanel';
@@ -11,7 +11,8 @@ import { useRoomChat } from '../../chat/hooks/useRoomChat';
 import { PixelConfirmModal } from '../../system/components/PixelConfirmModal';
 import { useRoomHeartbeat } from '../../room/hooks/useRoomHeartbeat';
 import { clearRoom } from '../../room/lib/roomStorage';
-import { ninjaApi, NinjaApiError } from '../../ninja/api/ninjaApi';
+import { FetchObjectGame } from '../../fetch/components/FetchObjectGame';
+import { useFetchGame } from '../../fetch/hooks/useFetchGame';
 import '@livekit/components-styles';
 import './VideoCallRoom.css';
 
@@ -38,10 +39,8 @@ const roomOptions: RoomOptions = {
 // LiveKit Cloud 프로젝트 서버 URL — 고정값이라 매번 입력받을 필요 없음.
 const LIVEKIT_SERVER_URL = 'wss://plaiground-gkmfgv1j.livekit.cloud';
 
-// 지금 실제로 구현된 게임은 닌자뿐이라 gameId를 고정한다 — 코스에서 게임을 고르는 흐름이
-// 생기면 그쪽에서 받아오도록 교체.
+// gameId 고정 — 코스에서 게임을 고르는 흐름이 생기면 그쪽에서 받아오도록 교체.
 const NINJA_GAME_ID = 1;
-const DEFAULT_TOTAL_ROUNDS = 5;
 
 interface VideoCallRoomProps {
   // 방 생성/입장 플로우를 마치고 들어오는 화면이라, 여기 도달한 시점엔 넷 다 이미 확보돼 있다.
@@ -119,42 +118,69 @@ interface RoomContentProps {
 // 채팅 상태는 여기(useRoomChat)가 소유해서 화면 전환으로 패널이 리마운트돼도 내역이 유지된다.
 function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomContentProps) {
   // 게임이 실제로 열려 있는지(NinjaGamePanel이 폴링으로 판단)에 따라 대기방/게임 화면을 전환한다.
-  // 손 인식(GesturePanel/GestureBoard)은 게임 중에만 켠다.
+  // 손 인식(GesturePanel/GestureBoard)은 닌자 게임 중에만 켠다.
   const [gameActive, setGameActive] = useState(false);
-  const [seeding, setSeeding] = useState(false);
-  const [seedError, setSeedError] = useState<string | null>(null);
+  const [starting, setStarting] = useState(false);
+  const [startError, setStartError] = useState<string | null>(null);
   const { messages, sendMessage } = useRoomChat();
 
-  // 게임 시작 트리거(대기방→게임 자동시작 도메인이 아직 없어서 임시로 프론트가 seed를 호출).
-  const startGame = useCallback(
-    async (participantTokens: string[]) => {
-      setSeeding(true);
-      setSeedError(null);
-      try {
-        await ninjaApi.seed(roomId, NINJA_GAME_ID, participantTokens, DEFAULT_TOTAL_ROUNDS, accessToken);
-        // 세션이 열리면 NinjaGamePanel 폴링이 이를 감지해 onActiveChange(true)로 게임 화면으로 전환된다.
-      } catch (err) {
-        setSeedError(err instanceof NinjaApiError ? err.message : '게임 시작 실패');
-      } finally {
-        setSeeding(false);
-      }
-    },
-    [roomId, accessToken],
-  );
+  // 물건 가져오기 게임 상태 (LiveKit 데이터 채널 mock — Spring course/mission API 확정 전 임시)
+  const fetchGame = useFetchGame();
+  const fetchActive = fetchGame.state.phase !== 'idle';
+
+  // [개발 전용] /dev/fetch로 들어오면(?autostart=fetch) LiveKit 연결 완료 시 게임을 자동 시작 —
+  // 랜딩부터 클릭해 들어오는 번거로움 없이 게임 화면을 바로 확인하기 위함.
+  const [searchParams] = useSearchParams();
+  const connectionState = useConnectionState();
+  const autoStartedRef = useRef(false);
+  useEffect(() => {
+    if (autoStartedRef.current) return;
+    if (searchParams.get('autostart') !== 'fetch') return;
+    if (connectionState !== ConnectionState.Connected) return;
+    autoStartedRef.current = true;
+    // ?target=휴대폰 이 붙어 있으면 제시어 고정 (물건 없는 개발 환경용), 없으면 랜덤
+    void fetchGame.startGame(undefined, searchParams.get('target') ?? undefined);
+  }, [searchParams, connectionState, fetchGame.startGame]);
+
+  // 게임 시작 트리거 — 임시로 "게임 구성" mock 1세트인 물건 가져오기를 시작한다.
+  // (닌자는 기존 dev seed 방식이 NinjaGamePanel에 남아 있고, 코스 도메인이 생기면
+  //  세트 순서대로 게임을 고르는 흐름으로 교체)
+  const startGame = useCallback(async () => {
+    setStarting(true);
+    setStartError(null);
+    try {
+      await fetchGame.startGame();
+    } catch {
+      setStartError('게임 시작 실패 — AI 서버가 켜져 있는지 확인하세요');
+    } finally {
+      setStarting(false);
+    }
+  }, [fetchGame.startGame]);
 
   return (
     <>
-      {!gameActive && (
+      {!gameActive && !fetchActive && (
         <LobbyScreen
           roomId={roomId}
           accessToken={accessToken}
           participantId={participantId}
-          onStartGame={startGame}
-          starting={seeding}
-          startError={seedError}
+          onStartGame={() => void startGame()}
+          starting={starting}
+          startError={startError}
           onLeave={onLeave}
           chatMessages={messages}
           onSendChat={sendMessage}
+        />
+      )}
+      {fetchActive && (
+        <FetchObjectGame
+          state={fetchGame.state}
+          myNickname={fetchGame.myNickname}
+          onReportSuccess={fetchGame.reportSuccess}
+          onEndRound={fetchGame.endRound}
+          onNextRound={() => void fetchGame.nextRound()}
+          onExit={fetchGame.exitGame}
+          onLeave={onLeave}
         />
       )}
       {gameActive && (
