@@ -291,6 +291,115 @@ class CharadesGameServiceTest {
         );
     }
 
+    @Test
+    void returnsCurrentWordOnlyForPresenter() {
+        UUID presenterId = UUID.randomUUID();
+        Instant expiresAt = Instant.now().plusSeconds(60);
+        stubWordState(presenterId, expiresAt, CharadesTurnStatus.PLAYING);
+        when(missionRepository
+            .findByMissionIdAndGameGameIdAndTopicTopicIdAndMissionTypeAndIsActiveTrue(
+                42L,
+                GAME_ID,
+                TOPIC_ID,
+                "CHARADES"
+            )).thenReturn(Optional.of(mission(42L)));
+
+        var response = service.getCurrentWord(
+            roomId,
+            GAME_ID,
+            presenterId
+        );
+
+        assertThat(response.round()).isEqualTo(2);
+        assertThat(response.turn()).isEqualTo(3);
+        assertThat(response.word()).isEqualTo("제시어42");
+        assertThat(response.expiresAt()).isEqualTo(expiresAt);
+    }
+
+    @Test
+    void rejectsWordRequestFromNonPresenter() {
+        UUID presenterId = UUID.randomUUID();
+        stubWordState(
+            presenterId,
+            Instant.now().plusSeconds(60),
+            CharadesTurnStatus.PLAYING
+        );
+
+        assertBusinessError(
+            () -> service.getCurrentWord(
+                roomId,
+                GAME_ID,
+                UUID.randomUUID()
+            ),
+            ErrorCode.CHARADES_NOT_PRESENTER
+        );
+        verify(missionRepository, never())
+            .findByMissionIdAndGameGameIdAndTopicTopicIdAndMissionTypeAndIsActiveTrue(
+                any(), any(), any(), any()
+            );
+    }
+
+    @Test
+    void rejectsWordRequestAfterTurnExpires() {
+        UUID presenterId = UUID.randomUUID();
+        stubWordState(
+            presenterId,
+            Instant.now().minusSeconds(1),
+            CharadesTurnStatus.PLAYING
+        );
+
+        assertBusinessError(
+            () -> service.getCurrentWord(
+                roomId,
+                GAME_ID,
+                presenterId
+            ),
+            ErrorCode.CHARADES_TURN_EXPIRED
+        );
+    }
+
+    @Test
+    void rejectsWordRequestWhenTurnIsNotPlaying() {
+        UUID presenterId = UUID.randomUUID();
+        stubWordState(
+            presenterId,
+            Instant.now().plusSeconds(60),
+            CharadesTurnStatus.CORRECT
+        );
+
+        assertBusinessError(
+            () -> service.getCurrentWord(
+                roomId,
+                GAME_ID,
+                presenterId
+            ),
+            ErrorCode.CHARADES_TURN_NOT_PLAYING
+        );
+    }
+
+    @Test
+    void rejectsWordRequestForDifferentGame() {
+        UUID presenterId = UUID.randomUUID();
+        when(roomRepository.findById(roomId)).thenReturn(Optional.of(room));
+        when(charadesRedis.findState(ROOM_CODE, SESSION_SEQ))
+            .thenReturn(Optional.of(new CharadesGameState(
+                2, 3, 3, 3, TOPIC_ID, presenterId, 42L,
+                Instant.now().plusSeconds(60), CharadesTurnStatus.PLAYING
+            )));
+        when(missionTopicRepository
+            .existsByTopicIdAndGameGameIdAndIsActiveTrue(TOPIC_ID, GAME_ID))
+            .thenReturn(false);
+
+        assertBusinessError(
+            () -> service.getCurrentWord(
+                roomId,
+                GAME_ID,
+                presenterId
+            ),
+            ErrorCode.GAME_NOT_CURRENT
+        );
+    }
+
     private void stubValidStart(
         List<Participant> participants,
         int totalRounds
@@ -361,6 +470,29 @@ class CharadesGameServiceTest {
             any(Long.class),
             any(Instant.class)
         )).thenReturn(true);
+    }
+
+    private void stubWordState(
+        UUID presenterId,
+        Instant expiresAt,
+        CharadesTurnStatus status
+    ) {
+        when(roomRepository.findById(roomId)).thenReturn(Optional.of(room));
+        when(charadesRedis.findState(ROOM_CODE, SESSION_SEQ))
+            .thenReturn(Optional.of(new CharadesGameState(
+                2,
+                3,
+                3,
+                3,
+                TOPIC_ID,
+                presenterId,
+                42L,
+                expiresAt,
+                status
+            )));
+        when(missionTopicRepository
+            .existsByTopicIdAndGameGameIdAndIsActiveTrue(TOPIC_ID, GAME_ID))
+            .thenReturn(true);
     }
 
     private static List<Participant> participants(int count) {

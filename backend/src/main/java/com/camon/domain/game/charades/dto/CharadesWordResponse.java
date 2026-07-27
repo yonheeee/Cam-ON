@@ -4,6 +4,7 @@ import java.time.Instant;
 
 public record CharadesWordResponse(
     int round,
+    int turn,
     String word,
     Instant expiresAt
 ) {

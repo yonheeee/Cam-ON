@@ -18,7 +18,7 @@ No,게임 공통,백 -> 프,WS Event,게임 라운드 결과 브로드캐스트,
 No,물건 가져오기,프 -> 백,API,이번 라운드 제시 물건 조회,이번 라운드에 찾아야 할 물건(제시어)을 Spring이 MySQL에서 뽑아 응답,GET,,/api/games/{gameId}/fetch-object/mission,미구현,미구현,방 참가자,필요
 No,물건 가져오기,프 -> AI -> 프,API,물건 인식 요청,카메라 프레임 속 물체가 무엇인지 분류만 해서 응답(정답 여부는 판단 안 함),POST,,/ai/games/{gameId}/fetch-object/detections,미구현,미구현,방 참가자,필요
 No,물건 가져오기,프 -> 백,API,물건 인증 제출,AI가 분류한 물체 결과를 제출하면 Spring이 정답 여부와 제출 순서를 즉시 응답,POST,,/api/games/{gameId}/fetch-object/submissions,미구현,미구현,방 참가자,필요
-No,몸으로 말해요,프 -> 백,API,제시어 조회,출제자가 이번 라운드 제시어를 조회,GET,,/api/games/{gameId}/charades/word,미구현,미구현,출제자,필요
+Yes,몸으로 말해요,프 -> 백,API,제시어 조회,현재 표현자가 이번 턴의 제시어와 종료 시각을 조회,GET,,/api/games/{gameId}/charades/word,구현,미구현,표현자,필요
 No,몸으로 말해요,프 -> 백,API,정답 채팅 제출,채팅으로 정답을 시도하고 정답 여부를 즉시 응답받음,POST,,/api/games/{gameId}/charades/guesses,미구현,미구현,방 참가자,필요
 No,몸으로 말해요,백 -> 프,WS Event,채팅 메세지 브로드캐스트,제출된 채팅 내용을 방 참가자 전체에 실시간 전파,,chat:message-received,/ws/rooms/{roomId},미구현,미구현,방 참가자,필요
 No,손동작 스킬 배틀,프 -> AI,WebSocket,AI 게임 소켓 연결 확인,손동작 좌표 연속 전송용 AI 서버 소켓 연결 수립,,connect,/ws/ai/games/{gameId},미구현,미구현,방 참가자,필요

@@ -2,6 +2,7 @@ package com.camon.domain.game.charades.service;
 
 import com.camon.domain.game.charades.domain.CharadesGameState;
 import com.camon.domain.game.charades.domain.CharadesTurnStatus;
+import com.camon.domain.game.charades.dto.CharadesWordResponse;
 import com.camon.domain.game.charades.repository.CharadesRedisRepository;
 import com.camon.domain.game.charades.ws.CharadesEventPublisher;
 import com.camon.domain.game.charades.ws.payload.CharadesTurnStartedPayload;
@@ -144,6 +145,64 @@ public class CharadesGameService {
             }
         }
         return Optional.empty();
+    }
+
+    @Transactional(readOnly = true)
+    public CharadesWordResponse getCurrentWord(
+        UUID roomId,
+        Long gameId,
+        UUID participantId
+    ) {
+        Room room = resolveRoom(roomId);
+        int sessionSeq = room.currentSessionSeq();
+        CharadesGameState state = charadesRedis.findState(
+            room.roomCode(),
+            sessionSeq
+        ).orElseThrow(() ->
+            new BusinessException(ErrorCode.CHARADES_SESSION_NOT_FOUND)
+        );
+
+        if (!missionTopicRepository
+            .existsByTopicIdAndGameGameIdAndIsActiveTrue(
+                state.topicId(),
+                gameId
+            )) {
+            throw new BusinessException(ErrorCode.GAME_NOT_CURRENT);
+        }
+        if (state.status() != CharadesTurnStatus.PLAYING) {
+            throw new BusinessException(ErrorCode.CHARADES_TURN_NOT_PLAYING);
+        }
+        if (!participantId.equals(state.presenterId())) {
+            throw new BusinessException(ErrorCode.CHARADES_NOT_PRESENTER);
+        }
+        if (state.expiresAt() == null
+            || !Instant.now().isBefore(state.expiresAt())) {
+            throw new BusinessException(ErrorCode.CHARADES_TURN_EXPIRED);
+        }
+        if (state.missionId() == null) {
+            throw new BusinessException(ErrorCode.CHARADES_WORD_NOT_FOUND);
+        }
+
+        Mission mission = missionRepository
+            .findByMissionIdAndGameGameIdAndTopicTopicIdAndMissionTypeAndIsActiveTrue(
+                state.missionId(),
+                gameId,
+                state.topicId(),
+                MISSION_TYPE
+            )
+            .orElseThrow(() ->
+                new BusinessException(ErrorCode.CHARADES_WORD_NOT_FOUND)
+            );
+        if (mission.getKeyword() == null || mission.getKeyword().isBlank()) {
+            throw new BusinessException(ErrorCode.CHARADES_WORD_NOT_FOUND);
+        }
+
+        return new CharadesWordResponse(
+            state.currentRound(),
+            state.currentTurn(),
+            mission.getKeyword(),
+            state.expiresAt()
+        );
     }
 
     private CharadesTurnStartedPayload openTurn(
