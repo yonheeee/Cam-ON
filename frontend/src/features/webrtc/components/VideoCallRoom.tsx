@@ -7,6 +7,7 @@ import { GestureBoard } from '../../gesture/components/GestureBoard';
 import { NinjaGamePanel } from '../../ninja/components/NinjaGamePanel';
 import { RoomLobby } from '../../room/components/RoomLobby';
 import { ChatPanel } from '../../chat/components/ChatPanel';
+import { CharadesMicrophoneController } from '../../charades/components/CharadesMicrophoneController';
 import { useRoomHeartbeat } from '../../room/hooks/useRoomHeartbeat';
 import { clearRoom } from '../../room/lib/roomStorage';
 import { ninjaApi, NinjaApiError } from '../../ninja/api/ninjaApi';
@@ -60,6 +61,7 @@ export function VideoCallRoom({ accessToken, token, roomId, participantId }: Vid
   const [seeding, setSeeding] = useState(false);
   const [seedError, setSeedError] = useState<string | null>(null);
   const [connectionError, setConnectionError] = useState<string | null>(null);
+  const [isCharadesPresenter, setIsCharadesPresenter] = useState(false);
 
   // 게임 시작 트리거(대기방→게임 자동시작 도메인이 아직 없어서 임시로 프론트가 seed를 호출).
   const startGame = useCallback(
@@ -100,7 +102,19 @@ export function VideoCallRoom({ accessToken, token, roomId, participantId }: Vid
         }}
         onError={(err) => setConnectionError(err.message)}
       >
-        <VideoConference />
+        <VideoConference
+          className={
+            isCharadesPresenter
+              ? 'lk-video-conference video-call-room__charades-presenter'
+              : 'lk-video-conference'
+          }
+        />
+        <CharadesMicrophoneController
+          roomId={roomId}
+          accessToken={accessToken}
+          participantId={participantId}
+          onPresenterChange={setIsCharadesPresenter}
+        />
         {gameActive && <GesturePanel />}
         {gameActive && <GestureBoard />}
         {!gameActive && (

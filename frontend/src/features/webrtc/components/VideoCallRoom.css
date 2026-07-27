@@ -10,3 +10,24 @@
   z-index: 100;
   font-size: 0.9rem;
 }
+
+.video-call-room__charades-microphone {
+  position: fixed;
+  top: 4rem;
+  left: 50%;
+  z-index: 100;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: rgb(20 20 20 / 88%);
+  color: #fff;
+  padding: 0.55rem 1rem;
+  font-size: 0.9rem;
+}
+
+.video-call-room__charades-presenter
+  .lk-control-bar
+  [data-lk-source='microphone'] {
+  cursor: not-allowed;
+  opacity: 0.45;
+  pointer-events: none;
+}
