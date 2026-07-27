@@ -27,6 +27,13 @@ public enum ErrorCode {
     NINJA_INVALID_TARGET(HttpStatus.BAD_REQUEST, "공격 대상으로 지정할 수 없는 참가자입니다."),
     NINJA_NOT_ENOUGH_PLAYERS(HttpStatus.BAD_REQUEST, "닌자 게임은 최소 2명 이상이어야 시작할 수 있습니다."),
     NINJA_TOO_MANY_PLAYERS(HttpStatus.BAD_REQUEST, "닌자 게임은 최대 4명까지만 참가할 수 있습니다."),
+    CHARADES_SESSION_NOT_FOUND(HttpStatus.NOT_FOUND, "진행 중인 몸으로 말해요 게임 세션이 없습니다."),
+    CHARADES_NOT_ENOUGH_PLAYERS(HttpStatus.BAD_REQUEST, "몸으로 말해요는 최소 3명 이상이어야 시작할 수 있습니다."),
+    CHARADES_TOO_MANY_PLAYERS(HttpStatus.BAD_REQUEST, "몸으로 말해요는 최대 4명까지만 참가할 수 있습니다."),
+    CHARADES_INVALID_ROUND_COUNT(HttpStatus.BAD_REQUEST, "몸으로 말해요 라운드는 3, 5, 7, 9개 중 하나로 설정해야 합니다."),
+    CHARADES_TOPIC_NOT_FOUND(HttpStatus.NOT_FOUND, "선택할 수 없는 몸으로 말해요 주제입니다."),
+    CHARADES_NOT_ENOUGH_MISSIONS(HttpStatus.CONFLICT, "선택한 주제에 게임 진행에 필요한 제시어가 부족합니다."),
+    CHARADES_TURN_STILL_PLAYING(HttpStatus.CONFLICT, "현재 표현 턴이 아직 진행 중입니다."),
     GAME_NOT_CURRENT(HttpStatus.CONFLICT, "현재 진행 중인 게임이 아닙니다."),
     INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "서버 오류가 발생했습니다.");
 

@@ -1,0 +1,420 @@
+package com.camon.domain.game.charades.service;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import com.camon.domain.game.charades.domain.CharadesGameState;
+import com.camon.domain.game.charades.domain.CharadesTurnStatus;
+import com.camon.domain.game.charades.repository.CharadesRedisRepository;
+import com.camon.domain.game.charades.ws.CharadesEventPublisher;
+import com.camon.domain.game.charades.ws.payload.CharadesTurnStartedPayload;
+import com.camon.domain.game.common.Mission;
+import com.camon.domain.game.common.repository.MissionRepository;
+import com.camon.domain.game.common.repository.MissionTopicRepository;
+import com.camon.domain.game.common.ws.GameEventPublisher;
+import com.camon.domain.room.domain.ConnectionStatus;
+import com.camon.domain.room.domain.Participant;
+import com.camon.domain.room.domain.Room;
+import com.camon.domain.room.domain.RoomStatus;
+import com.camon.domain.room.repository.ParticipantRepository;
+import com.camon.domain.room.repository.RoomRepository;
+import com.camon.global.exception.BusinessException;
+import com.camon.global.exception.ErrorCode;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+@ExtendWith(MockitoExtension.class)
+class CharadesGameServiceTest {
+
+    private static final Long GAME_ID = 3L;
+    private static final Long TOPIC_ID = 7L;
+    private static final int SESSION_SEQ = 1;
+    private static final String ROOM_CODE = "CH4R4D";
+
+    @Mock
+    private RoomRepository roomRepository;
+    @Mock
+    private ParticipantRepository participantRepository;
+    @Mock
+    private MissionTopicRepository missionTopicRepository;
+    @Mock
+    private MissionRepository missionRepository;
+    @Mock
+    private CharadesRedisRepository charadesRedis;
+    @Mock
+    private GameEventPublisher gameEventPublisher;
+    @Mock
+    private CharadesEventPublisher charadesEventPublisher;
+
+    private CharadesGameService service;
+    private UUID roomId;
+    private Room room;
+
+    @BeforeEach
+    void setUp() {
+        service = new CharadesGameService(
+            roomRepository,
+            participantRepository,
+            missionTopicRepository,
+            missionRepository,
+            charadesRedis,
+            gameEventPublisher,
+            charadesEventPublisher
+        );
+        roomId = UUID.randomUUID();
+        room = new Room(
+            roomId,
+            ROOM_CODE,
+            UUID.randomUUID(),
+            4,
+            RoomStatus.PLAYING,
+            SESSION_SEQ,
+            Instant.parse("2026-07-27T00:00:00Z")
+        );
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void startsSessionWithConnectedParticipantsInJoinOrder() {
+        List<Participant> participants = participants(3);
+        stubValidStart(participants, 3);
+        Instant beforeStart = Instant.now();
+
+        CharadesTurnStartedPayload result = service.startSession(
+            roomId,
+            GAME_ID,
+            TOPIC_ID,
+            3
+        );
+
+        ArgumentCaptor<List<UUID>> orderCaptor = ArgumentCaptor.forClass(List.class);
+        verify(charadesRedis).initialize(
+            eq(ROOM_CODE),
+            eq(SESSION_SEQ),
+            eq(3),
+            eq(TOPIC_ID),
+            orderCaptor.capture()
+        );
+        assertThat(orderCaptor.getValue()).containsExactly(
+            participants.get(0).participantId(),
+            participants.get(1).participantId(),
+            participants.get(2).participantId()
+        );
+        verify(charadesRedis).openTurn(
+            eq(ROOM_CODE),
+            eq(SESSION_SEQ),
+            eq(1),
+            eq(1),
+            eq(participants.getFirst().participantId()),
+            eq(42L),
+            any(Instant.class)
+        );
+        verify(gameEventPublisher).publishStarted(
+            roomId,
+            GAME_ID,
+            SESSION_SEQ,
+            3
+        );
+        verify(charadesEventPublisher).publish(
+            eq(roomId),
+            eq("charades:turn-started"),
+            any(CharadesTurnStartedPayload.class)
+        );
+        assertThat(result.round()).isEqualTo(1);
+        assertThat(result.turn()).isEqualTo(1);
+        assertThat(result.totalTurnsInRound()).isEqualTo(3);
+        assertThat(result.presenterId())
+            .isEqualTo(participants.getFirst().participantId());
+        assertThat(result.expiresAt())
+            .isBetween(
+                beforeStart.plusSeconds(59),
+                Instant.now().plusSeconds(61)
+            );
+    }
+
+    @Test
+    void rejectsInvalidPlayerCount() {
+        when(roomRepository.findById(roomId)).thenReturn(Optional.of(room));
+        when(participantRepository.findAll(roomId))
+            .thenReturn(participants(2));
+
+        assertBusinessError(
+            () -> service.startSession(roomId, GAME_ID, TOPIC_ID, 3),
+            ErrorCode.CHARADES_NOT_ENOUGH_PLAYERS
+        );
+        verify(charadesRedis, never()).initialize(
+            any(), anyInt(), anyInt(), any(Long.class), anyList()
+        );
+    }
+
+    @Test
+    void rejectsInvalidRoundCountBeforeAccessingRoom() {
+        assertBusinessError(
+            () -> service.startSession(roomId, GAME_ID, TOPIC_ID, 4),
+            ErrorCode.CHARADES_INVALID_ROUND_COUNT
+        );
+        verify(roomRepository, never()).findById(any());
+    }
+
+    @Test
+    void rejectsTopicThatDoesNotBelongToCurrentGame() {
+        when(roomRepository.findById(roomId)).thenReturn(Optional.of(room));
+        when(participantRepository.findAll(roomId))
+            .thenReturn(participants(3));
+        when(missionTopicRepository
+            .existsByTopicIdAndGameGameIdAndIsActiveTrue(TOPIC_ID, GAME_ID))
+            .thenReturn(false);
+
+        assertBusinessError(
+            () -> service.startSession(roomId, GAME_ID, TOPIC_ID, 3),
+            ErrorCode.CHARADES_TOPIC_NOT_FOUND
+        );
+    }
+
+    @Test
+    void rejectsTopicWhenMissionCountCannotCoverEveryTurn() {
+        List<Participant> participants = participants(3);
+        when(roomRepository.findById(roomId)).thenReturn(Optional.of(room));
+        when(participantRepository.findAll(roomId)).thenReturn(participants);
+        when(missionTopicRepository
+            .existsByTopicIdAndGameGameIdAndIsActiveTrue(TOPIC_ID, GAME_ID))
+            .thenReturn(true);
+        when(missionRepository
+            .findAllByGameGameIdAndTopicTopicIdAndMissionTypeAndIsActiveTrue(
+                GAME_ID,
+                TOPIC_ID,
+                "CHARADES"
+            )).thenReturn(missions(8));
+
+        assertBusinessError(
+            () -> service.startSession(roomId, GAME_ID, TOPIC_ID, 3),
+            ErrorCode.CHARADES_NOT_ENOUGH_MISSIONS
+        );
+        verify(charadesRedis, never()).initialize(
+            any(), anyInt(), anyInt(), any(Long.class), anyList()
+        );
+    }
+
+    @Test
+    void skipsDisconnectedPresenterWhenStartingNextTurn() {
+        List<Participant> participants = participants(3);
+        UUID first = participants.get(0).participantId();
+        UUID second = participants.get(1).participantId();
+        UUID third = participants.get(2).participantId();
+        stubExistingSession(
+            new CharadesGameState(
+                1, 3, 1, 3, TOPIC_ID, first, 41L,
+                Instant.now(), CharadesTurnStatus.CORRECT
+            ),
+            List.of(first, second, third)
+        );
+        when(participantRepository.findById(roomId, second))
+            .thenReturn(Optional.of(disconnected(second)));
+        when(participantRepository.findById(roomId, third))
+            .thenReturn(Optional.of(participants.get(2)));
+
+        Optional<CharadesTurnStartedPayload> result =
+            service.startNextTurn(roomId);
+
+        assertThat(result).isPresent();
+        assertThat(result.orElseThrow().round()).isEqualTo(1);
+        assertThat(result.orElseThrow().turn()).isEqualTo(3);
+        assertThat(result.orElseThrow().presenterId()).isEqualTo(third);
+        verify(charadesRedis).openTurn(
+            eq(ROOM_CODE),
+            eq(SESSION_SEQ),
+            eq(1),
+            eq(3),
+            eq(third),
+            eq(42L),
+            any(Instant.class)
+        );
+    }
+
+    @Test
+    void wrapsPresenterOrderAtStartOfNextRound() {
+        List<Participant> participants = participants(3);
+        UUID first = participants.get(0).participantId();
+        UUID third = participants.get(2).participantId();
+        stubExistingSession(
+            new CharadesGameState(
+                1, 3, 3, 3, TOPIC_ID, third, 41L,
+                Instant.now(), CharadesTurnStatus.CORRECT
+            ),
+            participants.stream().map(Participant::participantId).toList()
+        );
+        when(participantRepository.findById(roomId, first))
+            .thenReturn(Optional.of(participants.get(0)));
+
+        CharadesTurnStartedPayload result = service.startNextTurn(roomId)
+            .orElseThrow();
+
+        assertThat(result.round()).isEqualTo(2);
+        assertThat(result.turn()).isEqualTo(1);
+        assertThat(result.presenterId()).isEqualTo(first);
+    }
+
+    @Test
+    void doesNotAdvanceWhileCurrentTurnIsPlaying() {
+        UUID presenterId = UUID.randomUUID();
+        when(roomRepository.findById(roomId)).thenReturn(Optional.of(room));
+        when(charadesRedis.findState(ROOM_CODE, SESSION_SEQ))
+            .thenReturn(Optional.of(new CharadesGameState(
+                1, 3, 1, 3, TOPIC_ID, presenterId, 41L,
+                Instant.now(), CharadesTurnStatus.PLAYING
+            )));
+
+        assertBusinessError(
+            () -> service.startNextTurn(roomId),
+            ErrorCode.CHARADES_TURN_STILL_PLAYING
+        );
+        verify(charadesRedis, never()).openTurn(
+            any(), anyInt(), anyInt(), anyInt(),
+            any(), any(Long.class), any(Instant.class)
+        );
+    }
+
+    private void stubValidStart(
+        List<Participant> participants,
+        int totalRounds
+    ) {
+        when(roomRepository.findById(roomId)).thenReturn(Optional.of(room));
+        when(participantRepository.findAll(roomId)).thenReturn(participants);
+        when(missionTopicRepository
+            .existsByTopicIdAndGameGameIdAndIsActiveTrue(TOPIC_ID, GAME_ID))
+            .thenReturn(true);
+        when(missionRepository
+            .findAllByGameGameIdAndTopicTopicIdAndMissionTypeAndIsActiveTrue(
+                GAME_ID,
+                TOPIC_ID,
+                "CHARADES"
+            )).thenReturn(missions(participants.size() * totalRounds));
+        when(charadesRedis.findState(ROOM_CODE, SESSION_SEQ))
+            .thenReturn(Optional.of(new CharadesGameState(
+                0,
+                totalRounds,
+                0,
+                participants.size(),
+                TOPIC_ID,
+                null,
+                null,
+                null,
+                CharadesTurnStatus.READY
+            )));
+        when(charadesRedis.getUsedMissionIds(ROOM_CODE, SESSION_SEQ))
+            .thenReturn(Set.of());
+        when(missionRepository
+            .findAllByTopicTopicIdAndMissionTypeAndIsActiveTrue(
+                TOPIC_ID,
+                "CHARADES"
+            )).thenReturn(List.of(mission(42L)));
+        when(charadesRedis.openTurn(
+            eq(ROOM_CODE),
+            eq(SESSION_SEQ),
+            anyInt(),
+            anyInt(),
+            any(UUID.class),
+            any(Long.class),
+            any(Instant.class)
+        )).thenReturn(true);
+    }
+
+    private void stubExistingSession(
+        CharadesGameState state,
+        List<UUID> presenterOrder
+    ) {
+        when(roomRepository.findById(roomId)).thenReturn(Optional.of(room));
+        when(charadesRedis.findState(ROOM_CODE, SESSION_SEQ))
+            .thenReturn(Optional.of(state));
+        when(charadesRedis.getPresenterOrder(ROOM_CODE, SESSION_SEQ))
+            .thenReturn(presenterOrder);
+        when(charadesRedis.getUsedMissionIds(ROOM_CODE, SESSION_SEQ))
+            .thenReturn(Set.of(41L));
+        when(missionRepository
+            .findAllByTopicTopicIdAndMissionTypeAndIsActiveTrue(
+                TOPIC_ID,
+                "CHARADES"
+            )).thenReturn(List.of(mission(42L)));
+        when(charadesRedis.openTurn(
+            eq(ROOM_CODE),
+            eq(SESSION_SEQ),
+            anyInt(),
+            anyInt(),
+            any(UUID.class),
+            any(Long.class),
+            any(Instant.class)
+        )).thenReturn(true);
+    }
+
+    private static List<Participant> participants(int count) {
+        List<Participant> participants = new ArrayList<>();
+        Instant joinedAt = Instant.parse("2026-07-27T00:00:00Z");
+        for (int index = 0; index < count; index++) {
+            participants.add(new Participant(
+                UUID.randomUUID(),
+                "참가자" + index,
+                true,
+                ConnectionStatus.CONNECTED,
+                joinedAt.plusSeconds(index)
+            ));
+        }
+        return List.copyOf(participants);
+    }
+
+    private static Participant disconnected(UUID participantId) {
+        return new Participant(
+            participantId,
+            "연결 끊김",
+            true,
+            ConnectionStatus.DISCONNECTED,
+            Instant.now()
+        );
+    }
+
+    private static List<Mission> missions(int count) {
+        List<Mission> missions = new ArrayList<>();
+        for (long id = 1; id <= count; id++) {
+            missions.add(mission(id));
+        }
+        return List.copyOf(missions);
+    }
+
+    private static Mission mission(long id) {
+        return Mission.builder()
+            .missionId(id)
+            .missionType("CHARADES")
+            .keyword("제시어" + id)
+            .difficulty("NORMAL")
+            .isActive(true)
+            .build();
+    }
+
+    private static void assertBusinessError(
+        org.assertj.core.api.ThrowableAssert.ThrowingCallable action,
+        ErrorCode expected
+    ) {
+        assertThatThrownBy(action)
+            .isInstanceOfSatisfying(
+                BusinessException.class,
+                exception -> assertThat(exception.errorCode())
+                    .isEqualTo(expected)
+            );
+    }
+}
