@@ -1,88 +1,69 @@
 # 물건 가져오기 미션 후보 풀 (임시 mock).
 # 최종적으로는 MySQL missions 테이블이 원본이고, 이 파일은 백엔드 미션 확정 전까지의 기본값이다.
 #
-# 선정 기준: 1인 가구/자취방에서 쉽게 구할 수 있는 물건 + 제시어 간 원자성.
-# 단, 원자성은 "형태/용도" 기준으로만 나눈다 — "재질" 기준 세분화(머그컵/플라스틱 컵/종이컵)는
-# 실테스트에서 탈락: 홀더 낀 플라스틱 컵이 종이컵으로 인식되는 등 재질은 조명/부착물에
-# 쉽게 뒤집히는 모호한 기준이었다. 그래서 컵은 종이컵 하나만 둔다.
+# 선정 기준:
+# - 1인 가구/자취방에서 쉽게 구할 수 있고, 서로 시각적으로 확실히 구분되는(원자성) 물건만
+# - 재질 기준 세분화(머그컵/플라스틱컵)는 실테스트 탈락 — 조명/부착물에 쉽게 뒤집힘
+# - 한 제시어가 여러 형태를 허용할 수 있다 (라면 = 봉지/컵 모두 OK, 가방 = 백팩/크로스백 모두 OK)
+#   → 라벨당 프롬프트를 여러 개 두면 점수는 그중 최고점으로 합산된다 (main.py의 라벨별 max)
 #
-# SigLIP은 영어 프롬프트가 가장 안정적이라 ko(제시어) → en(프롬프트용 구문)을 함께 관리한다.
-# 프롬프트 템플릿은 SigLIP 공식 문서 권장 형태("This is a photo of {}.")를 쓴다.
+# 이전 버전 풀(50종 v1, 20종 v2)은 git 히스토리 참고.
 
 PROMPT_TEMPLATE = "This is a photo of {}."
 
-# 제시어(한국어) → 영어 프롬프트 구문
-MISSION_POOL: dict[str, str] = {
-    # ---- 주방/식사 ----
-    "종이컵": "a disposable paper cup",
-    "숟가락": "a metal spoon",
-    "젓가락": "a pair of chopsticks",
-    "포크": "a fork",
-    "그릇": "a bowl",
-    "접시": "a plate",
-    "컵라면": "a cup of instant noodles",
-    "봉지라면": "an unopened packet of instant ramen noodles",
-    "즉석밥": "a plastic container of instant microwavable rice",
-    "생수병": "a plastic water bottle",
-    "캔음료": "an aluminum beverage can",
-    "프라이팬": "a frying pan",
-    "냄비": "a cooking pot",
-    "국자": "a ladle",
-    "가위": "scissors",
-    "주방세제": "a bottle of dish soap",
-    # ---- 생활/욕실 ----
-    "칫솔": "a toothbrush",
-    "치약": "a tube of toothpaste",
-    "수건": "a towel",
-    "휴지": "a roll of toilet paper",
-    "물티슈": "a pack of wet wipes",
-    "샴푸통": "a bottle of shampoo",
-    "빗": "a hair comb",
-    "손톱깎이": "a nail clipper",
-    "면봉": "cotton swabs",
-    "헤어드라이어": "a hair dryer",
-    # ---- 책상/전자기기 ----
-    "휴대폰": "a smartphone",
-    "노트북": "a laptop computer",
-    "무선 이어폰": "wireless earbuds",
-    "유선 이어폰": "wired earphones with a cable",
-    "충전기": "a wall charger power adapter",
-    "충전 케이블": "a USB charging cable",
-    "마우스": "a computer mouse",
-    "키보드": "a computer keyboard",
-    "리모컨": "a remote control",
-    "보조배터리": "a portable power bank",
-    "볼펜": "a ballpoint pen",
-    "공책": "a paper notebook",
-    "책": "a book",
-    "포스트잇": "a pad of sticky notes",
-    "테이프": "a roll of adhesive tape",
-    # ---- 의류/기타 ----
-    "안경": "a pair of glasses",
-    "모자": "a baseball cap",
-    "양말": "a pair of socks",
-    "마스크": "a disposable face mask",
-    "우산": "an umbrella",
-    "지갑": "a wallet",
-    "열쇠": "a key",
-    "인형": "a stuffed toy",
-    "옷걸이": "a clothes hanger",
+# 제시어(한국어) → 허용하는 영어 프롬프트 구문들
+MISSION_POOL: dict[str, list[str]] = {
+    "휴대폰": ["a smartphone"],
+    "마우스": [
+        "a computer mouse",
+        # 버티컬(에르고) 마우스가 일반 프롬프트로는 0.4 문턱을 못 넘어서 변형 추가
+        "a vertical ergonomic computer mouse",
+        "a wireless computer mouse",
+    ],
+    "가위": ["scissors"],
+    "숟가락": ["a metal spoon"],
+    "안경": ["a pair of glasses"],
+    "칫솔": ["a toothbrush"],
+    "라면": [
+        "an unopened packet of instant ramen noodles",
+        "a cup of instant noodles",
+    ],
+    "헤어드라이어": ["a hair dryer"],
+    "우산": ["an umbrella"],
+    "그릇": ["a bowl", "a plate", "a ceramic dish"],
+    "모자": ["a baseball cap", "a hat", "a beanie"],
+    "가방": ["a backpack", "a crossbody bag", "a handbag", "a tote bag"],
+    # 여기에 자유롭게 추가 — "제시어": ["허용 형태 1", "허용 형태 2", ...]
 }
 
-# 오인식 방지용 네거티브 — "아무것도 안 들고 있는" 상황이 어떤 물건으로 오판되지 않게
-# 후보에 항상 포함시킨다. detected_value가 이것으로 나오면 "인식 실패"로 취급.
+# 오인식 방지용 네거티브. 두 부류로 나뉜다:
+# 1) "아무것도 없음" 계열 — 빈 손/얼굴/배경이 물건으로 오판되지 않게
+# 2) "정체불명 물건" 계열 (open-set 거부) — 풀에 없는 물건을 들었을 때 특정 라벨이 아니라
+#    이쪽에 흡수되게 해서, 미등록 물건이 오인 판정되는 걸 막는다.
+# 여러 개여도 같은 라벨(_none)로 합산(최고점)되므로 rank를 1자리만 차지한다.
 NEGATIVE_LABEL = "_none"
 NEGATIVE_PROMPTS = [
+    # 아무것도 없음
     "a person's face",
     "an empty hand",
     "an empty room",
+    # 정체불명 물건 (open-set 흡수)
+    "a hand holding an unidentifiable object",
+    "a hand holding some random household item",
 ]
 
 
 def build_candidates(extra_target: str | None = None) -> tuple[list[str], list[str]]:
-    """(라벨 목록, 프롬프트 목록)을 만든다. extra_target이 풀에 없는 새 제시어면 후보에 추가."""
-    labels = list(MISSION_POOL.keys())
-    prompts = [PROMPT_TEMPLATE.format(en) for en in MISSION_POOL.values()]
+    """(라벨 목록, 프롬프트 목록)을 만든다. 라벨당 프롬프트가 여러 개면 같은 라벨을 반복해서
+    붙인다 — 점수 집계(main.py)가 같은 라벨을 최고점으로 합치므로 앙상블처럼 동작한다.
+    extra_target이 풀에 없는 새 제시어면 후보에 추가."""
+    labels: list[str] = []
+    prompts: list[str] = []
+
+    for ko, variants in MISSION_POOL.items():
+        for variant in variants:
+            labels.append(ko)
+            prompts.append(PROMPT_TEMPLATE.format(variant))
 
     if extra_target and extra_target not in MISSION_POOL:
         labels.append(extra_target)
