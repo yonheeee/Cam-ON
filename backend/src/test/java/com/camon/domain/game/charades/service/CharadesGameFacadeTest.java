@@ -6,6 +6,8 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.camon.domain.game.charades.dto.CharadesGuessRequest;
+import com.camon.domain.game.charades.dto.CharadesGuessResponse;
 import com.camon.domain.game.charades.dto.CharadesWordResponse;
 import com.camon.domain.room.domain.ConnectionStatus;
 import com.camon.domain.room.domain.Participant;
@@ -105,5 +107,34 @@ class CharadesGameFacadeTest {
         );
         verify(charadesGameService, never())
             .getCurrentWord(roomId, 3L, participantId);
+    }
+
+    @Test
+    void resolvesCurrentRoomAndDelegatesGuessSubmission() {
+        Long gameId = 3L;
+        Participant participant = new Participant(
+            participantId,
+            "정답도전자",
+            true,
+            ConnectionStatus.CONNECTED,
+            Instant.now()
+        );
+        CharadesGuessRequest request = new CharadesGuessRequest("축구");
+        CharadesGuessResponse expected =
+            new CharadesGuessResponse(1, 2, true);
+        when(participantRepository.findCurrentRoomId(participantId))
+            .thenReturn(Optional.of(roomId));
+        when(roomRepository.findById(roomId)).thenReturn(Optional.of(room));
+        when(participantRepository.findById(roomId, participantId))
+            .thenReturn(Optional.of(participant));
+        when(charadesGameService.submitGuess(
+            roomId,
+            gameId,
+            participant,
+            request
+        )).thenReturn(expected);
+
+        assertThat(facade.submitGuess(gameId, participantId, request))
+            .isEqualTo(expected);
     }
 }

@@ -2,10 +2,14 @@ package com.camon.domain.game.charades.service;
 
 import com.camon.domain.game.charades.domain.CharadesGameState;
 import com.camon.domain.game.charades.domain.CharadesTurnStatus;
+import com.camon.domain.game.charades.dto.CharadesGuessRequest;
+import com.camon.domain.game.charades.dto.CharadesGuessResponse;
 import com.camon.domain.game.charades.dto.CharadesWordResponse;
 import com.camon.domain.game.charades.repository.CharadesRedisRepository;
 import com.camon.domain.game.charades.ws.CharadesEventPublisher;
+import com.camon.domain.game.charades.ws.payload.CharadesAnswerRevealedPayload;
 import com.camon.domain.game.charades.ws.payload.CharadesTurnStartedPayload;
+import com.camon.domain.game.charades.ws.payload.ChatMessageReceivedPayload;
 import com.camon.domain.game.common.Mission;
 import com.camon.domain.game.common.repository.MissionRepository;
 import com.camon.domain.game.common.repository.MissionTopicRepository;
@@ -37,12 +41,15 @@ public class CharadesGameService {
 
     private static final String MISSION_TYPE = "CHARADES";
     private static final String TURN_STARTED_EVENT = "charades:turn-started";
+    private static final String CHAT_MESSAGE_EVENT = "chat:message-received";
+    private static final String ANSWER_REVEALED_EVENT = "charades:answer-revealed";
 
     private final RoomRepository roomRepository;
     private final ParticipantRepository participantRepository;
     private final MissionTopicRepository missionTopicRepository;
     private final MissionRepository missionRepository;
     private final CharadesRedisRepository charadesRedis;
+    private final CharadesAnswerMatcher answerMatcher;
     private final GameEventPublisher gameEventPublisher;
     private final CharadesEventPublisher charadesEventPublisher;
 
@@ -52,6 +59,7 @@ public class CharadesGameService {
         MissionTopicRepository missionTopicRepository,
         MissionRepository missionRepository,
         CharadesRedisRepository charadesRedis,
+        CharadesAnswerMatcher answerMatcher,
         GameEventPublisher gameEventPublisher,
         CharadesEventPublisher charadesEventPublisher
     ) {
@@ -60,6 +68,7 @@ public class CharadesGameService {
         this.missionTopicRepository = missionTopicRepository;
         this.missionRepository = missionRepository;
         this.charadesRedis = charadesRedis;
+        this.answerMatcher = answerMatcher;
         this.gameEventPublisher = gameEventPublisher;
         this.charadesEventPublisher = charadesEventPublisher;
     }
@@ -162,46 +171,90 @@ public class CharadesGameService {
             new BusinessException(ErrorCode.CHARADES_SESSION_NOT_FOUND)
         );
 
-        if (!missionTopicRepository
-            .existsByTopicIdAndGameGameIdAndIsActiveTrue(
-                state.topicId(),
-                gameId
-            )) {
-            throw new BusinessException(ErrorCode.GAME_NOT_CURRENT);
-        }
-        if (state.status() != CharadesTurnStatus.PLAYING) {
-            throw new BusinessException(ErrorCode.CHARADES_TURN_NOT_PLAYING);
-        }
+        requireCurrentGame(state, gameId);
+        requirePlayingTurn(state);
         if (!participantId.equals(state.presenterId())) {
             throw new BusinessException(ErrorCode.CHARADES_NOT_PRESENTER);
         }
-        if (state.expiresAt() == null
-            || !Instant.now().isBefore(state.expiresAt())) {
-            throw new BusinessException(ErrorCode.CHARADES_TURN_EXPIRED);
-        }
-        if (state.missionId() == null) {
-            throw new BusinessException(ErrorCode.CHARADES_WORD_NOT_FOUND);
-        }
-
-        Mission mission = missionRepository
-            .findByMissionIdAndGameGameIdAndTopicTopicIdAndMissionTypeAndIsActiveTrue(
-                state.missionId(),
-                gameId,
-                state.topicId(),
-                MISSION_TYPE
-            )
-            .orElseThrow(() ->
-                new BusinessException(ErrorCode.CHARADES_WORD_NOT_FOUND)
-            );
-        if (mission.getKeyword() == null || mission.getKeyword().isBlank()) {
-            throw new BusinessException(ErrorCode.CHARADES_WORD_NOT_FOUND);
-        }
+        requireNotExpired(state, Instant.now());
+        Mission mission = findCurrentMission(state, gameId);
 
         return new CharadesWordResponse(
             state.currentRound(),
             state.currentTurn(),
             mission.getKeyword(),
             state.expiresAt()
+        );
+    }
+
+    @Transactional
+    public CharadesGuessResponse submitGuess(
+        UUID roomId,
+        Long gameId,
+        Participant participant,
+        CharadesGuessRequest request
+    ) {
+        Room room = resolveRoom(roomId);
+        int sessionSeq = room.currentSessionSeq();
+        CharadesGameState state = charadesRedis.findState(
+            room.roomCode(),
+            sessionSeq
+        ).orElseThrow(() ->
+            new BusinessException(ErrorCode.CHARADES_SESSION_NOT_FOUND)
+        );
+
+        requireCurrentGame(state, gameId);
+        requirePlayingTurn(state);
+        if (participant.participantId().equals(state.presenterId())) {
+            throw new BusinessException(
+                ErrorCode.CHARADES_PRESENTER_CANNOT_GUESS
+            );
+        }
+
+        Instant submittedAt = Instant.now();
+        requireNotExpired(state, submittedAt);
+        Mission mission = findCurrentMission(state, gameId);
+        boolean matches = answerMatcher.matches(
+            request.text(),
+            mission.getKeyword()
+        );
+        boolean correct = matches && charadesRedis.claimCorrectAnswer(
+            room.roomCode(),
+            sessionSeq,
+            participant.participantId(),
+            submittedAt
+        );
+
+        charadesEventPublisher.publish(
+            room.roomId(),
+            CHAT_MESSAGE_EVENT,
+            new ChatMessageReceivedPayload(
+                state.currentRound(),
+                state.currentTurn(),
+                participant.participantId(),
+                participant.nickname(),
+                request.text(),
+                submittedAt
+            )
+        );
+        if (correct) {
+            charadesEventPublisher.publish(
+                room.roomId(),
+                ANSWER_REVEALED_EVENT,
+                new CharadesAnswerRevealedPayload(
+                    state.currentRound(),
+                    state.currentTurn(),
+                    state.presenterId(),
+                    participant.participantId(),
+                    submittedAt
+                )
+            );
+        }
+
+        return new CharadesGuessResponse(
+            state.currentRound(),
+            state.currentTurn(),
+            correct
         );
     }
 
@@ -263,6 +316,57 @@ public class CharadesGameService {
             throw new BusinessException(ErrorCode.CHARADES_NOT_ENOUGH_MISSIONS);
         }
         return available.get(ThreadLocalRandom.current().nextInt(available.size()));
+    }
+
+    private void requireCurrentGame(
+        CharadesGameState state,
+        Long gameId
+    ) {
+        if (!missionTopicRepository
+            .existsByTopicIdAndGameGameIdAndIsActiveTrue(
+                state.topicId(),
+                gameId
+            )) {
+            throw new BusinessException(ErrorCode.GAME_NOT_CURRENT);
+        }
+    }
+
+    private static void requirePlayingTurn(CharadesGameState state) {
+        if (state.status() != CharadesTurnStatus.PLAYING) {
+            throw new BusinessException(ErrorCode.CHARADES_TURN_NOT_PLAYING);
+        }
+    }
+
+    private static void requireNotExpired(
+        CharadesGameState state,
+        Instant now
+    ) {
+        if (state.expiresAt() == null || !now.isBefore(state.expiresAt())) {
+            throw new BusinessException(ErrorCode.CHARADES_TURN_EXPIRED);
+        }
+    }
+
+    private Mission findCurrentMission(
+        CharadesGameState state,
+        Long gameId
+    ) {
+        if (state.missionId() == null) {
+            throw new BusinessException(ErrorCode.CHARADES_WORD_NOT_FOUND);
+        }
+        Mission mission = missionRepository
+            .findByMissionIdAndGameGameIdAndTopicTopicIdAndMissionTypeAndIsActiveTrue(
+                state.missionId(),
+                gameId,
+                state.topicId(),
+                MISSION_TYPE
+            )
+            .orElseThrow(() ->
+                new BusinessException(ErrorCode.CHARADES_WORD_NOT_FOUND)
+            );
+        if (mission.getKeyword() == null || mission.getKeyword().isBlank()) {
+            throw new BusinessException(ErrorCode.CHARADES_WORD_NOT_FOUND);
+        }
+        return mission;
     }
 
     private List<Mission> findTopicMissions(Long gameId, Long topicId) {

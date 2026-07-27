@@ -3,12 +3,11 @@ package com.camon.domain.game.charades.ws.payload;
 import java.time.Instant;
 import java.util.UUID;
 
-public record ChatMessageReceivedPayload(
+public record CharadesAnswerRevealedPayload(
     int round,
     int turn,
-    UUID participantId,
-    String nickname,
-    String text,
-    Instant submittedAt
+    UUID presenterId,
+    UUID answererId,
+    Instant answeredAt
 ) {
 }

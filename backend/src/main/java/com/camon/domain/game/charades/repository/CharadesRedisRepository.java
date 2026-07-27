@@ -27,6 +27,8 @@ public class CharadesRedisRepository {
     private static final String MISSION_ID_FIELD = "mission_id";
     private static final String EXPIRES_AT_FIELD = "expires_at";
     private static final String STATUS_FIELD = "status";
+    private static final String CORRECT_PARTICIPANT_ID_FIELD = "correct_participant_id";
+    private static final String ANSWERED_AT_FIELD = "answered_at";
 
     private static final DefaultRedisScript<Long> INITIALIZE_SCRIPT =
         new DefaultRedisScript<>("""
@@ -49,6 +51,9 @@ public class CharadesRedisRepository {
             if redis.call('EXISTS', KEYS[1]) == 0 then
                 return 0
             end
+            redis.call('HDEL', KEYS[1],
+                'correct_participant_id',
+                'answered_at')
             redis.call('HSET', KEYS[1],
                 'current_round', ARGV[1],
                 'current_turn', ARGV[2],
@@ -66,6 +71,18 @@ public class CharadesRedisRepository {
                 return 0
             end
             redis.call('HSET', KEYS[1], 'status', ARGV[2])
+            return 1
+            """, Long.class);
+
+    private static final DefaultRedisScript<Long> CLAIM_CORRECT_ANSWER_SCRIPT =
+        new DefaultRedisScript<>("""
+            if redis.call('HGET', KEYS[1], 'status') ~= 'PLAYING' then
+                return 0
+            end
+            redis.call('HSET', KEYS[1],
+                'status', 'CORRECT',
+                'correct_participant_id', ARGV[1],
+                'answered_at', ARGV[2])
             return 1
             """, Long.class);
 
@@ -222,6 +239,49 @@ public class CharadesRedisRepository {
             target.name()
         );
         return requiredResult(result) == 1L;
+    }
+
+    public boolean claimCorrectAnswer(
+        String roomCode,
+        int sessionSeq,
+        UUID participantId,
+        Instant answeredAt
+    ) {
+        validatePosition(roomCode, sessionSeq);
+        if (participantId == null) {
+            throw new IllegalArgumentException("participantId must not be null");
+        }
+        if (answeredAt == null) {
+            throw new IllegalArgumentException("answeredAt must not be null");
+        }
+
+        Long result = redis.execute(
+            CLAIM_CORRECT_ANSWER_SCRIPT,
+            List.of(CharadesRedisKeys.state(roomCode, sessionSeq)),
+            participantId.toString(),
+            Long.toString(answeredAt.toEpochMilli())
+        );
+        return requiredResult(result) == 1L;
+    }
+
+    public UUID getCorrectParticipantId(String roomCode, int sessionSeq) {
+        validatePosition(roomCode, sessionSeq);
+        Object value = redis.opsForHash().get(
+            CharadesRedisKeys.state(roomCode, sessionSeq),
+            CORRECT_PARTICIPANT_ID_FIELD
+        );
+        return value == null ? null : UUID.fromString(value.toString());
+    }
+
+    public Instant getAnsweredAt(String roomCode, int sessionSeq) {
+        validatePosition(roomCode, sessionSeq);
+        Object value = redis.opsForHash().get(
+            CharadesRedisKeys.state(roomCode, sessionSeq),
+            ANSWERED_AT_FIELD
+        );
+        return value == null
+            ? null
+            : Instant.ofEpochMilli(Long.parseLong(value.toString()));
     }
 
     public void clear(String roomCode, int sessionSeq) {

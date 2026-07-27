@@ -37,6 +37,7 @@ public enum ErrorCode {
     CHARADES_TURN_NOT_PLAYING(HttpStatus.CONFLICT, "현재 진행 중인 몸으로 말해요 표현 턴이 없습니다."),
     CHARADES_TURN_EXPIRED(HttpStatus.CONFLICT, "현재 몸으로 말해요 표현 턴의 제한시간이 지났습니다."),
     CHARADES_NOT_PRESENTER(HttpStatus.FORBIDDEN, "현재 표현자만 제시어를 조회할 수 있습니다."),
+    CHARADES_PRESENTER_CANNOT_GUESS(HttpStatus.FORBIDDEN, "현재 표현자는 정답을 제출할 수 없습니다."),
     CHARADES_WORD_NOT_FOUND(HttpStatus.NOT_FOUND, "현재 턴의 제시어를 찾을 수 없습니다."),
     GAME_NOT_CURRENT(HttpStatus.CONFLICT, "현재 진행 중인 게임이 아닙니다."),
     INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "서버 오류가 발생했습니다.");

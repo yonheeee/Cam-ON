@@ -12,9 +12,12 @@ import static org.mockito.Mockito.when;
 
 import com.camon.domain.game.charades.domain.CharadesGameState;
 import com.camon.domain.game.charades.domain.CharadesTurnStatus;
+import com.camon.domain.game.charades.dto.CharadesGuessRequest;
 import com.camon.domain.game.charades.repository.CharadesRedisRepository;
 import com.camon.domain.game.charades.ws.CharadesEventPublisher;
+import com.camon.domain.game.charades.ws.payload.CharadesAnswerRevealedPayload;
 import com.camon.domain.game.charades.ws.payload.CharadesTurnStartedPayload;
+import com.camon.domain.game.charades.ws.payload.ChatMessageReceivedPayload;
 import com.camon.domain.game.common.Mission;
 import com.camon.domain.game.common.repository.MissionRepository;
 import com.camon.domain.game.common.repository.MissionTopicRepository;
@@ -63,6 +66,8 @@ class CharadesGameServiceTest {
     @Mock
     private CharadesEventPublisher charadesEventPublisher;
 
+    private final CharadesAnswerMatcher answerMatcher =
+        new CharadesAnswerMatcher();
     private CharadesGameService service;
     private UUID roomId;
     private Room room;
@@ -75,6 +80,7 @@ class CharadesGameServiceTest {
             missionTopicRepository,
             missionRepository,
             charadesRedis,
+            answerMatcher,
             gameEventPublisher,
             charadesEventPublisher
         );
@@ -400,6 +406,149 @@ class CharadesGameServiceTest {
         );
     }
 
+    @Test
+    void broadcastsWrongGuessAsChatWithoutClosingTurn() {
+        UUID presenterId = UUID.randomUUID();
+        Participant guesser = participant(UUID.randomUUID(), "정답도전자");
+        stubGuessState(presenterId, "축구", Instant.now().plusSeconds(60));
+
+        var response = service.submitGuess(
+            roomId, GAME_ID, guesser, new CharadesGuessRequest("농구")
+        );
+
+        assertThat(response.round()).isEqualTo(2);
+        assertThat(response.turn()).isEqualTo(3);
+        assertThat(response.correct()).isFalse();
+        verify(charadesRedis, never()).claimCorrectAnswer(
+            any(), anyInt(), any(), any()
+        );
+        verify(charadesEventPublisher).publish(
+            eq(roomId),
+            eq("chat:message-received"),
+            any(ChatMessageReceivedPayload.class)
+        );
+        verify(charadesEventPublisher, never()).publish(
+            eq(roomId),
+            eq("charades:answer-revealed"),
+            any(CharadesAnswerRevealedPayload.class)
+        );
+    }
+
+    @Test
+    void firstMatchingGuessClaimsAnswerAndRevealsWinner() {
+        UUID presenterId = UUID.randomUUID();
+        Participant guesser = participant(UUID.randomUUID(), "정답도전자");
+        stubGuessState(
+            presenterId, "babyshark", Instant.now().plusSeconds(60)
+        );
+        when(charadesRedis.claimCorrectAnswer(
+            eq(ROOM_CODE),
+            eq(SESSION_SEQ),
+            eq(guesser.participantId()),
+            any(Instant.class)
+        )).thenReturn(true);
+
+        var response = service.submitGuess(
+            roomId, GAME_ID, guesser, new CharadesGuessRequest("BABY SHARK")
+        );
+
+        assertThat(response.correct()).isTrue();
+        verify(charadesEventPublisher).publish(
+            eq(roomId),
+            eq("chat:message-received"),
+            any(ChatMessageReceivedPayload.class)
+        );
+        verify(charadesEventPublisher).publish(
+            eq(roomId),
+            eq("charades:answer-revealed"),
+            any(CharadesAnswerRevealedPayload.class)
+        );
+    }
+
+    @Test
+    void matchingGuessThatLosesAtomicClaimIsNotAccepted() {
+        UUID presenterId = UUID.randomUUID();
+        Participant guesser = participant(UUID.randomUUID(), "늦은도전자");
+        stubGuessState(presenterId, "축구", Instant.now().plusSeconds(60));
+        when(charadesRedis.claimCorrectAnswer(
+            eq(ROOM_CODE),
+            eq(SESSION_SEQ),
+            eq(guesser.participantId()),
+            any(Instant.class)
+        )).thenReturn(false);
+
+        var response = service.submitGuess(
+            roomId, GAME_ID, guesser, new CharadesGuessRequest("축 구")
+        );
+
+        assertThat(response.correct()).isFalse();
+        verify(charadesEventPublisher, never()).publish(
+            eq(roomId),
+            eq("charades:answer-revealed"),
+            any(CharadesAnswerRevealedPayload.class)
+        );
+    }
+
+    @Test
+    void visibleSpecialCharacterMakesGuessIncorrect() {
+        UUID presenterId = UUID.randomUUID();
+        Participant guesser = participant(UUID.randomUUID(), "정답도전자");
+        stubGuessState(presenterId, "축구", Instant.now().plusSeconds(60));
+
+        var response = service.submitGuess(
+            roomId, GAME_ID, guesser, new CharadesGuessRequest("축구!")
+        );
+
+        assertThat(response.correct()).isFalse();
+        verify(charadesRedis, never()).claimCorrectAnswer(
+            any(), anyInt(), any(), any()
+        );
+    }
+
+    @Test
+    void presenterCannotSubmitGuess() {
+        UUID presenterId = UUID.randomUUID();
+        Participant presenter = participant(presenterId, "표현자");
+        stubWordState(
+            presenterId,
+            Instant.now().plusSeconds(60),
+            CharadesTurnStatus.PLAYING
+        );
+
+        assertBusinessError(
+            () -> service.submitGuess(
+                roomId,
+                GAME_ID,
+                presenter,
+                new CharadesGuessRequest("축구")
+            ),
+            ErrorCode.CHARADES_PRESENTER_CANNOT_GUESS
+        );
+        verify(charadesEventPublisher, never()).publish(any(), any(), any());
+    }
+
+    @Test
+    void rejectsGuessAfterTurnExpires() {
+        UUID presenterId = UUID.randomUUID();
+        Participant guesser = participant(UUID.randomUUID(), "정답도전자");
+        stubWordState(
+            presenterId,
+            Instant.now().minusSeconds(1),
+            CharadesTurnStatus.PLAYING
+        );
+
+        assertBusinessError(
+            () -> service.submitGuess(
+                roomId,
+                GAME_ID,
+                guesser,
+                new CharadesGuessRequest("축구")
+            ),
+            ErrorCode.CHARADES_TURN_EXPIRED
+        );
+        verify(charadesEventPublisher, never()).publish(any(), any(), any());
+    }
+
     private void stubValidStart(
         List<Participant> participants,
         int totalRounds
@@ -495,6 +644,25 @@ class CharadesGameServiceTest {
             .thenReturn(true);
     }
 
+    private void stubGuessState(
+        UUID presenterId,
+        String keyword,
+        Instant expiresAt
+    ) {
+        stubWordState(
+            presenterId,
+            expiresAt,
+            CharadesTurnStatus.PLAYING
+        );
+        when(missionRepository
+            .findByMissionIdAndGameGameIdAndTopicTopicIdAndMissionTypeAndIsActiveTrue(
+                42L,
+                GAME_ID,
+                TOPIC_ID,
+                "CHARADES"
+            )).thenReturn(Optional.of(missionWithKeyword(42L, keyword)));
+    }
+
     private static List<Participant> participants(int count) {
         List<Participant> participants = new ArrayList<>();
         Instant joinedAt = Instant.parse("2026-07-27T00:00:00Z");
@@ -520,12 +688,32 @@ class CharadesGameServiceTest {
         );
     }
 
+    private static Participant participant(UUID participantId, String nickname) {
+        return new Participant(
+            participantId,
+            nickname,
+            true,
+            ConnectionStatus.CONNECTED,
+            Instant.now()
+        );
+    }
+
     private static List<Mission> missions(int count) {
         List<Mission> missions = new ArrayList<>();
         for (long id = 1; id <= count; id++) {
             missions.add(mission(id));
         }
         return List.copyOf(missions);
+    }
+
+    private static Mission missionWithKeyword(long id, String keyword) {
+        return Mission.builder()
+            .missionId(id)
+            .missionType("CHARADES")
+            .keyword(keyword)
+            .difficulty("NORMAL")
+            .isActive(true)
+            .build();
     }
 
     private static Mission mission(long id) {

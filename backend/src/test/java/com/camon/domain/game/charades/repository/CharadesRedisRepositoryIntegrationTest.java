@@ -178,6 +178,76 @@ class CharadesRedisRepositoryIntegrationTest {
     }
 
     @Test
+    void acceptsOnlyFirstCorrectAnswerAndRecordsWinner() {
+        UUID presenterId = UUID.randomUUID();
+        UUID firstAnswererId = UUID.randomUUID();
+        UUID secondAnswererId = UUID.randomUUID();
+        Instant answeredAt = Instant.parse("2026-07-27T12:01:30.123Z");
+        repository.initialize(
+            ROOM_CODE,
+            SESSION_SEQ,
+            3,
+            7L,
+            List.of(presenterId, firstAnswererId, secondAnswererId)
+        );
+        repository.openTurn(
+            ROOM_CODE,
+            SESSION_SEQ,
+            1,
+            1,
+            presenterId,
+            1L,
+            answeredAt.plusSeconds(30)
+        );
+
+        assertThat(repository.claimCorrectAnswer(
+            ROOM_CODE,
+            SESSION_SEQ,
+            firstAnswererId,
+            answeredAt
+        )).isTrue();
+        assertThat(repository.claimCorrectAnswer(
+            ROOM_CODE,
+            SESSION_SEQ,
+            secondAnswererId,
+            answeredAt.plusMillis(1)
+        )).isFalse();
+        assertThat(repository.getCorrectParticipantId(ROOM_CODE, SESSION_SEQ))
+            .isEqualTo(firstAnswererId);
+        assertThat(repository.getAnsweredAt(ROOM_CODE, SESSION_SEQ))
+            .isEqualTo(answeredAt);
+        assertThat(repository.findState(ROOM_CODE, SESSION_SEQ).orElseThrow().status())
+            .isEqualTo(CharadesTurnStatus.CORRECT);
+    }
+
+    @Test
+    void openingNextTurnClearsPreviousAnswerWinner() {
+        UUID presenterId = UUID.randomUUID();
+        UUID answererId = UUID.randomUUID();
+        repository.initialize(
+            ROOM_CODE,
+            SESSION_SEQ,
+            3,
+            7L,
+            List.of(presenterId, answererId, UUID.randomUUID())
+        );
+        repository.openTurn(
+            ROOM_CODE, SESSION_SEQ, 1, 1, presenterId, 1L, Instant.now()
+        );
+        repository.claimCorrectAnswer(
+            ROOM_CODE, SESSION_SEQ, answererId, Instant.now()
+        );
+
+        repository.openTurn(
+            ROOM_CODE, SESSION_SEQ, 1, 2, answererId, 2L, Instant.now()
+        );
+
+        assertThat(repository.getCorrectParticipantId(ROOM_CODE, SESSION_SEQ))
+            .isNull();
+        assertThat(repository.getAnsweredAt(ROOM_CODE, SESSION_SEQ)).isNull();
+    }
+
+    @Test
     void concurrentStatusTransitionsHaveExactlyOneWinner() throws Exception {
         UUID presenterId = UUID.randomUUID();
         repository.initialize(
