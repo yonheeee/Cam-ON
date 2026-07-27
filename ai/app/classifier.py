@@ -2,9 +2,12 @@ import torch
 from PIL import Image
 from transformers import AutoModel, AutoProcessor
 
-# 기본은 CPU 개발용 base 모델. GPU 서버에선 환경변수로 so400m을 지정한다:
-#   AI_MODEL_ID=google/siglip2-so400m-patch14-384
-DEFAULT_MODEL_ID = "google/siglip2-base-patch16-224"
+# 모델은 장비에 맞춰 자동 선택 (AI_MODEL_ID env로 강제 지정 가능):
+#   GPU(cuda) → so400m: 실사용 모델 — 정확도·해상도(384px) 우위, fp16 VRAM 3~4GB, 왕복 ~100ms
+#   CPU       → base:   동작 확인용 소형(~800MB) — CPU에서 so400m은 프레임당 수 초라 비실용적
+GPU_MODEL_ID = "google/siglip2-so400m-patch14-384"
+CPU_MODEL_ID = "google/siglip2-base-patch16-224"
+DEFAULT_MODEL_ID = GPU_MODEL_ID if torch.cuda.is_available() else CPU_MODEL_ID
 
 
 class SiglipClassifier:
