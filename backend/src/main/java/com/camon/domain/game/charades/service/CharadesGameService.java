@@ -9,14 +9,19 @@ import com.camon.domain.game.charades.repository.CharadesRedisRepository;
 import com.camon.domain.game.charades.ws.CharadesEventPublisher;
 import com.camon.domain.game.charades.ws.payload.CharadesAnswerRevealedPayload;
 import com.camon.domain.game.charades.ws.payload.CharadesGameEndedPayload;
+import com.camon.domain.game.charades.ws.payload.CharadesRankingEntry;
 import com.camon.domain.game.charades.ws.payload.CharadesRoundInvalidatedPayload;
+import com.camon.domain.game.charades.ws.payload.CharadesRoundScoredPayload;
 import com.camon.domain.game.charades.ws.payload.CharadesRoundStartedPayload;
 import com.camon.domain.game.charades.ws.payload.CharadesRoundTimeoutPayload;
+import com.camon.domain.game.charades.ws.payload.CharadesScoreEntry;
 import com.camon.domain.game.charades.ws.payload.CharadesTurnStartedPayload;
 import com.camon.domain.game.charades.ws.payload.ChatMessageReceivedPayload;
 import com.camon.domain.game.common.Mission;
 import com.camon.domain.game.common.repository.MissionRepository;
 import com.camon.domain.game.common.repository.MissionTopicRepository;
+import com.camon.domain.game.common.repository.SaveRoundResult;
+import com.camon.domain.game.common.service.GameScoreService;
 import com.camon.domain.game.common.ws.GameEventPublisher;
 import com.camon.domain.room.domain.ConnectionStatus;
 import com.camon.domain.room.domain.Participant;
@@ -27,6 +32,9 @@ import com.camon.global.exception.BusinessException;
 import com.camon.global.exception.ErrorCode;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -55,6 +63,7 @@ public class CharadesGameService {
     private static final String ROUND_TIMEOUT_EVENT = "charades:round-timeout";
     private static final String ROUND_INVALIDATED_EVENT =
         "charades:round-invalidated";
+    private static final String ROUND_SCORED_EVENT = "charades:round-scored";
     private static final String GAME_ENDED_EVENT = "charades:game-ended";
 
     private final RoomRepository roomRepository;
@@ -63,6 +72,7 @@ public class CharadesGameService {
     private final MissionRepository missionRepository;
     private final CharadesRedisRepository charadesRedis;
     private final CharadesAnswerMatcher answerMatcher;
+    private final GameScoreService gameScoreService;
     private final GameEventPublisher gameEventPublisher;
     private final CharadesEventPublisher charadesEventPublisher;
     private final TaskScheduler taskScheduler;
@@ -76,6 +86,7 @@ public class CharadesGameService {
         MissionRepository missionRepository,
         CharadesRedisRepository charadesRedis,
         CharadesAnswerMatcher answerMatcher,
+        GameScoreService gameScoreService,
         GameEventPublisher gameEventPublisher,
         CharadesEventPublisher charadesEventPublisher,
         TaskScheduler taskScheduler
@@ -86,6 +97,7 @@ public class CharadesGameService {
         this.missionRepository = missionRepository;
         this.charadesRedis = charadesRedis;
         this.answerMatcher = answerMatcher;
+        this.gameScoreService = gameScoreService;
         this.gameEventPublisher = gameEventPublisher;
         this.charadesEventPublisher = charadesEventPublisher;
         this.taskScheduler = taskScheduler;
@@ -176,11 +188,15 @@ public class CharadesGameService {
                 turn = 1;
             }
             if (round > state.totalRounds()) {
+                saveCompletedRound(room, sessionSeq, state.currentRound());
                 return Optional.empty();
             }
 
             UUID candidate = presenterOrder.get(turn - 1);
             if (isConnected(roomId, candidate)) {
+                if (round > state.currentRound()) {
+                    saveCompletedRound(room, sessionSeq, state.currentRound());
+                }
                 return Optional.of(
                     openTurn(
                         room,
@@ -524,10 +540,140 @@ public class CharadesGameService {
             GAME_ENDED_EVENT,
             new CharadesGameEndedPayload(
                 state.totalRounds(),
-                Instant.now()
+                Instant.now(),
+                buildFinalRanking(room, sessionSeq)
             )
         );
         charadesRedis.clear(room.roomCode(), sessionSeq);
+    }
+
+    private void saveCompletedRound(
+        Room room,
+        int sessionSeq,
+        int round
+    ) {
+        List<UUID> participantOrder = charadesRedis.getPresenterOrder(
+            room.roomCode(),
+            sessionSeq
+        );
+        Map<UUID, Long> earnedScores = charadesRedis.getRoundScores(
+            room.roomCode(),
+            sessionSeq,
+            round
+        );
+        LinkedHashMap<UUID, Long> roundScores = new LinkedHashMap<>();
+        participantOrder.forEach(participantId ->
+            roundScores.put(
+                participantId,
+                earnedScores.getOrDefault(participantId, 0L)
+            )
+        );
+
+        SaveRoundResult result = gameScoreService.saveRoundScores(
+            room.roomId(),
+            sessionSeq,
+            round,
+            roundScores
+        );
+        if (result == SaveRoundResult.ALREADY_SAVED) {
+            return;
+        }
+        if (result != SaveRoundResult.SUCCESS) {
+            throw new IllegalStateException(
+                "Failed to save charades round score: " + result
+            );
+        }
+
+        Map<UUID, Long> totals = gameScoreService.getSessionTotals(
+            room.roomId(),
+            sessionSeq
+        );
+        charadesEventPublisher.publish(
+            room.roomId(),
+            ROUND_SCORED_EVENT,
+            new CharadesRoundScoredPayload(
+                round,
+                buildRoundScoreEntries(participantOrder, roundScores, totals)
+            )
+        );
+    }
+
+    private List<CharadesScoreEntry> buildRoundScoreEntries(
+        List<UUID> participantOrder,
+        Map<UUID, Long> roundScores,
+        Map<UUID, Long> totals
+    ) {
+        Map<UUID, Integer> ranks = calculateRanks(participantOrder, totals);
+        return participantOrder.stream()
+            .map(participantId -> new CharadesScoreEntry(
+                participantId,
+                roundScores.getOrDefault(participantId, 0L),
+                totals.getOrDefault(participantId, 0L),
+                ranks.get(participantId)
+            ))
+            .sorted(
+                Comparator.comparingInt(CharadesScoreEntry::rank)
+                    .thenComparing(entry -> participantOrder.indexOf(
+                        entry.participantId()
+                    ))
+            )
+            .toList();
+    }
+
+    private List<CharadesRankingEntry> buildFinalRanking(
+        Room room,
+        int sessionSeq
+    ) {
+        List<UUID> participantOrder = charadesRedis.getPresenterOrder(
+            room.roomCode(),
+            sessionSeq
+        );
+        Map<UUID, Long> totals = gameScoreService.getSessionTotals(
+            room.roomId(),
+            sessionSeq
+        );
+        Map<UUID, Integer> ranks = calculateRanks(participantOrder, totals);
+        return participantOrder.stream()
+            .map(participantId -> new CharadesRankingEntry(
+                participantId,
+                totals.getOrDefault(participantId, 0L),
+                ranks.get(participantId)
+            ))
+            .sorted(
+                Comparator.comparingInt(CharadesRankingEntry::rank)
+                    .thenComparing(entry -> participantOrder.indexOf(
+                        entry.participantId()
+                    ))
+            )
+            .toList();
+    }
+
+    private static Map<UUID, Integer> calculateRanks(
+        List<UUID> participantOrder,
+        Map<UUID, Long> totals
+    ) {
+        List<UUID> sorted = new ArrayList<>(participantOrder);
+        sorted.sort(
+            Comparator.comparingLong(
+                (UUID participantId) ->
+                    totals.getOrDefault(participantId, 0L)
+            ).reversed()
+        );
+
+        LinkedHashMap<UUID, Integer> ranks = new LinkedHashMap<>();
+        Long previousScore = null;
+        int previousRank = 0;
+        for (int index = 0; index < sorted.size(); index++) {
+            UUID participantId = sorted.get(index);
+            long score = totals.getOrDefault(participantId, 0L);
+            int rank = previousScore != null && previousScore == score
+                ? previousRank
+                : index + 1;
+            ranks.put(participantId, rank);
+            previousScore = score;
+            previousRank = rank;
+        }
+        return Map.copyOf(ranks);
     }
 
     private static boolean isScheduledTurn(

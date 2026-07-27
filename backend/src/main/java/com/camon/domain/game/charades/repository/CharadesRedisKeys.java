@@ -19,6 +19,14 @@ final class CharadesRedisKeys {
         return state(roomCode, sessionSeq) + ":used_missions";
     }
 
+    static String roundScores(String roomCode, int sessionSeq) {
+        return state(roomCode, sessionSeq) + ":round_scores";
+    }
+
+    static String round(String roomCode, int sessionSeq, int round) {
+        return session(roomCode, sessionSeq) + ":round:" + round;
+    }
+
     private static String session(String roomCode, int sessionSeq) {
         return ROOM_PREFIX + roomCode + ":session:" + sessionSeq;
     }

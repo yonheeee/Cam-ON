@@ -32,7 +32,7 @@ public class CharadesRedisRepository {
 
     private static final DefaultRedisScript<Long> INITIALIZE_SCRIPT =
         new DefaultRedisScript<>("""
-            redis.call('DEL', KEYS[1], KEYS[2], KEYS[3])
+            redis.call('DEL', KEYS[1], KEYS[2], KEYS[3], KEYS[4])
             redis.call('HSET', KEYS[1],
                 'current_round', '0',
                 'total_rounds', ARGV[1],
@@ -62,6 +62,7 @@ public class CharadesRedisRepository {
                 'expires_at', ARGV[5],
                 'status', 'PLAYING')
             redis.call('SADD', KEYS[2], ARGV[4])
+            redis.call('HSETNX', KEYS[3], 'round', ARGV[1])
             return 1
             """, Long.class);
 
@@ -79,16 +80,20 @@ public class CharadesRedisRepository {
             if redis.call('HGET', KEYS[1], 'status') ~= 'PLAYING' then
                 return 0
             end
+            local round = redis.call('HGET', KEYS[1], 'current_round')
+            local presenterId = redis.call('HGET', KEYS[1], 'presenter_id')
             redis.call('HSET', KEYS[1],
                 'status', 'CORRECT',
                 'correct_participant_id', ARGV[1],
                 'answered_at', ARGV[2])
+            redis.call('HINCRBY', KEYS[2], round .. ':' .. presenterId, 1)
+            redis.call('HINCRBY', KEYS[2], round .. ':' .. ARGV[1], 1)
             return 1
             """, Long.class);
 
     private static final DefaultRedisScript<Long> CLEAR_SCRIPT =
         new DefaultRedisScript<>("""
-            return redis.call('DEL', KEYS[1], KEYS[2], KEYS[3])
+            return redis.call('DEL', KEYS[1], KEYS[2], KEYS[3], KEYS[4])
             """, Long.class);
 
     private final StringRedisTemplate redis;
@@ -120,7 +125,8 @@ public class CharadesRedisRepository {
             List.of(
                 CharadesRedisKeys.state(roomCode, sessionSeq),
                 CharadesRedisKeys.presenterOrder(roomCode, sessionSeq),
-                CharadesRedisKeys.usedMissions(roomCode, sessionSeq)
+                CharadesRedisKeys.usedMissions(roomCode, sessionSeq),
+                CharadesRedisKeys.roundScores(roomCode, sessionSeq)
             ),
             arguments.toArray()
         );
@@ -156,7 +162,8 @@ public class CharadesRedisRepository {
             OPEN_TURN_SCRIPT,
             List.of(
                 CharadesRedisKeys.state(roomCode, sessionSeq),
-                CharadesRedisKeys.usedMissions(roomCode, sessionSeq)
+                CharadesRedisKeys.usedMissions(roomCode, sessionSeq),
+                CharadesRedisKeys.round(roomCode, sessionSeq, round)
             ),
             Integer.toString(round),
             Integer.toString(turn),
@@ -257,11 +264,39 @@ public class CharadesRedisRepository {
 
         Long result = redis.execute(
             CLAIM_CORRECT_ANSWER_SCRIPT,
-            List.of(CharadesRedisKeys.state(roomCode, sessionSeq)),
+            List.of(
+                CharadesRedisKeys.state(roomCode, sessionSeq),
+                CharadesRedisKeys.roundScores(roomCode, sessionSeq)
+            ),
             participantId.toString(),
             Long.toString(answeredAt.toEpochMilli())
         );
         return requiredResult(result) == 1L;
+    }
+
+    public Map<UUID, Long> getRoundScores(
+        String roomCode,
+        int sessionSeq,
+        int round
+    ) {
+        validatePosition(roomCode, sessionSeq);
+        if (round < 1) {
+            throw new IllegalArgumentException("round must be at least 1");
+        }
+
+        String prefix = round + ":";
+        Map<Object, Object> values = redis.opsForHash()
+            .entries(CharadesRedisKeys.roundScores(roomCode, sessionSeq));
+        java.util.LinkedHashMap<UUID, Long> scores = new java.util.LinkedHashMap<>();
+        values.entrySet().stream()
+            .filter(entry -> entry.getKey().toString().startsWith(prefix))
+            .map(entry -> Map.entry(
+                UUID.fromString(entry.getKey().toString().substring(prefix.length())),
+                Long.parseLong(entry.getValue().toString())
+            ))
+            .sorted(Map.Entry.comparingByKey())
+            .forEach(entry -> scores.put(entry.getKey(), entry.getValue()));
+        return Map.copyOf(scores);
     }
 
     public UUID getCorrectParticipantId(String roomCode, int sessionSeq) {
@@ -291,7 +326,8 @@ public class CharadesRedisRepository {
             List.of(
                 CharadesRedisKeys.state(roomCode, sessionSeq),
                 CharadesRedisKeys.presenterOrder(roomCode, sessionSeq),
-                CharadesRedisKeys.usedMissions(roomCode, sessionSeq)
+                CharadesRedisKeys.usedMissions(roomCode, sessionSeq),
+                CharadesRedisKeys.roundScores(roomCode, sessionSeq)
             )
         );
     }

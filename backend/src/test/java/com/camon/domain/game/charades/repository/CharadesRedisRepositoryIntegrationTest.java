@@ -8,6 +8,7 @@ import com.camon.domain.game.charades.domain.CharadesTurnStatus;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
@@ -218,6 +219,11 @@ class CharadesRedisRepositoryIntegrationTest {
             .isEqualTo(answeredAt);
         assertThat(repository.findState(ROOM_CODE, SESSION_SEQ).orElseThrow().status())
             .isEqualTo(CharadesTurnStatus.CORRECT);
+        assertThat(repository.getRoundScores(ROOM_CODE, SESSION_SEQ, 1))
+            .containsExactlyInAnyOrderEntriesOf(Map.of(
+                presenterId, 1L,
+                firstAnswererId, 1L
+            ));
     }
 
     @Test
@@ -353,6 +359,7 @@ class CharadesRedisRepositoryIntegrationTest {
         assertThat(repository.findState(ROOM_CODE, SESSION_SEQ)).isEmpty();
         assertThat(repository.getPresenterOrder(ROOM_CODE, SESSION_SEQ)).isEmpty();
         assertThat(repository.getUsedMissionIds(ROOM_CODE, SESSION_SEQ)).isEmpty();
+        assertThat(repository.getRoundScores(ROOM_CODE, SESSION_SEQ, 1)).isEmpty();
         assertThat(redis.opsForHash().get(sessionKey, "game_id")).isEqualTo("3");
     }
 

@@ -9,6 +9,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -20,6 +21,7 @@ import com.camon.domain.game.charades.ws.CharadesEventPublisher;
 import com.camon.domain.game.charades.ws.payload.CharadesAnswerRevealedPayload;
 import com.camon.domain.game.charades.ws.payload.CharadesGameEndedPayload;
 import com.camon.domain.game.charades.ws.payload.CharadesRoundInvalidatedPayload;
+import com.camon.domain.game.charades.ws.payload.CharadesRoundScoredPayload;
 import com.camon.domain.game.charades.ws.payload.CharadesRoundStartedPayload;
 import com.camon.domain.game.charades.ws.payload.CharadesRoundTimeoutPayload;
 import com.camon.domain.game.charades.ws.payload.CharadesTurnStartedPayload;
@@ -27,6 +29,8 @@ import com.camon.domain.game.charades.ws.payload.ChatMessageReceivedPayload;
 import com.camon.domain.game.common.Mission;
 import com.camon.domain.game.common.repository.MissionRepository;
 import com.camon.domain.game.common.repository.MissionTopicRepository;
+import com.camon.domain.game.common.repository.SaveRoundResult;
+import com.camon.domain.game.common.service.GameScoreService;
 import com.camon.domain.game.common.ws.GameEventPublisher;
 import com.camon.domain.room.domain.ConnectionStatus;
 import com.camon.domain.room.domain.Participant;
@@ -39,6 +43,7 @@ import com.camon.global.exception.ErrorCode;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -70,6 +75,8 @@ class CharadesGameServiceTest {
     @Mock
     private CharadesRedisRepository charadesRedis;
     @Mock
+    private GameScoreService gameScoreService;
+    @Mock
     private GameEventPublisher gameEventPublisher;
     @Mock
     private CharadesEventPublisher charadesEventPublisher;
@@ -91,10 +98,16 @@ class CharadesGameServiceTest {
             missionRepository,
             charadesRedis,
             answerMatcher,
+            gameScoreService,
             gameEventPublisher,
             charadesEventPublisher,
             taskScheduler
         );
+        lenient().when(gameScoreService.saveRoundScores(
+            any(), anyInt(), anyInt(), any()
+        )).thenReturn(SaveRoundResult.SUCCESS);
+        lenient().when(gameScoreService.getSessionTotals(any(), anyInt()))
+            .thenReturn(Map.of());
         roomId = UUID.randomUUID();
         room = new Room(
             roomId,
@@ -269,6 +282,7 @@ class CharadesGameServiceTest {
     void wrapsPresenterOrderAtStartOfNextRound() {
         List<Participant> participants = participants(3);
         UUID first = participants.get(0).participantId();
+        UUID second = participants.get(1).participantId();
         UUID third = participants.get(2).participantId();
         stubExistingSession(
             new CharadesGameState(
@@ -279,6 +293,10 @@ class CharadesGameServiceTest {
         );
         when(participantRepository.findById(roomId, first))
             .thenReturn(Optional.of(participants.get(0)));
+        when(charadesRedis.getRoundScores(ROOM_CODE, SESSION_SEQ, 1))
+            .thenReturn(Map.of(first, 2L, second, 1L, third, 1L));
+        when(gameScoreService.getSessionTotals(roomId, SESSION_SEQ))
+            .thenReturn(Map.of(first, 2L, second, 1L, third, 1L));
 
         CharadesTurnStartedPayload result = service.startNextTurn(roomId)
             .orElseThrow();
@@ -286,6 +304,26 @@ class CharadesGameServiceTest {
         assertThat(result.round()).isEqualTo(2);
         assertThat(result.turn()).isEqualTo(1);
         assertThat(result.presenterId()).isEqualTo(first);
+        verify(gameScoreService).saveRoundScores(
+            roomId,
+            SESSION_SEQ,
+            1,
+            Map.of(first, 2L, second, 1L, third, 1L)
+        );
+        ArgumentCaptor<CharadesRoundScoredPayload> scoreCaptor =
+            ArgumentCaptor.forClass(CharadesRoundScoredPayload.class);
+        verify(charadesEventPublisher).publish(
+            eq(roomId),
+            eq("charades:round-scored"),
+            scoreCaptor.capture()
+        );
+        assertThat(scoreCaptor.getValue().scores())
+            .extracting("participantId", "roundScore", "totalScore", "rank")
+            .containsExactly(
+                org.assertj.core.groups.Tuple.tuple(first, 2L, 2L, 1),
+                org.assertj.core.groups.Tuple.tuple(second, 1L, 1L, 2),
+                org.assertj.core.groups.Tuple.tuple(third, 1L, 1L, 2)
+            );
     }
 
     @Test
