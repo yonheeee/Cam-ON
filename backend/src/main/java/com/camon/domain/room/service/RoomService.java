@@ -90,7 +90,9 @@ public class RoomService {
             Participant host = new Participant(
                 participantId,
                 guestSession.nickname(),
-                false,
+                // 방장은 준비 토글 대신 "게임 시작" 버튼을 쓰므로 생성 시점부터 준비 완료로 둔다
+                // (UI에도 방장이 "준비됨"으로 표시되고, 게임 시작의 전원-ready 검사도 특별취급 불필요).
+                true,
                 ConnectionStatus.CONNECTED,
                 createdAt
             );
