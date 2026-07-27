@@ -119,22 +119,7 @@ export const ninjaApi = {
       body: JSON.stringify({ targetToken }),
     }),
 
-  // TEMP — 대기방에서 방장이 "게임 시작"을 누르면 자동으로 열려야 할 세션을 수동으로 튼다.
-  // backend의 DevNinjaSeedController(/api/dev/ninja/seed)가 없어지면 이 함수도 같이 지우면 된다.
-  seed: (
-    roomId: string,
-    gameId: number,
-    participantTokens: string[],
-    totalRounds: number,
-    accessToken: string,
-  ) =>
-    request<void>(`/api/dev/ninja/seed`, accessToken, {
-      method: 'POST',
-      body: JSON.stringify({ roomId, gameId, participantTokens, totalRounds }),
-    }),
-
-  // TEMP — 테스트 중 판을 통째로 리셋하는 버튼용. seed와 마찬가지로 room/course/session
-  // 도메인이 생기면 지운다.
+  // TEMP — 테스트 중 판을 통째로 리셋하는 버튼용. room/course/session 도메인이 완성되면 지운다.
   reset: (roomId: string, accessToken: string) =>
     request<void>(`/api/dev/ninja/reset`, accessToken, {
       method: 'POST',

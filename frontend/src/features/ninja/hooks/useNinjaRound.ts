@@ -28,7 +28,6 @@ export function useNinjaRound(
   const [ranking, setRanking] = useState<RankingEntry[]>([]);
   const [requiredSkill, setRequiredSkill] = useState<RoundSkillResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [seeding, setSeeding] = useState(false);
 
   // requiredSkill이 실제로 바뀔 때만(=라운드 전환) 새 배열이 되도록 메모.
   // 그냥 매 렌더 .map()을 새로 만들면 참조가 매번 달라져서, useSequenceProgress의
@@ -146,27 +145,6 @@ export function useNinjaRound(
     void submitTarget(others[0]);
   }, [participantId, round, currentAttackerToken, alivePlayers, submitTarget]);
 
-  const seed = useCallback(
-    async (participantTokens: string[], totalRoundsInput: number) => {
-      setSeeding(true);
-      setError(null);
-      try {
-        await ninjaApi.seed(roomId, gameId, participantTokens, totalRoundsInput, accessToken);
-        // 새 게임도 라운드 번호가 1부터 다시 시작되는데, 이 ref들이 이전 판 값(예: 1)을 그대로
-        // 들고 있으면 "같은 라운드 번호엔 한 번만 제출"이라는 중복 방지 로직이 새 판의 그 라운드를
-        // 스킵해버린다 — 리셋해야 새 판에서도 정상적으로 공격/대상 지정이 제출된다.
-        attackedRoundRef.current = null;
-        targetedRoundRef.current = null;
-        await poll();
-      } catch (err) {
-        setError(err instanceof NinjaApiError ? err.message : '게임 시작 실패');
-      } finally {
-        setSeeding(false);
-      }
-    },
-    [poll, roomId, gameId, accessToken],
-  );
-
   const [resetting, setResetting] = useState(false);
   const resetGame = useCallback(async () => {
     setResetting(true);
@@ -237,9 +215,7 @@ export function useNinjaRound(
     ranking,
     gameEnded,
     error,
-    seeding,
     submitTarget,
-    seed,
     resetGame,
     resetting,
     resetSequence: reset,

@@ -11,7 +11,7 @@ import { useRoomChat } from '../../chat/hooks/useRoomChat';
 import { PixelConfirmModal } from '../../system/components/PixelConfirmModal';
 import { useRoomHeartbeat } from '../../room/hooks/useRoomHeartbeat';
 import { clearRoom } from '../../room/lib/roomStorage';
-import { ninjaApi, NinjaApiError } from '../../ninja/api/ninjaApi';
+import { roomApi, RoomApiError } from '../../room/api/roomApi';
 import '@livekit/components-styles';
 import './VideoCallRoom.css';
 
@@ -125,16 +125,17 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
   const [seedError, setSeedError] = useState<string | null>(null);
   const { messages, sendMessage } = useRoomChat();
 
-  // 게임 시작 트리거(대기방→게임 자동시작 도메인이 아직 없어서 임시로 프론트가 seed를 호출).
+  // 게임 시작 트리거. 방장이 누르면 서버가 방장 여부·전원 준비를 검증하고 방을 PLAYING으로
+  // 전환한 뒤 세션을 연다. 참가자 토큰은 서버가 방의 실제 참가자 목록에서 만들므로 넘기지 않는다.
   const startGame = useCallback(
-    async (participantTokens: string[]) => {
+    async () => {
       setSeeding(true);
       setSeedError(null);
       try {
-        await ninjaApi.seed(roomId, NINJA_GAME_ID, participantTokens, DEFAULT_TOTAL_ROUNDS, accessToken);
+        await roomApi.startGame(roomId, NINJA_GAME_ID, DEFAULT_TOTAL_ROUNDS, accessToken);
         // 세션이 열리면 NinjaGamePanel 폴링이 이를 감지해 onActiveChange(true)로 게임 화면으로 전환된다.
       } catch (err) {
-        setSeedError(err instanceof NinjaApiError ? err.message : '게임 시작 실패');
+        setSeedError(err instanceof RoomApiError ? err.message : '게임 시작 실패');
       } finally {
         setSeeding(false);
       }
