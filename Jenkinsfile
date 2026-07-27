@@ -164,6 +164,34 @@ pipeline {
     }
 
     post {
+        success {
+            script {
+                if (env.BRANCH_NAME == 'main') {
+                    mattermostSend(
+                        color: 'good',
+                        message: "✅ **Cam-ON 운영 배포 성공**\n- 브랜치: `${env.BRANCH_NAME}`\n- 빌드: #${env.BUILD_NUMBER}\n- 확인: ${env.BUILD_URL}"
+                    )
+                }
+            }
+        }
+
+        failure {
+            script {
+                if (env.BRANCH_NAME == 'develop') {
+                    mattermostSend(
+                        color: 'danger',
+                        message: "❌ **develop 통합 빌드 실패**\n- 빌드: #${env.BUILD_NUMBER}\n- 로그: ${env.BUILD_URL}"
+                    )
+                } else if (env.BRANCH_NAME == 'main') {
+                    mattermostSend(
+                        color: 'danger',
+                        text: '@here',
+                        message: "🚨 **Cam-ON 운영 배포 실패**\n- 브랜치: `${env.BRANCH_NAME}`\n- 빌드: #${env.BUILD_NUMBER}\n- 로그: ${env.BUILD_URL}"
+                    )
+                }
+            }
+        }
+
         always {
             deleteDir()
         }
