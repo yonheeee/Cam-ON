@@ -95,6 +95,37 @@
 
 ---
 
+# Git 브랜치/머지 워크플로우
+
+**공유 브랜치(`main`, `develop`, `develop-backend`, `develop-frontend`)에는 절대 직접 push 하지
+않는다.** 모든 변경은 작업 브랜치(`feature/*`, `fix/*` 등)에서 커밋·push 한 뒤 **MR(Merge
+Request)로만** 반영한다. 팀원 전원과 AI 에이전트가 이 규칙을 따른다 — "develop에 올려줘",
+"머지해줘" 같은 요청도 **공유 브랜치 직접 push가 아니라 "작업 브랜치 push → MR"** 을 의미한다.
+
+## 브랜치 모델
+
+```
+feature|fix/backend/*   ──MR──▶ develop-backend
+feature|fix/frontend/*  ──MR──▶ develop-frontend
+        develop-backend + develop-frontend ──통합──▶ develop
+        develop ──(테스트 통과 후 MR)──▶ main ──▶ 자동 배포(EC2)
+```
+
+- FE와 BE가 한 몸으로 엮인 변경(예: 새 REST 엔드포인트 + 그걸 부르는 프론트)은 `develop`에서
+  작업 브랜치를 따서 `develop`으로 MR 한다 — 어느 한쪽 통합 브랜치엔 짝이 없어서 반쪽만
+  올라가거나 배포가 깨질 수 있다.
+- 작업 브랜치를 **어느 브랜치에서 분기했는지**가 곧 MR 대상이다. 엉뚱한 브랜치에서 따면 그
+  브랜치의 무관한 커밋들이 MR에 딸려 들어간다(분기 지점을 맞춰서 딸 것).
+
+## 배포 트리거 (직접 push가 특히 위험한 이유)
+
+- **`main`**: Jenkins가 EC2에 자동 배포. protected 브랜치라 직접 push가 막힐 수 있음(MR 필수).
+- **`develop-backend`**: push 즉시 GitLab CI(`.gitlab-ci.yml`)가 EC2에 자동 배포.
+- `develop` / `develop-frontend`: 현재 자동 배포는 없지만, 그래도 공유 브랜치이므로 MR로만
+  반영한다.
+
+---
+
 # 백엔드 패키지 구조 강령 (Spring)
 
 이 문서는 Spring 백엔드의 패키지 구조 원칙을 정리한 것이다. 팀원 전원과 AI 에이전트는 새 코드를
