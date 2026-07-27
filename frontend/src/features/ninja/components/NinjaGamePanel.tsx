@@ -1,5 +1,5 @@
 import { useLocalParticipant, useParticipants } from '@livekit/components-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useGestureBoardStore } from '../../gesture/store/gestureBoardStore';
 import { useNinjaRound } from '../hooks/useNinjaRound';
 import './NinjaGamePanel.css';
@@ -72,9 +72,18 @@ export function NinjaGamePanel({ roomId, gameId, accessToken, onActiveChange }: 
     return nicknameByToken[token] ?? '상대';
   };
 
-  // 게임 활성 여부(폴링으로 세션이 열려 있는지)를 부모에 알려 대기방/게임 화면 전환에 쓴다.
+  // 게임 진입은 부모가 game:started 이벤트로 판단한다(이 패널은 게임 중에만 마운트됨). 이 패널은
+  // 세션이 사라졌을 때(리셋/종료 정리) 부모에 알려 대기방으로 돌아가게 하는 역할만 한다. 단,
+  // 마운트 직후 첫 폴링 전 round=null 상태로 대기방에 잘못 튕기지 않도록 "한 번이라도 활성이었을
+  // 때만" 비활성을 통지한다.
+  const wasActiveRef = useRef(false);
   useEffect(() => {
-    onActiveChange(gameStarted);
+    if (gameStarted) {
+      wasActiveRef.current = true;
+      onActiveChange(true);
+    } else if (wasActiveRef.current) {
+      onActiveChange(false);
+    }
   }, [gameStarted, onActiveChange]);
 
   // 대기방 단계에서는 이 패널을 통째로 숨긴다(손 인식 UI/게임 UI 없음) — 부모가 대기방을 대신 띄운다.

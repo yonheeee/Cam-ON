@@ -1,10 +1,11 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { LiveKitRoom, VideoConference } from '@livekit/components-react';
 import { VideoPresets, type RoomOptions } from 'livekit-client';
 import { GesturePanel } from '../../gesture/components/GesturePanel';
 import { GestureBoard } from '../../gesture/components/GestureBoard';
 import { NinjaGamePanel } from '../../ninja/components/NinjaGamePanel';
+import { useRoomGameStarted } from '../../ninja/hooks/useRoomGameStarted';
 import { LobbyScreen } from '../../room/components/LobbyScreen';
 import { ChatPanel } from '../../chat/components/ChatPanel';
 import { useRoomChat } from '../../chat/hooks/useRoomChat';
@@ -118,12 +119,31 @@ interface RoomContentProps {
 // LiveKitRoom 컨텍스트 안에서 동작하는 부분 — 대기방(LobbyScreen) ↔ 게임 화면을 전환한다.
 // 채팅 상태는 여기(useRoomChat)가 소유해서 화면 전환으로 패널이 리마운트돼도 내역이 유지된다.
 function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomContentProps) {
-  // 게임이 실제로 열려 있는지(NinjaGamePanel이 폴링으로 판단)에 따라 대기방/게임 화면을 전환한다.
-  // 손 인식(GesturePanel/GestureBoard)은 게임 중에만 켠다.
+  // 대기방↔게임 화면 전환. 손 인식(GesturePanel/GestureBoard)은 게임 중에만 켠다.
   const [gameActive, setGameActive] = useState(false);
   const [seeding, setSeeding] = useState(false);
   const [seedError, setSeedError] = useState<string | null>(null);
   const { messages, sendMessage } = useRoomChat();
+
+  // 게임 진입은 game:started 이벤트로 한다(폴링 아님) — 방에 연결된 모든 클라이언트가 브로드캐스트를
+  // 동시에 받아 함께 게임 화면으로 전환된다. 폴링에 의존하던 이전 방식은 일부 참가자가 전환을
+  // 놓치는 문제가 있었다.
+  useRoomGameStarted(roomId, accessToken, () => setGameActive(true));
+  // 이벤트를 놓친 경우(늦은 접속/재접속) 방 status로 복구한다 — PLAYING이면 이미 시작된 게임이다.
+  useEffect(() => {
+    let cancelled = false;
+    roomApi
+      .getRoom(roomId, accessToken)
+      .then((room) => {
+        if (!cancelled && room.status === 'PLAYING') setGameActive(true);
+      })
+      .catch(() => {
+        // 조회 실패는 무시 — game:started 이벤트가 주 경로다.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [roomId, accessToken]);
 
   // 게임 시작 트리거. 방장이 누르면 서버가 방장 여부·전원 준비를 검증하고 방을 PLAYING으로
   // 전환한 뒤 세션을 연다. 참가자 토큰은 서버가 방의 실제 참가자 목록에서 만들므로 넘기지 않는다.
@@ -133,7 +153,7 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
       setSeedError(null);
       try {
         await roomApi.startGame(roomId, NINJA_GAME_ID, DEFAULT_TOTAL_ROUNDS, accessToken);
-        // 세션이 열리면 NinjaGamePanel 폴링이 이를 감지해 onActiveChange(true)로 게임 화면으로 전환된다.
+        // 화면 전환은 서버가 브로드캐스트하는 game:started 이벤트로 이뤄진다(방장 본인 포함 전원).
       } catch (err) {
         setSeedError(err instanceof RoomApiError ? err.message : '게임 시작 실패');
       } finally {
@@ -166,12 +186,16 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
           <ChatPanel variant="floating" messages={messages} onSend={sendMessage} />
         </>
       )}
-      <NinjaGamePanel
-        roomId={roomId}
-        gameId={NINJA_GAME_ID}
-        accessToken={accessToken}
-        onActiveChange={setGameActive}
-      />
+      {/* 게임 중에만 마운트 — 대기방에선 ninja state 폴링을 아예 돌리지 않는다(불필요한
+          NINJA_SESSION_NOT_FOUND 요청 제거). 세션이 사라지면 onActiveChange(false)로 대기방 복귀. */}
+      {gameActive && (
+        <NinjaGamePanel
+          roomId={roomId}
+          gameId={NINJA_GAME_ID}
+          accessToken={accessToken}
+          onActiveChange={setGameActive}
+        />
+      )}
     </>
   );
 }
