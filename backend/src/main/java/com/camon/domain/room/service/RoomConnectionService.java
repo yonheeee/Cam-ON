@@ -2,6 +2,7 @@ package com.camon.domain.room.service;
 
 import com.camon.domain.room.config.RoomConnectionProperties;
 import com.camon.domain.room.domain.ConnectionStatus;
+import com.camon.domain.room.event.ParticipantForcedLeftEvent;
 import com.camon.domain.room.repository.ConnectionRepository;
 import com.camon.domain.room.repository.HeartbeatRefreshResult;
 import com.camon.domain.room.repository.LeaveRoomResult;
@@ -16,6 +17,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ScheduledFuture;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.TaskScheduler;
 import org.springframework.stereotype.Service;
 
@@ -30,6 +32,7 @@ public class RoomConnectionService {
     private final RoomEventPublisher roomEventPublisher;
     private final RoomConnectionProperties properties;
     private final TaskScheduler taskScheduler;
+    private final ApplicationEventPublisher applicationEventPublisher;
     private final ConcurrentMap<UUID, TimeoutTask> timeoutTasks =
         new ConcurrentHashMap<>();
 
@@ -38,13 +41,15 @@ public class RoomConnectionService {
         ParticipantRepository participantRepository,
         RoomEventPublisher roomEventPublisher,
         RoomConnectionProperties properties,
-        @Qualifier("roomConnectionTaskScheduler") TaskScheduler taskScheduler
+        @Qualifier("roomConnectionTaskScheduler") TaskScheduler taskScheduler,
+        ApplicationEventPublisher applicationEventPublisher
     ) {
         this.connectionRepository = connectionRepository;
         this.participantRepository = participantRepository;
         this.roomEventPublisher = roomEventPublisher;
         this.properties = properties;
         this.taskScheduler = taskScheduler;
+        this.applicationEventPublisher = applicationEventPublisher;
     }
 
     public void connected(UUID roomId, UUID participantId) {
@@ -111,6 +116,11 @@ public class RoomConnectionService {
         UUID participantId,
         UUID timeoutId
     ) {
+        TimeoutTask activeTask = timeoutTasks.get(participantId);
+        if (activeTask == null
+            || !activeTask.timeoutId().equals(timeoutId)) {
+            return;
+        }
         try {
             LeaveRoomResult result =
                 participantRepository.leaveIfHeartbeatExpired(
@@ -128,6 +138,13 @@ public class RoomConnectionService {
                 participantId,
                 newHostParticipantId,
                 "TIMEOUT"
+            );
+            applicationEventPublisher.publishEvent(
+                new ParticipantForcedLeftEvent(
+                    roomId,
+                    participantId,
+                    "TIMEOUT"
+                )
             );
         } finally {
             timeoutTasks.computeIfPresent(

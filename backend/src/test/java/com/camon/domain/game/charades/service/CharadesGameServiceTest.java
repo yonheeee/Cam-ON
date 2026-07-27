@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -16,6 +17,10 @@ import com.camon.domain.game.charades.dto.CharadesGuessRequest;
 import com.camon.domain.game.charades.repository.CharadesRedisRepository;
 import com.camon.domain.game.charades.ws.CharadesEventPublisher;
 import com.camon.domain.game.charades.ws.payload.CharadesAnswerRevealedPayload;
+import com.camon.domain.game.charades.ws.payload.CharadesGameEndedPayload;
+import com.camon.domain.game.charades.ws.payload.CharadesRoundInvalidatedPayload;
+import com.camon.domain.game.charades.ws.payload.CharadesRoundStartedPayload;
+import com.camon.domain.game.charades.ws.payload.CharadesRoundTimeoutPayload;
 import com.camon.domain.game.charades.ws.payload.CharadesTurnStartedPayload;
 import com.camon.domain.game.charades.ws.payload.ChatMessageReceivedPayload;
 import com.camon.domain.game.common.Mission;
@@ -42,6 +47,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.scheduling.TaskScheduler;
 
 @ExtendWith(MockitoExtension.class)
 class CharadesGameServiceTest {
@@ -65,6 +71,8 @@ class CharadesGameServiceTest {
     private GameEventPublisher gameEventPublisher;
     @Mock
     private CharadesEventPublisher charadesEventPublisher;
+    @Mock
+    private TaskScheduler taskScheduler;
 
     private final CharadesAnswerMatcher answerMatcher =
         new CharadesAnswerMatcher();
@@ -82,7 +90,8 @@ class CharadesGameServiceTest {
             charadesRedis,
             answerMatcher,
             gameEventPublisher,
-            charadesEventPublisher
+            charadesEventPublisher,
+            taskScheduler
         );
         roomId = UUID.randomUUID();
         room = new Room(
@@ -441,6 +450,7 @@ class CharadesGameServiceTest {
         stubGuessState(
             presenterId, "babyshark", Instant.now().plusSeconds(60)
         );
+        stubNextTurnAfterCorrect(presenterId, guesser);
         when(charadesRedis.claimCorrectAnswer(
             eq(ROOM_CODE),
             eq(SESSION_SEQ),
@@ -462,6 +472,20 @@ class CharadesGameServiceTest {
             eq(roomId),
             eq("charades:answer-revealed"),
             any(CharadesAnswerRevealedPayload.class)
+        );
+        verify(charadesEventPublisher).publish(
+            eq(roomId),
+            eq("charades:round-started"),
+            eq(new CharadesRoundStartedPayload(3, 3, 3))
+        );
+        verify(charadesRedis).openTurn(
+            eq(ROOM_CODE),
+            eq(SESSION_SEQ),
+            eq(3),
+            eq(1),
+            eq(guesser.participantId()),
+            eq(43L),
+            any(Instant.class)
         );
     }
 
@@ -547,6 +571,227 @@ class CharadesGameServiceTest {
             ErrorCode.CHARADES_TURN_EXPIRED
         );
         verify(charadesEventPublisher, never()).publish(any(), any(), any());
+    }
+
+    @Test
+    void timeoutEndsOnlyCurrentTurnAndStartsNextPresenterInSameRound() {
+        UUID presenterId = UUID.randomUUID();
+        Participant nextPresenter =
+            participant(UUID.randomUUID(), "다음표현자");
+        UUID lastPresenterId = UUID.randomUUID();
+        Instant expiresAt = Instant.now().minusSeconds(1);
+        CharadesGameState playing = new CharadesGameState(
+            1, 3, 1, 3, TOPIC_ID, presenterId, 42L,
+            expiresAt, CharadesTurnStatus.PLAYING
+        );
+        CharadesGameState timeout = new CharadesGameState(
+            1, 3, 1, 3, TOPIC_ID, presenterId, 42L,
+            expiresAt, CharadesTurnStatus.TIMEOUT
+        );
+        when(roomRepository.findById(roomId)).thenReturn(Optional.of(room));
+        when(charadesRedis.findState(ROOM_CODE, SESSION_SEQ))
+            .thenReturn(
+                Optional.of(playing),
+                Optional.of(timeout),
+                Optional.of(timeout)
+            );
+        when(charadesRedis.transitionStatus(
+            ROOM_CODE,
+            SESSION_SEQ,
+            CharadesTurnStatus.PLAYING,
+            CharadesTurnStatus.TIMEOUT
+        )).thenReturn(true);
+        when(charadesRedis.getPresenterOrder(ROOM_CODE, SESSION_SEQ))
+            .thenReturn(List.of(
+                presenterId,
+                nextPresenter.participantId(),
+                lastPresenterId
+            ));
+        when(participantRepository.findById(
+            roomId,
+            nextPresenter.participantId()
+        )).thenReturn(Optional.of(nextPresenter));
+        stubNextMission(43L, "코끼리");
+
+        service.handleTimeout(
+            room,
+            SESSION_SEQ,
+            1,
+            1,
+            expiresAt
+        );
+
+        verify(charadesEventPublisher).publish(
+            eq(roomId),
+            eq("charades:round-timeout"),
+            eq(new CharadesRoundTimeoutPayload(1, 1))
+        );
+        verify(charadesRedis).openTurn(
+            eq(ROOM_CODE),
+            eq(SESSION_SEQ),
+            eq(1),
+            eq(2),
+            eq(nextPresenter.participantId()),
+            eq(43L),
+            any(Instant.class)
+        );
+        verify(charadesEventPublisher, never()).publish(
+            eq(roomId),
+            eq("charades:round-started"),
+            any(CharadesRoundStartedPayload.class)
+        );
+    }
+
+    @Test
+    void lastTurnTimeoutFinishesGame() {
+        UUID presenterId = UUID.randomUUID();
+        Instant expiresAt = Instant.now().minusSeconds(1);
+        CharadesGameState playing = new CharadesGameState(
+            3, 3, 3, 3, TOPIC_ID, presenterId, 42L,
+            expiresAt, CharadesTurnStatus.PLAYING
+        );
+        CharadesGameState timeout = new CharadesGameState(
+            3, 3, 3, 3, TOPIC_ID, presenterId, 42L,
+            expiresAt, CharadesTurnStatus.TIMEOUT
+        );
+        when(roomRepository.findById(roomId)).thenReturn(Optional.of(room));
+        when(charadesRedis.findState(ROOM_CODE, SESSION_SEQ))
+            .thenReturn(
+                Optional.of(playing),
+                Optional.of(timeout),
+                Optional.of(timeout)
+            );
+        when(charadesRedis.transitionStatus(
+            ROOM_CODE,
+            SESSION_SEQ,
+            CharadesTurnStatus.PLAYING,
+            CharadesTurnStatus.TIMEOUT
+        )).thenReturn(true);
+        when(charadesRedis.transitionStatus(
+            ROOM_CODE,
+            SESSION_SEQ,
+            CharadesTurnStatus.TIMEOUT,
+            CharadesTurnStatus.FINISHED
+        )).thenReturn(true);
+        when(charadesRedis.getPresenterOrder(ROOM_CODE, SESSION_SEQ))
+            .thenReturn(List.of(
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                presenterId
+            ));
+
+        service.handleTimeout(
+            room,
+            SESSION_SEQ,
+            3,
+            3,
+            expiresAt
+        );
+
+        verify(charadesRedis).transitionStatus(
+            ROOM_CODE,
+            SESSION_SEQ,
+            CharadesTurnStatus.TIMEOUT,
+            CharadesTurnStatus.FINISHED
+        );
+        verify(charadesEventPublisher).publish(
+            eq(roomId),
+            eq("charades:game-ended"),
+            any(CharadesGameEndedPayload.class)
+        );
+        verify(charadesRedis, never()).openTurn(
+            any(), anyInt(), anyInt(), anyInt(),
+            any(), anyLong(), any()
+        );
+    }
+
+    @Test
+    void forcedPresenterLeaveInvalidatesTurnAndStartsNextPresenter() {
+        UUID presenterId = UUID.randomUUID();
+        Participant nextPresenter =
+            participant(UUID.randomUUID(), "다음표현자");
+        Instant expiresAt = Instant.now().plusSeconds(30);
+        CharadesGameState playing = new CharadesGameState(
+            1, 3, 1, 3, TOPIC_ID, presenterId, 42L,
+            expiresAt, CharadesTurnStatus.PLAYING
+        );
+        CharadesGameState invalidated = new CharadesGameState(
+            1, 3, 1, 3, TOPIC_ID, presenterId, 42L,
+            expiresAt, CharadesTurnStatus.INVALIDATED
+        );
+        CharadesGameState nextTurn = new CharadesGameState(
+            1, 3, 2, 3, TOPIC_ID, nextPresenter.participantId(), 43L,
+            Instant.now().plusSeconds(60), CharadesTurnStatus.PLAYING
+        );
+        when(roomRepository.findById(roomId)).thenReturn(Optional.of(room));
+        when(charadesRedis.findState(ROOM_CODE, SESSION_SEQ))
+            .thenReturn(
+                Optional.of(playing),
+                Optional.of(invalidated),
+                Optional.of(invalidated),
+                Optional.of(nextTurn)
+            );
+        when(charadesRedis.transitionStatus(
+            ROOM_CODE,
+            SESSION_SEQ,
+            CharadesTurnStatus.PLAYING,
+            CharadesTurnStatus.INVALIDATED
+        )).thenReturn(true);
+        when(charadesRedis.getPresenterOrder(ROOM_CODE, SESSION_SEQ))
+            .thenReturn(List.of(
+                presenterId,
+                nextPresenter.participantId(),
+                UUID.randomUUID()
+            ));
+        when(participantRepository.findById(
+            roomId,
+            nextPresenter.participantId()
+        )).thenReturn(Optional.of(nextPresenter));
+        stubNextMission(43L, "코끼리");
+        Instant beforeRestart = Instant.now();
+        ArgumentCaptor<Instant> expiresAtCaptor =
+            ArgumentCaptor.forClass(Instant.class);
+
+        service.handlePresenterForcedLeave(
+            roomId,
+            presenterId,
+            "TIMEOUT"
+        );
+        service.handlePresenterForcedLeave(
+            roomId,
+            presenterId,
+            "TIMEOUT"
+        );
+
+        verify(charadesEventPublisher).publish(
+            eq(roomId),
+            eq("charades:round-invalidated"),
+            eq(new CharadesRoundInvalidatedPayload(
+                1,
+                1,
+                presenterId,
+                "TIMEOUT"
+            ))
+        );
+        verify(charadesEventPublisher).publish(
+            eq(roomId),
+            eq("charades:round-started"),
+            eq(new CharadesRoundStartedPayload(1, 3, 3))
+        );
+        verify(charadesRedis).openTurn(
+            eq(ROOM_CODE),
+            eq(SESSION_SEQ),
+            eq(1),
+            eq(2),
+            eq(nextPresenter.participantId()),
+            eq(43L),
+            expiresAtCaptor.capture()
+        );
+        assertThat(expiresAtCaptor.getValue()).isBetween(
+            beforeRestart.plusSeconds(59),
+            Instant.now().plusSeconds(61)
+        );
+        assertThat(expiresAtCaptor.getValue()).isNotEqualTo(expiresAt);
     }
 
     private void stubValidStart(
@@ -661,6 +906,57 @@ class CharadesGameServiceTest {
                 TOPIC_ID,
                 "CHARADES"
             )).thenReturn(Optional.of(missionWithKeyword(42L, keyword)));
+    }
+
+    private void stubNextTurnAfterCorrect(
+        UUID presenterId,
+        Participant nextPresenter
+    ) {
+        Instant expiresAt = Instant.now().plusSeconds(60);
+        CharadesGameState playing = new CharadesGameState(
+            2, 3, 3, 3, TOPIC_ID, presenterId, 42L,
+            expiresAt, CharadesTurnStatus.PLAYING
+        );
+        CharadesGameState correct = new CharadesGameState(
+            2, 3, 3, 3, TOPIC_ID, presenterId, 42L,
+            expiresAt, CharadesTurnStatus.CORRECT
+        );
+        when(charadesRedis.findState(ROOM_CODE, SESSION_SEQ))
+            .thenReturn(
+                Optional.of(playing),
+                Optional.of(correct),
+                Optional.of(correct)
+            );
+        when(charadesRedis.getPresenterOrder(ROOM_CODE, SESSION_SEQ))
+            .thenReturn(List.of(
+                nextPresenter.participantId(),
+                UUID.randomUUID(),
+                presenterId
+            ));
+        when(participantRepository.findById(
+            roomId,
+            nextPresenter.participantId()
+        )).thenReturn(Optional.of(nextPresenter));
+        stubNextMission(43L, "코끼리");
+    }
+
+    private void stubNextMission(long missionId, String keyword) {
+        when(charadesRedis.getUsedMissionIds(ROOM_CODE, SESSION_SEQ))
+            .thenReturn(Set.of(42L));
+        when(missionRepository
+            .findAllByTopicTopicIdAndMissionTypeAndIsActiveTrue(
+                TOPIC_ID,
+                "CHARADES"
+            )).thenReturn(List.of(missionWithKeyword(missionId, keyword)));
+        when(charadesRedis.openTurn(
+            eq(ROOM_CODE),
+            eq(SESSION_SEQ),
+            anyInt(),
+            anyInt(),
+            any(UUID.class),
+            eq(missionId),
+            any(Instant.class)
+        )).thenReturn(true);
     }
 
     private static List<Participant> participants(int count) {
