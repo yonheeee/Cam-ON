@@ -8,6 +8,7 @@ import java.time.Instant;
 // 게임을 끝내는 경우(마지막 라운드 등)엔 카운트다운 없이 바로 종료되며 phase=ENDED, nextRoundAt=null.
 public record RoundTimeoutPayload(
     int round,
+    int exchange,
     NinjaPhase phase,
     Instant nextRoundAt
 ) {

@@ -14,7 +14,9 @@ import java.util.Map;
 // 시각으로만 판단하게 해서 전원 동일 타이밍(선입력 방지)을 보장한다. 인터미션이 아닐 땐
 // effectUntil/nextRoundAt/lastAttack은 null.
 public record NinjaStateResponse(
+    // round=판(1..totalRounds), exchange=판 안의 교환 번호. alivePlayers/hp는 "현재 판" 기준(판마다 리셋).
     int round,
+    int exchange,
     int totalRounds,
     List<String> alivePlayers,
     Map<String, Integer> hp,
@@ -23,6 +25,8 @@ public record NinjaStateResponse(
     NinjaPhase phase,
     Instant effectUntil,
     Instant nextRoundAt,
-    LastAttackResponse lastAttack
+    LastAttackResponse lastAttack,
+    // 판을 가로질러 누적된 참가자별 점수(최종 발표 합산용) — 게임 진행 중에도 실시간으로 노출한다.
+    Map<String, Long> sessionTotals
 ) {
 }
