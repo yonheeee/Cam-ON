@@ -65,6 +65,19 @@ export interface RankingEntry {
   rank: number;
 }
 
+// 라운드 진행의 서버 기준 단계. 백엔드 NinjaPhase와 1:1.
+export type NinjaPhase = 'ROUND' | 'INTERMISSION' | 'ENDED';
+
+// INTERMISSION 구간에서 "방금 무슨 공격이 들어갔는지" 스냅샷. 타임아웃 인터미션엔 null.
+export interface LastAttack {
+  attackerToken: string;
+  targetToken: string;
+  skillId: number | null;
+  damage: number;
+  targetHpAfter: number;
+  targetEliminated: boolean;
+}
+
 export interface NinjaStateResponse {
   round: number;
   totalRounds: number;
@@ -74,6 +87,12 @@ export interface NinjaStateResponse {
   // 게임이 끝나기 전엔 빈 배열. WS(ninja:game-ended) 없이도 폴링만으로 최종 순위를 알 수 있게
   // 백엔드가 GET .../state에 같이 실어준다.
   ranking: RankingEntry[];
+  // 서버 주도 인터미션: 진행/전환을 클라 로컬 타이머가 아니라 이 서버 기준 시각(ISO 문자열)으로만
+  // 판단한다. ROUND일 땐 effectUntil/nextRoundAt/lastAttack은 null.
+  phase: NinjaPhase | null;
+  effectUntil: string | null;
+  nextRoundAt: string | null;
+  lastAttack: LastAttack | null;
 }
 
 export class NinjaApiError extends Error {

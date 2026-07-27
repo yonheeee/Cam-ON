@@ -2,6 +2,7 @@ import { useLocalParticipant, useParticipants } from '@livekit/components-react'
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useGestureBoardStore } from '../../gesture/store/gestureBoardStore';
 import { useNinjaRound } from '../hooks/useNinjaRound';
+import { NinjaEffectOverlay } from './NinjaEffectOverlay';
 import './NinjaGamePanel.css';
 
 const ATTACK_TARGET_TIMER_SECONDS = 30;
@@ -43,6 +44,11 @@ export function NinjaGamePanel({ roomId, gameId, accessToken, onActiveChange }: 
     submitTarget,
     resetGame,
     resetting,
+    isIntermission,
+    inEffectPlayback,
+    inCountdown,
+    countdownSeconds,
+    lastAttack,
   } = useNinjaRound(roomId, gameId, accessToken, myParticipantId, comboLabel, comboConfidence);
 
   const [otherParticipantIds, setOtherParticipantIds] = useState<Record<string, string>>({});
@@ -120,7 +126,7 @@ export function NinjaGamePanel({ roomId, gameId, accessToken, onActiveChange }: 
         <>
           <p className="ninja-panel__round">
             라운드 {round} / {totalRounds}
-            {roundTimerSeconds !== null && (
+            {!isIntermission && roundTimerSeconds !== null && (
               <span className="ninja-panel__round-timer"> — 남은 시간 {roundTimerSeconds}s</span>
             )}
           </p>
@@ -138,7 +144,38 @@ export function NinjaGamePanel({ roomId, gameId, accessToken, onActiveChange }: 
             })}
           </ul>
 
-          {requiredSkill && !completed && currentStep && (
+          {isIntermission && (
+            <div className="ninja-panel__intermission">
+              {inEffectPlayback && requiredSkill && (
+                <>
+                  <NinjaEffectOverlay effect={requiredSkill.effect} />
+                  <p className="ninja-panel__intermission-title">
+                    {lastAttack ? (
+                      <>
+                        {displayName(lastAttack.attackerToken)} → {displayName(lastAttack.targetToken)}
+                        {' · '}
+                        {requiredSkill.skillName} ({lastAttack.damage} 데미지)
+                        {lastAttack.targetEliminated && ' · 탈락!'}
+                      </>
+                    ) : (
+                      '라운드 종료'
+                    )}
+                  </p>
+                </>
+              )}
+              {inCountdown && (
+                <div className="ninja-panel__countdown">
+                  <p className="ninja-panel__countdown-label">다음 라운드까지</p>
+                  <p className="ninja-panel__countdown-number">{countdownSeconds}</p>
+                </div>
+              )}
+              {!inEffectPlayback && !inCountdown && (
+                <p className="ninja-panel__intermission-title">정리 중...</p>
+              )}
+            </div>
+          )}
+
+          {!isIntermission && requiredSkill && !completed && currentStep && (
             <div className="ninja-panel__current-gesture">
               <p className="ninja-panel__current-gesture-label">지금 취해야 할 손동작</p>
               <p className="ninja-panel__current-gesture-name">
@@ -153,7 +190,7 @@ export function NinjaGamePanel({ roomId, gameId, accessToken, onActiveChange }: 
             </div>
           )}
 
-          {requiredSkill && (
+          {!isIntermission && requiredSkill && (
             <div className="ninja-panel__combo">
               <p>
                 요구 스킬: <strong>{requiredSkill.skillName}</strong>
@@ -178,7 +215,7 @@ export function NinjaGamePanel({ roomId, gameId, accessToken, onActiveChange }: 
             </div>
           )}
 
-          {requiredSkill?.nextSkill && (
+          {!isIntermission && requiredSkill?.nextSkill && (
             <div className="ninja-panel__next-skill">
               <p className="ninja-panel__next-skill-label">다음 라운드 예고</p>
               <p className="ninja-panel__next-skill-name">{requiredSkill.nextSkill.skillName}</p>
@@ -188,13 +225,13 @@ export function NinjaGamePanel({ roomId, gameId, accessToken, onActiveChange }: 
             </div>
           )}
 
-          {currentAttackerToken && !isMyAttack && (
+          {!isIntermission && currentAttackerToken && !isMyAttack && (
             <p className="ninja-panel__attacker-info">
               {displayName(currentAttackerToken)} 님이 공격권을 먼저 획득했습니다
             </p>
           )}
 
-          {isMyAttack && (
+          {!isIntermission && isMyAttack && (
             <div className="ninja-panel__target-picker">
               <p className="ninja-panel__target-picker-title">⚔️ 공격권 획득!</p>
               {attackTimerSeconds !== null && (

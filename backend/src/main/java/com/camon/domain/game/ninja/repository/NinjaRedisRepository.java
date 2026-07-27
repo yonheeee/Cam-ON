@@ -1,5 +1,6 @@
 package com.camon.domain.game.ninja.repository;
 
+import com.camon.domain.game.ninja.domain.NinjaPhase;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -23,6 +24,15 @@ public class NinjaRedisRepository {
     private static final String ATTACKER_TOKEN_FIELD = "attacker_token";
     private static final String TARGET_TOKEN_FIELD = "target_token";
     private static final String JUDGED_AT_FIELD = "judged_at";
+    private static final String DAMAGE_FIELD = "damage";
+    private static final String HP_AFTER_FIELD = "hp_after";
+    private static final String ELIMINATED_FIELD = "eliminated";
+
+    // 인터미션(공격 resolve/타임아웃 이후 다음 라운드 직전 대기) 상태를 세션 해시에 둔다 —
+    // 진행/전환을 클라가 아니라 서버 기준 시각으로 판단하게 하는 값들.
+    private static final String PHASE_FIELD = "phase";
+    private static final String EFFECT_UNTIL_FIELD = "effect_until";
+    private static final String NEXT_ROUND_AT_FIELD = "next_round_at";
 
     private final StringRedisTemplate redis;
 
@@ -134,6 +144,58 @@ public class NinjaRedisRepository {
         return value == null ? null : Long.valueOf(value.toString());
     }
 
+    // --- 진행 단계(phase) / 인터미션 타이밍 ---
+
+    // 라운드 진입: 손동작 입력을 받는 정상 상태로 되돌린다. 이전 인터미션의 이펙트/카운트다운
+    // 시각을 지워서, 재접속 스냅샷이 지나간 인터미션을 잘못 복구하지 않게 한다.
+    public void enterRound(String roomCode, int seq) {
+        String key = sessionKey(roomCode, seq);
+        redis.opsForHash().put(key, PHASE_FIELD, NinjaPhase.ROUND.name());
+        redis.opsForHash().delete(key, EFFECT_UNTIL_FIELD, NEXT_ROUND_AT_FIELD);
+    }
+
+    // 인터미션 진입: 이펙트 종료 시각(effectUntil, 타임아웃은 null)과 다음 라운드 시작 시각
+    // (nextRoundAt, 결정타면 null)을 서버 기준으로 박아둔다.
+    public void enterIntermission(String roomCode, int seq, Instant effectUntil, Instant nextRoundAt) {
+        String key = sessionKey(roomCode, seq);
+        redis.opsForHash().put(key, PHASE_FIELD, NinjaPhase.INTERMISSION.name());
+        putInstantOrDelete(key, EFFECT_UNTIL_FIELD, effectUntil);
+        putInstantOrDelete(key, NEXT_ROUND_AT_FIELD, nextRoundAt);
+    }
+
+    // 게임 종료: 인터미션 타이밍은 더 이상 의미 없으니 지운다.
+    public void enterEnded(String roomCode, int seq) {
+        String key = sessionKey(roomCode, seq);
+        redis.opsForHash().put(key, PHASE_FIELD, NinjaPhase.ENDED.name());
+        redis.opsForHash().delete(key, EFFECT_UNTIL_FIELD, NEXT_ROUND_AT_FIELD);
+    }
+
+    public NinjaPhase getPhase(String roomCode, int seq) {
+        Object value = redis.opsForHash().get(sessionKey(roomCode, seq), PHASE_FIELD);
+        return value == null ? null : NinjaPhase.valueOf(value.toString());
+    }
+
+    public Instant getEffectUntil(String roomCode, int seq) {
+        return getInstant(sessionKey(roomCode, seq), EFFECT_UNTIL_FIELD);
+    }
+
+    public Instant getNextRoundAt(String roomCode, int seq) {
+        return getInstant(sessionKey(roomCode, seq), NEXT_ROUND_AT_FIELD);
+    }
+
+    private void putInstantOrDelete(String key, String field, Instant value) {
+        if (value == null) {
+            redis.opsForHash().delete(key, field);
+        } else {
+            redis.opsForHash().put(key, field, String.valueOf(value.toEpochMilli()));
+        }
+    }
+
+    private Instant getInstant(String key, String field) {
+        Object value = redis.opsForHash().get(key, field);
+        return value == null ? null : Instant.ofEpochMilli(Long.parseLong(value.toString()));
+    }
+
     // --- 라운드 진행 ---
 
     public void openRound(String roomCode, int seq, int round, Long skillId, Instant startedAt) {
@@ -183,6 +245,21 @@ public class NinjaRedisRepository {
     public String getAttacker(String roomCode, int seq, int round) {
         Object value = redis.opsForHash().get(attackKey(roomCode, seq, round), ATTACKER_TOKEN_FIELD);
         return value == null ? null : value.toString();
+    }
+
+    // 대상 지정으로 라운드가 판정난 결과(데미지/남은 HP/탈락 여부)를 attack 해시에 함께 남긴다 —
+    // 인터미션 스냅샷(getAttack)이 "방금 무슨 공격이 들어갔는지"를 그대로 재현할 수 있게 하기 위함.
+    public void recordAttackResolution(String roomCode, int seq, int round, int damage, int hpAfter, boolean eliminated) {
+        String key = attackKey(roomCode, seq, round);
+        redis.opsForHash().put(key, DAMAGE_FIELD, String.valueOf(damage));
+        redis.opsForHash().put(key, HP_AFTER_FIELD, String.valueOf(hpAfter));
+        redis.opsForHash().put(key, ELIMINATED_FIELD, String.valueOf(eliminated));
+    }
+
+    // 해당 라운드 attack 해시 전체(attacker_token/target_token/skill_id/damage/hp_after/eliminated).
+    // 필드가 하나도 없으면(공격이 없었던 라운드) 빈 맵.
+    public Map<Object, Object> getAttack(String roomCode, int seq, int round) {
+        return redis.opsForHash().entries(attackKey(roomCode, seq, round));
     }
 
     public boolean claimTarget(String roomCode, int seq, int round, String token) {

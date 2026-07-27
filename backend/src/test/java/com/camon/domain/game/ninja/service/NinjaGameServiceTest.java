@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
@@ -251,14 +252,25 @@ class NinjaGameServiceTest {
 
         verify(ninjaRedis, never()).eliminate(any(), anyInt(), any(), any());
         verify(eventPublisher).publish(eq(roomId), eq("ninja:attack-resolved"), any());
-        verify(eventPublisher).publish(eq(roomId), eq("ninja:round-started"), any());
-        verify(ninjaRedis).openRound(eq(roomCode), eq(seq), eq(round + 1), eq(20L), any(Instant.class));
+        // 점수는 라운드가 판정난 시점(지금)에 저장된다 — 인터미션 지연과 무관.
         verify(gameScoreService).saveRoundRanking(
             roomId,
             seq,
             round,
             List.of(attackerId, thirdId, targetId)
         );
+
+        // 공격 resolve 직후엔 다음 라운드를 바로 열지 않고 인터미션(이펙트+카운트다운)만 세팅한다.
+        verify(ninjaRedis).enterIntermission(eq(roomCode), eq(seq), any(Instant.class), any(Instant.class));
+        verify(ninjaRedis, never()).openRound(eq(roomCode), eq(seq), eq(round + 1), any(), any());
+
+        // 인터미션 종료 시점에 실행될 태스크를 붙잡아 직접 돌려야 비로소 다음 라운드가 열린다.
+        ArgumentCaptor<Runnable> taskCaptor = ArgumentCaptor.forClass(Runnable.class);
+        verify(taskScheduler).schedule(taskCaptor.capture(), any(Instant.class));
+        taskCaptor.getValue().run();
+
+        verify(ninjaRedis).openRound(eq(roomCode), eq(seq), eq(round + 1), eq(20L), any(Instant.class));
+        verify(eventPublisher).publish(eq(roomId), eq("ninja:round-started"), any());
     }
 
     @Test
@@ -290,6 +302,13 @@ class NinjaGameServiceTest {
 
         verify(ninjaRedis).eliminate(eq(roomCode), eq(seq), eq(target), any(Instant.class));
         verify(ninjaRedis, never()).openRound(any(), anyInt(), anyInt(), any(), any());
+        // 결정타여도 곧바로 종료하지 않고 이펙트(effectUntil)만 재생 — 카운트다운은 없다(nextRoundAt=null).
+        verify(ninjaRedis).enterIntermission(eq(roomCode), eq(seq), any(Instant.class), isNull());
+
+        // 이펙트 종료 시점에 실행될 마무리 태스크를 붙잡아 직접 돌려야 game-ended가 나간다.
+        ArgumentCaptor<Runnable> taskCaptor = ArgumentCaptor.forClass(Runnable.class);
+        verify(taskScheduler).schedule(taskCaptor.capture(), any(Instant.class));
+        taskCaptor.getValue().run();
 
         ArgumentCaptor<Object> payloadCaptor = ArgumentCaptor.forClass(Object.class);
         verify(eventPublisher).publish(eq(roomId), eq("ninja:game-ended"), payloadCaptor.capture());

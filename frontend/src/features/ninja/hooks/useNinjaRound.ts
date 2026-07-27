@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ninjaApi, NinjaApiError, type RankingEntry, type RoundSkillResponse } from '../api/ninjaApi';
+import {
+  ninjaApi,
+  NinjaApiError,
+  type LastAttack,
+  type NinjaPhase,
+  type RankingEntry,
+  type RoundSkillResponse,
+} from '../api/ninjaApi';
 import { useSequenceProgress } from '../lib/sequenceProgress';
+import { useNinjaRealtime } from './useNinjaRealtime';
 
 const STATE_POLL_INTERVAL_MS = 1500;
 const ATTACK_TARGET_TIMER_SECONDS = 30;
@@ -28,6 +36,11 @@ export function useNinjaRound(
   const [ranking, setRanking] = useState<RankingEntry[]>([]);
   const [requiredSkill, setRequiredSkill] = useState<RoundSkillResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // 서버 주도 인터미션 상태. 진행/전환은 이 값들(특히 서버 기준 시각)로만 판단한다.
+  const [phase, setPhase] = useState<NinjaPhase | null>(null);
+  const [effectUntil, setEffectUntil] = useState<number | null>(null);
+  const [nextRoundAt, setNextRoundAt] = useState<number | null>(null);
+  const [lastAttack, setLastAttack] = useState<LastAttack | null>(null);
 
   // requiredSkill이 실제로 바뀔 때만(=라운드 전환) 새 배열이 되도록 메모.
   // 그냥 매 렌더 .map()을 새로 만들면 참조가 매번 달라져서, useSequenceProgress의
@@ -69,10 +82,24 @@ export function useNinjaRound(
       setHp(state.hp);
       setCurrentAttackerToken(state.currentAttackerToken);
       setRanking(state.ranking);
+      setPhase(state.phase);
+      setEffectUntil(state.effectUntil ? Date.parse(state.effectUntil) : null);
+      setNextRoundAt(state.nextRoundAt ? Date.parse(state.nextRoundAt) : null);
+      setLastAttack(state.lastAttack);
     } catch {
       // 세션이 아직 없으면 404 — 조용히 무시하고 다음 폴링을 기다린다.
     }
   }, [participantId, gameId, accessToken]);
+
+  // ninja:* WS 이벤트가 오면 폴링 주기를 기다리지 않고 즉시 다시 읽어 반영한다(실시간성). 상태의
+  // 단일 소스는 여전히 getState — 이 구독은 "언제 읽을지"만 앞당긴다(WS 놓쳐도 폴링 폴백).
+  useNinjaRealtime(
+    roomId,
+    accessToken,
+    useCallback(() => {
+      void poll();
+    }, [poll]),
+  );
 
   useEffect(() => {
     if (!participantId) return;
@@ -108,6 +135,9 @@ export function useNinjaRound(
   const attackedRoundRef = useRef<number | null>(null);
   useEffect(() => {
     if (!completed || !participantId || !requiredSkill || round == null) return;
+    // 인터미션(이펙트/카운트다운) 중엔 입력을 받지 않는다 — 다음 라운드가 서버에서 열리기 전까진
+    // 공격 제출 자체가 무의미하고(라운드 이미 닫힘), 선입력으로 이어질 수 있다.
+    if (phase !== 'ROUND') return;
     if (attackedRoundRef.current === round) return;
     attackedRoundRef.current = round;
 
@@ -118,7 +148,7 @@ export function useNinjaRound(
         // 이미 다른 참가자가 선점(NINJA_ALREADY_CLAIMED)한 것도 정상적인 결과라 에러로만 표시.
         setError(err instanceof NinjaApiError ? err.message : '공격 제출 실패');
       });
-  }, [completed, participantId, requiredSkill, round, poll, gameId, accessToken]);
+  }, [completed, participantId, requiredSkill, round, phase, poll, gameId, accessToken]);
 
   const submitTarget = useCallback(
     async (targetToken: string) => {
@@ -138,12 +168,13 @@ export function useNinjaRound(
   const targetedRoundRef = useRef<number | null>(null);
   useEffect(() => {
     if (!participantId || round == null || currentAttackerToken !== participantId) return;
+    if (phase !== 'ROUND') return; // 인터미션에 접어들면 이미 대상 지정이 끝난 상태라 재시도하지 않는다.
     if (targetedRoundRef.current === round) return;
     const others = alivePlayers.filter((token) => token !== participantId);
     if (others.length !== 1) return;
     targetedRoundRef.current = round;
     void submitTarget(others[0]);
-  }, [participantId, round, currentAttackerToken, alivePlayers, submitTarget]);
+  }, [participantId, round, currentAttackerToken, phase, alivePlayers, submitTarget]);
 
   const [resetting, setResetting] = useState(false);
   const resetGame = useCallback(async () => {
@@ -199,6 +230,27 @@ export function useNinjaRound(
     return () => clearInterval(interval);
   }, [isMyAttack, round]);
 
+  // 인터미션 진행은 서버 기준 시각으로만 판단한다 — 클라 로컬 카운터로 "몇 초 지났나"를 세지 않고,
+  // effectUntil/nextRoundAt(절대 시각)까지 남은 시간을 매 틱 계산한다. 그래서 늦게 폴링한 클라이언트나
+  // 재접속자도 같은 순간에 같은 화면(이펙트 → 카운트다운 → 다음 라운드)으로 수렴한다. (동일 LAN 데모
+  // 전제로 기기 간 시계 오차는 무시할 수준으로 본다 — 서버 데드라인을 쓰는 기존 코드와 동일 가정.)
+  const [now, setNow] = useState<number>(() => Date.now());
+  const isIntermission = phase === 'INTERMISSION';
+  useEffect(() => {
+    if (!isIntermission) return;
+    setNow(Date.now());
+    const interval = setInterval(() => setNow(Date.now()), 200);
+    return () => clearInterval(interval);
+  }, [isIntermission, effectUntil, nextRoundAt]);
+
+  const inEffectPlayback = isIntermission && effectUntil != null && now < effectUntil;
+  const inCountdown =
+    isIntermission &&
+    nextRoundAt != null &&
+    (effectUntil == null || now >= effectUntil) &&
+    now < nextRoundAt;
+  const countdownSeconds = inCountdown ? Math.max(1, Math.ceil((nextRoundAt - now) / 1000)) : null;
+
   return {
     round,
     totalRounds,
@@ -219,5 +271,12 @@ export function useNinjaRound(
     resetGame,
     resetting,
     resetSequence: reset,
+    // 서버 주도 인터미션
+    phase,
+    isIntermission,
+    inEffectPlayback,
+    inCountdown,
+    countdownSeconds,
+    lastAttack,
   };
 }

@@ -3,9 +3,11 @@ package com.camon.domain.game.ninja.service;
 import com.camon.domain.game.common.repository.SaveRoundResult;
 import com.camon.domain.game.common.service.GameScoreService;
 import com.camon.domain.game.common.ws.GameEventPublisher;
+import com.camon.domain.game.ninja.domain.NinjaPhase;
 import com.camon.domain.game.ninja.domain.Skill;
 import com.camon.domain.game.ninja.dto.AttackRequest;
 import com.camon.domain.game.ninja.dto.AttackResponse;
+import com.camon.domain.game.ninja.dto.LastAttackResponse;
 import com.camon.domain.game.ninja.dto.NextSkillPreview;
 import com.camon.domain.game.ninja.dto.NinjaStateResponse;
 import com.camon.domain.game.ninja.dto.RankingEntry;
@@ -52,6 +54,10 @@ public class NinjaGameService {
     // 요구사항 명세에 구체적 수치가 없어 임의로 잡은 값 — 튜닝 필요.
     private static final int INITIAL_HP = 100;
     private static final Duration ROUND_DURATION = Duration.ofSeconds(30);
+    // 공격 resolve 후 다음 라운드 사이의 인터미션: 이펙트 재생 5초 + 다음 라운드 직전 카운트다운 3초.
+    // 타임아웃(공격 없음)으로 넘어갈 땐 이펙트가 없어 카운트다운(3초)만 태운다.
+    private static final Duration EFFECT_DURATION = Duration.ofSeconds(5);
+    private static final Duration COUNTDOWN_DURATION = Duration.ofSeconds(3);
 
     private final RoomRepository roomRepository;
     private final SkillRepository skillRepository;
@@ -186,13 +192,50 @@ public class NinjaGameService {
             .mapToObj(i -> new RankingEntry(rankingTokens.get(i), i + 1))
             .toList();
 
+        // phase는 저장값을 그대로 쓰되, 순위가 확정돼 있으면(게임 종료) ENDED로 확정한다 — phase
+        // 필드가 아직 없던(구버전/시드) 세션도 round 유무로 최소한의 값을 유도한다.
+        NinjaPhase phase = ninjaRedis.getPhase(roomCode, seq);
+        if (!ranking.isEmpty()) {
+            phase = NinjaPhase.ENDED;
+        } else if (phase == null && round != null) {
+            phase = NinjaPhase.ROUND;
+        }
+        Instant effectUntil = ninjaRedis.getEffectUntil(roomCode, seq);
+        Instant nextRoundAt = ninjaRedis.getNextRoundAt(roomCode, seq);
+        // 이펙트가 있었던(=공격이 들어간) 인터미션에서만 방금 공격 스냅샷을 노출. 타임아웃 인터미션은 null.
+        LastAttackResponse lastAttack = (phase == NinjaPhase.INTERMISSION && effectUntil != null && round != null)
+            ? buildLastAttack(roomCode, seq, round)
+            : null;
+
         return new NinjaStateResponse(
             round == null ? 0 : round,
             totalRounds == null ? 0 : totalRounds,
             alive,
             hp,
             attacker,
-            ranking
+            ranking,
+            phase,
+            effectUntil,
+            nextRoundAt,
+            lastAttack
+        );
+    }
+
+    private LastAttackResponse buildLastAttack(String roomCode, int seq, int round) {
+        Map<Object, Object> attack = ninjaRedis.getAttack(roomCode, seq, round);
+        Object attacker = attack.get("attacker_token");
+        Object target = attack.get("target_token");
+        if (attacker == null || target == null) {
+            return null;
+        }
+        Object skillId = attack.get("skill_id");
+        return new LastAttackResponse(
+            attacker.toString(),
+            target.toString(),
+            skillId == null ? null : Long.valueOf(skillId.toString()),
+            parseHp(attack.get("damage")),
+            parseHp(attack.get("hp_after")),
+            Boolean.parseBoolean(String.valueOf(attack.get("eliminated")))
         );
     }
 
@@ -263,14 +306,52 @@ public class NinjaGameService {
         log.info("[Service] target : round={} attacker={} target={} skill={}({}) damage={} hpAfter={} eliminated={}",
             round, participantToken, targetToken, skill.getName(), skill.getId(), damage, Math.max(hpAfter, 0), eliminated);
 
+        int hpAfterClamped = (int) Math.max(hpAfter, 0);
+
+        // 점수는 라운드가 실제로 판정난 지금 확정해 저장한다 — 인터미션 지연/서버 재시작과 무관하게
+        // "이 라운드 결과"가 그대로 남도록. 인터미션 스냅샷 재현용으로 결과도 attack 해시에 남긴다.
+        saveRoundScore(room, seq, round);
+        ninjaRedis.recordAttackResolution(roomCode, seq, round, damage, hpAfterClamped, eliminated);
+
+        boolean ending = isGameEnding(roomCode, seq, round);
+        Instant now = Instant.now();
+        Instant effectUntil = now.plus(EFFECT_DURATION);
+        // 결정타면 카운트다운 없이 이펙트만 재생하고 최종 순위로 — nextRoundAt은 null.
+        Instant nextRoundAt = ending ? null : effectUntil.plus(COUNTDOWN_DURATION);
+
+        ninjaRedis.enterIntermission(roomCode, seq, effectUntil, nextRoundAt);
         eventPublisher.publish(room.roomId(), "ninja:attack-resolved",
             new AttackResolvedPayload(round, participantToken, targetToken, skill.getId(), damage,
-                (int) Math.max(hpAfter, 0), eliminated));
+                hpAfterClamped, eliminated, NinjaPhase.INTERMISSION, effectUntil, nextRoundAt, ending));
 
-        boolean gameEnded = advanceOrFinish(room, seq, round);
+        // 다음 라운드 시작(또는 게임 종료)을 인터미션 종료 시각으로 미룬다. 진행/전환의 기준은
+        // 이 서버 스케줄이라 전원이 nextRoundAt에 동시에 다음 라운드를 시작한다(선입력 방지).
+        scheduleAfterIntermission(room, seq, round, ending, ending ? effectUntil : nextRoundAt);
 
         return new TargetResponse(round, participantToken, targetToken, skill.getId(), damage,
-            (int) Math.max(hpAfter, 0), eliminated, gameEnded);
+            hpAfterClamped, eliminated, ending);
+    }
+
+    // 이번 라운드 판정으로 게임이 끝나는가: 생존 1명 이하 or 마지막 라운드 도달.
+    private boolean isGameEnding(String roomCode, int seq, int round) {
+        Set<String> alive = ninjaRedis.getAlivePlayers(roomCode, seq);
+        if (alive.size() <= 1) {
+            return true;
+        }
+        Integer totalRounds = ninjaRedis.getTotalRounds(roomCode, seq);
+        return totalRounds != null && round >= totalRounds;
+    }
+
+    // 인터미션 종료 시점에 다음 라운드를 열거나(진행) 게임을 마무리(종료)하도록 1회성 태스크를 건다.
+    // 라운드 타임아웃 타이머와 같은 슬롯(roomCode:seq)을 재사용하므로, 이전 타이머를 먼저 취소해
+    // 인터미션 도중 옛 타임아웃이 끼어들지 않게 한다.
+    private void scheduleAfterIntermission(Room room, int seq, int round, boolean ending, Instant runAt) {
+        cancelPendingTimeout(room.roomCode(), seq);
+        Runnable task = ending
+            ? () -> finishGame(room, seq)
+            : () -> startRound(room, seq, round + 1);
+        ScheduledFuture<?> future = taskScheduler.schedule(task, runAt);
+        pendingTimeouts.put(timerKey(room.roomCode(), seq), future);
     }
 
     private void startRound(Room room, int seq, int round) {
@@ -283,6 +364,8 @@ public class NinjaGameService {
         Instant startedAt = Instant.now();
         ninjaRedis.openRound(room.roomCode(), seq, round, skillId, startedAt);
         ninjaRedis.setCurrentRound(room.roomCode(), seq, round);
+        // 정상 진행 단계로 되돌리고 이전 인터미션의 이펙트/카운트다운 시각을 지운다.
+        ninjaRedis.enterRound(room.roomCode(), seq);
 
         Instant deadline = startedAt.plus(ROUND_DURATION);
         log.info("[Service] startRound : round={} 시작 (roomCode={} seq={} skillId={} 제한시간={}초)",
@@ -293,34 +376,30 @@ public class NinjaGameService {
     }
 
     private void handleTimeout(Room room, int seq, int round) {
-        pendingTimeouts.remove(timerKey(room.roomCode(), seq));
-        if (!ninjaRedis.closeRound(room.roomCode(), seq, round, "TIMEOUT")) {
+        String roomCode = room.roomCode();
+        pendingTimeouts.remove(timerKey(roomCode, seq));
+        if (!ninjaRedis.closeRound(roomCode, seq, round, "TIMEOUT")) {
             return; // 이미 대상 지정으로 종료됐거나, 이 타이머 자체가 이전 세션의 좀비였던 경우 — no-op.
         }
         log.info("[Service] handleTimeout : round={} 제한시간 내에 아무도 콤보를 완성 못함 — 공격 없이 종료", round);
-        eventPublisher.publish(room.roomId(), "ninja:round-timeout", new RoundTimeoutPayload(round));
-        advanceOrFinish(room, seq, round);
-    }
-
-    // 다음 라운드로 진행하거나 게임을 종료한다. 게임이 끝났으면 true.
-    private boolean advanceOrFinish(Room room, int seq, int round) {
+        // 점수는 판정 시점(지금)에 확정.
         saveRoundScore(room, seq, round);
-        Set<String> alive = ninjaRedis.getAlivePlayers(room.roomCode(), seq);
-        if (alive.size() <= 1) {
-            log.info("[Service] advanceOrFinish : round={} 생존자 {}명 — 게임 종료 조건", round, alive.size());
+
+        boolean ending = isGameEnding(roomCode, seq, round);
+        if (ending) {
+            // 마무리 라운드가 타임아웃난 경우 — 재생할 이펙트도, 열 다음 라운드도 없으니 바로 종료.
+            log.info("[Service] handleTimeout : round={} 타임아웃이 게임을 종료시킴 — 즉시 마무리", round);
+            eventPublisher.publish(room.roomId(), "ninja:round-timeout",
+                new RoundTimeoutPayload(round, NinjaPhase.ENDED, null));
             finishGame(room, seq);
-            return true;
+            return;
         }
-        Integer totalRounds = ninjaRedis.getTotalRounds(room.roomCode(), seq);
-        if (totalRounds != null && round >= totalRounds) {
-            // 안전판: round_count를 다 썼는데도 2명 이상 생존 시 HP 순으로 마무리한다(요구사항에 명시된 케이스는 아님).
-            log.info("[Service] advanceOrFinish : round={} totalRounds={} 도달 — 게임 종료(HP 순 마무리)", round, totalRounds);
-            finishGame(room, seq);
-            return true;
-        }
-        log.info("[Service] advanceOrFinish : round={} → round={}로 진행 (생존자 {}명)", round, round + 1, alive.size());
-        startRound(room, seq, round + 1);
-        return false;
+        // 타임아웃은 이펙트 없이 3초 카운트다운만 태우고 다음 라운드로.
+        Instant nextRoundAt = Instant.now().plus(COUNTDOWN_DURATION);
+        ninjaRedis.enterIntermission(roomCode, seq, null, nextRoundAt);
+        eventPublisher.publish(room.roomId(), "ninja:round-timeout",
+            new RoundTimeoutPayload(round, NinjaPhase.INTERMISSION, nextRoundAt));
+        scheduleAfterIntermission(room, seq, round, false, nextRoundAt);
     }
 
     private void saveRoundScore(Room room, int seq, int round) {
@@ -344,6 +423,7 @@ public class NinjaGameService {
     private void finishGame(Room room, int seq) {
         List<RankingEntry> ranking = buildRanking(room, seq);
         ninjaRedis.saveRanking(room.roomCode(), seq, ranking.stream().map(RankingEntry::token).toList());
+        ninjaRedis.enterEnded(room.roomCode(), seq);
         log.info("[Service] finishGame : roomCode={} seq={} 최종 순위={}", room.roomCode(), seq, ranking);
         eventPublisher.publish(room.roomId(), "ninja:game-ended", new GameEndedPayload(ranking));
         // results/totals 반영, 다음 세션으로의 진행은 room/session 공통 흐름(score 도메인)의 책임 —
