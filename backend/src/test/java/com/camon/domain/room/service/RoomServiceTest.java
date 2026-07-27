@@ -105,7 +105,8 @@ class RoomServiceTest {
         assertThat(savedRoom.status()).isEqualTo(RoomStatus.WAITING);
         assertThat(savedHost.participantId()).isEqualTo(participantId);
         assertThat(savedHost.nickname()).isEqualTo("플레이어1");
-        assertThat(savedHost.ready()).isFalse();
+        // 방장은 "게임 시작" 버튼을 쓰므로 생성 시점부터 준비 완료(ready=true)로 둔다 — RoomService 참조.
+        assertThat(savedHost.ready()).isTrue();
         assertThat(savedHost.connectionStatus()).isEqualTo(ConnectionStatus.CONNECTED);
         assertThat(response.room().roomCode()).isEqualTo("AB23CD");
         assertThat(response.room().participants()).singleElement()
