@@ -1,8 +1,12 @@
+name: deploy
+
 services:
   redis:
     image: redis:7.4-alpine
     container_name: camon-redis
-    command: redis-server --appendonly no
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -32,6 +36,7 @@ services:
     restart: unless-stopped
 
   backend:
+    image: ${BACKEND_IMAGE:-camon-backend:local}
     build:
       context: ../backend
       dockerfile: Dockerfile
@@ -53,9 +58,17 @@ services:
       # 시작시키는 유일한 방법, /api/dev/ninja/seed)가 local 프로필에서만 켜진다. 이 흐름이
       # 생기기 전까지는 배포 환경도 local 프로필을 그대로 쓴다 — JWT 서명키가 백엔드 재시작마다
       # 새로 생성되는 대가가 있지만, 게스트 토큰 기반 임시 세션이라 재로그인 정도로 끝난다.
+<<<<<<< HEAD
       SPRING_PROFILES_ACTIVE: local
       # 공개 배포 환경에서는 API 문서를 통째로 차단한다(스캐너가 dev 엔드포인트를 찾는 진입점이 됨).
       SWAGGER_ENABLED: "false"
+=======
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-local}
+      JWT_PRIVATE_KEY_PATH: /run/secrets/camon/jwt-private.pem
+      JWT_PUBLIC_KEY_PATH: /run/secrets/camon/jwt-public.pem
+    volumes:
+      - ./secrets:/run/secrets/camon:ro
+>>>>>>> 6668f35919b96be49677e01818802929af57b90c
     depends_on:
       redis:
         condition: service_healthy
@@ -66,6 +79,7 @@ services:
     restart: unless-stopped
 
   frontend-builder:
+    image: ${FRONTEND_IMAGE:-camon-web:local}
     build:
       context: ../frontend
       dockerfile: Dockerfile
@@ -81,7 +95,6 @@ services:
     container_name: camon-caddy
     environment:
       DOMAIN: ${DOMAIN}
-      CADDY_ACME_EMAIL: ${CADDY_ACME_EMAIL}
     ports:
       - "80:80"
       - "443:443"
@@ -105,6 +118,7 @@ networks:
 
 volumes:
   mysql-data:
+  redis-data:
   frontend-dist:
   caddy-data:
   caddy-config:

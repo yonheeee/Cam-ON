@@ -26,6 +26,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.dao.InvalidDataAccessApiUsageException;
 import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.test.context.ActiveProfiles;
@@ -133,7 +134,12 @@ class RedisHeartbeatGuardRepositoryIntegrationTests {
             UUID.randomUUID(),
             UUID.randomUUID(),
             Duration.ofNanos(1)
-        )).isInstanceOf(IllegalArgumentException.class);
+        ))
+            .isInstanceOf(InvalidDataAccessApiUsageException.class)
+            .hasCauseInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining(
+                "Heartbeat TTL must be at least one millisecond"
+            );
     }
 
     @Test
