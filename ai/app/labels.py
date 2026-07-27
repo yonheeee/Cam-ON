@@ -9,7 +9,17 @@
 #
 # 이전 버전 풀(50종 v1, 20종 v2)은 git 히스토리 참고.
 
-PROMPT_TEMPLATE = "This is a photo of {}."
+# 프롬프트 템플릿 — 게임의 실제 촬영 조건(웹캠 앞에서 손에 들고 보여줌)을 담은 변형을
+# 함께 사용한다. 라벨별 점수는 모든 (템플릿 × 형태) 조합 중 최고점이라 변형 추가는 손해가 없고,
+# 텍스트 임베딩 캐시 덕에 런타임 비용도 없다 (기동 후 첫 요청에서 1회 인코딩).
+PROMPT_TEMPLATES = [
+    "This is a photo of {}.",
+    "This is a webcam photo of {} held up in a hand.",
+    "A person holding {} in front of a webcam.",
+]
+
+# 네거티브는 이미 완결된 구문이라 기본 템플릿 하나만 쓴다
+PROMPT_TEMPLATE = PROMPT_TEMPLATES[0]
 
 # 제시어(한국어) → 허용하는 영어 프롬프트 구문들
 MISSION_POOL: dict[str, list[str]] = {
@@ -62,8 +72,9 @@ def build_candidates(extra_target: str | None = None) -> tuple[list[str], list[s
 
     for ko, variants in MISSION_POOL.items():
         for variant in variants:
-            labels.append(ko)
-            prompts.append(PROMPT_TEMPLATE.format(variant))
+            for template in PROMPT_TEMPLATES:
+                labels.append(ko)
+                prompts.append(template.format(variant))
 
     if extra_target and extra_target not in MISSION_POOL:
         labels.append(extra_target)

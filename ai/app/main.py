@@ -12,9 +12,7 @@ from .labels import MISSION_POOL, NEGATIVE_LABEL, build_candidates
 
 STATIC_DIR = Path(__file__).parent / "static"
 
-# 판정 임계값 — /test 실측 기준: 정답 0.7+, 오인/빈손은 _none 아래.
-# 0.4는 모션 블러/비정형 변형에서 억울한 실패가 생겨서 0.3으로 확정 (2026-07-27).
-# 오인 방어는 임계값 혼자가 아니라 rank 제한 + open-set 네거티브가 함께 담당한다.
+# 판정 임계값 — /test 페이지로 실제 물건들 점수 분포를 보고 조정한다.
 CONFIDENCE_THRESHOLD = float(os.environ.get("AI_CONFIDENCE_THRESHOLD", "0.3"))
 # 제시어 기준 판정에서 허용하는 순위 — 비슷한 라벨(종이컵↔플라스틱 컵)이 1등을 뺏어도
 # 제시어가 이 순위 안에 들면 인정. 1로 두면 argmax와 동일해진다.
