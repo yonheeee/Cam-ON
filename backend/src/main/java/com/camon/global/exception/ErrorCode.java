@@ -9,6 +9,8 @@ public enum ErrorCode {
     ROOM_FULL(HttpStatus.CONFLICT, "방 정원이 가득 찼습니다."),
     ROOM_ALREADY_STARTED(HttpStatus.CONFLICT, "이미 시작한 방입니다."),
     ROOM_ACCESS_DENIED(HttpStatus.FORBIDDEN, "방 참가자만 조회할 수 있습니다."),
+    ROOM_NOT_HOST(HttpStatus.FORBIDDEN, "방장만 게임을 시작할 수 있습니다."),
+    ROOM_NOT_ALL_READY(HttpStatus.CONFLICT, "모든 참가자가 준비되어야 게임을 시작할 수 있습니다."),
     NICKNAME_DUPLICATED(HttpStatus.CONFLICT, "이미 사용 중인 닉네임입니다."),
     ALREADY_JOINED(HttpStatus.CONFLICT, "이미 참가한 방입니다."),
     ROOM_CODE_GENERATION_FAILED(

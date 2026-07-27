@@ -118,8 +118,23 @@ export function useRoomLobby(roomId: string, accessToken: string) {
     };
   }, [roomId, accessToken]);
 
+  // 준비 상태는 STOMP 브로드캐스트(member:ready-updated)로도 돌아오지만, 그것만 의존하면
+  // 이벤트가 늦거나 유실될 때 버튼이 "죽은 것처럼" 보인다 — API 응답을 즉시 로컬에 반영한다.
+  // (STOMP 이벤트가 나중에 와도 같은 값이라 무해)
   const toggleReady = useCallback(
-    (ready: boolean) => roomApi.updateReady(roomId, ready, accessToken),
+    async (ready: boolean) => {
+      const result = await roomApi.updateReady(roomId, ready, accessToken);
+      setRoom((prev) =>
+        prev
+          ? {
+              ...prev,
+              participants: prev.participants.map((p) =>
+                p.participantId === result.participantId ? { ...p, ready: result.ready } : p,
+              ),
+            }
+          : prev,
+      );
+    },
     [roomId, accessToken],
   );
 

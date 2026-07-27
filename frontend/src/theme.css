@@ -1,0 +1,203 @@
+/* Pixel Arcade Plaza 테마 토큰
+ * 원본: CAM_ON_Pixel_Arcade_Plaza_인수인계_2026-07-24.md 11절 (초안 수치 — Figma 적용 시 재검토)
+ * 원칙: 픽셀 외곽선은 쓰되 모든 UI를 계단 형태로 만들지 않는다. 본문은 읽기 쉬운 고딕,
+ *       로고·게임 제목·큰 숫자에만 픽셀 폰트를 우선 적용한다.
+ */
+
+/* 픽셀 폰트: Galmuri11 (한글 지원 픽셀 폰트, SIL OFL) */
+@import url('https://cdn.jsdelivr.net/npm/galmuri@latest/dist/galmuri.css');
+
+:root {
+  /* 색상 토큰 */
+  --pap-sky-blue: #80d8f4;
+  --pap-plaza-cream: #fff0c8;
+  --pap-arcade-teal: #2fc7be;
+  --pap-festival-coral: #f06478;
+  --pap-play-yellow: #ffd966;
+  --pap-lavender: #8c78d8;
+  --pap-ink: #2b1833;
+  --pap-white: #fffdf5;
+  --pap-success-lime: #b8ff4f;
+
+  /* 플레이어 대표색 (1~4P) */
+  --pap-player-1: var(--pap-arcade-teal);
+  --pap-player-2: var(--pap-festival-coral);
+  --pap-player-3: var(--pap-play-yellow);
+  --pap-player-4: var(--pap-lavender);
+
+  /* 타이포 */
+  --pap-font-pixel: 'Galmuri11', 'Galmuri9', monospace;
+  --pap-font-body: 'Pretendard', system-ui, 'Segoe UI', 'Malgun Gothic', sans-serif;
+
+  /* 픽셀 UI 형태 — 어두운 외곽선 + 짧은 픽셀 그림자 */
+  --pap-border-width: 3px;
+  --pap-shadow-offset: 4px;
+  --pap-radius: 6px; /* 과한 계단 방지: 살짝만 둥글게 */
+}
+
+/* ---- 공통 픽셀 컴포넌트 ---- */
+
+/* 진입 플로우(랜딩/코드/닉네임) 공용 전체 화면 — #root가 1126px 컨테이너라 fixed로 뷰포트를 덮는다 */
+.pap-plaza-screen {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  /* cover라 비율이 안 맞으면 일부가 잘리는데, 정보가 없는 위쪽 하늘이 잘리도록
+     바닥(진입 라인·부스·인물) 기준으로 고정한다 */
+  background: var(--pap-sky-blue) url('/assets/landing-bg.png') center bottom / cover no-repeat;
+  overflow: hidden;
+}
+
+/* 라우트 기반 모달 — 랜딩(광장) 위에 팝업처럼 뜨는 단계 화면 공용 */
+.pap-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgb(43 24 51 / 0.45); /* Ink 반투명 */
+  z-index: 100;
+}
+
+.pap-modal {
+  animation: pap-modal-pop 120ms ease-out;
+}
+
+@keyframes pap-modal-pop {
+  from {
+    transform: translateY(8px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pap-modal {
+    animation: none;
+  }
+}
+
+/* 짧은 안내 토스트 (복사 완료 등) */
+.pap-toast {
+  position: fixed;
+  bottom: 36px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--pap-ink);
+  color: var(--pap-white);
+  font-family: var(--pap-font-pixel);
+  font-size: 15px;
+  padding: 10px 20px;
+  border-radius: var(--pap-radius);
+  z-index: 200;
+  animation: pap-toast-in 120ms ease-out;
+  pointer-events: none;
+}
+
+@keyframes pap-toast-in {
+  from {
+    transform: translate(-50%, 6px);
+    opacity: 0;
+  }
+  to {
+    transform: translate(-50%, 0);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pap-toast {
+    animation: none;
+  }
+}
+
+.pap-input {
+  font-family: var(--pap-font-pixel);
+  font-size: 20px;
+  color: var(--pap-ink);
+  background: var(--pap-white);
+  border: var(--pap-border-width) solid var(--pap-ink);
+  border-radius: var(--pap-radius);
+  padding: 12px 14px;
+  box-sizing: border-box;
+}
+
+.pap-input:focus-visible {
+  outline: 3px solid var(--pap-arcade-teal);
+  outline-offset: 2px;
+}
+
+.pap-pixel-btn {
+  font-family: var(--pap-font-pixel);
+  font-size: 20px;
+  line-height: 1;
+  color: var(--pap-ink);
+  background: var(--pap-white);
+  border: var(--pap-border-width) solid var(--pap-ink);
+  border-radius: var(--pap-radius);
+  padding: 14px 28px;
+  cursor: pointer;
+  box-shadow: var(--pap-shadow-offset) var(--pap-shadow-offset) 0 0 var(--pap-ink);
+  transition: transform 60ms ease-out, box-shadow 60ms ease-out;
+  image-rendering: pixelated;
+  user-select: none;
+}
+
+.pap-pixel-btn:hover:not(:disabled) {
+  transform: translate(-1px, -1px);
+  box-shadow: calc(var(--pap-shadow-offset) + 1px) calc(var(--pap-shadow-offset) + 1px) 0 0 var(--pap-ink);
+}
+
+.pap-pixel-btn:active:not(:disabled) {
+  transform: translate(var(--pap-shadow-offset), var(--pap-shadow-offset));
+  box-shadow: 0 0 0 0 var(--pap-ink);
+}
+
+.pap-pixel-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.pap-pixel-btn--primary {
+  background: var(--pap-play-yellow);
+}
+
+.pap-pixel-btn--teal {
+  background: var(--pap-arcade-teal);
+  color: var(--pap-white);
+}
+
+.pap-pixel-btn--coral {
+  background: var(--pap-festival-coral);
+  color: var(--pap-white);
+}
+
+.pap-pixel-card {
+  background: var(--pap-white);
+  border: var(--pap-border-width) solid var(--pap-ink);
+  border-radius: var(--pap-radius);
+  box-shadow: var(--pap-shadow-offset) var(--pap-shadow-offset) 0 0 rgb(43 24 51 / 0.35);
+  color: var(--pap-ink);
+}
+
+.pap-pixel-title {
+  font-family: var(--pap-font-pixel);
+  color: var(--pap-ink);
+}
+
+/* 픽셀 아트 이미지 공통: 확대 시 블러 방지 */
+.pap-pixel-img {
+  image-rendering: pixelated;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pap-pixel-btn {
+    transition: none;
+  }
+}

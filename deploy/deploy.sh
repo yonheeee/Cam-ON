@@ -40,9 +40,12 @@ compose() {
 wait_for_health() {
     attempt=1
     while [ "${attempt}" -le "${HEALTH_ATTEMPTS}" ]; do
-        if curl --fail --silent --show-error \
-            "https://${DOMAIN}/actuator/health" >/dev/null; then
-            return 0
+        if health_response=$(curl --fail --silent --show-error \
+            "https://${DOMAIN}/actuator/health"); then
+            if printf '%s' "${health_response}" \
+                | grep -Eq '"status"[[:space:]]*:[[:space:]]*"UP"'; then
+                return 0
+            fi
         fi
 
         sleep "${HEALTH_INTERVAL_SECONDS}"
@@ -59,6 +62,10 @@ export DOMAIN
 docker image inspect "${BACKEND_IMAGE}" >/dev/null
 docker image inspect "${FRONTEND_IMAGE}" >/dev/null
 compose up -d --remove-orphans
+compose exec -T caddy \
+    caddy reload \
+    --config /etc/caddy/Caddyfile \
+    --adapter caddyfile
 
 if wait_for_health; then
     state_tmp="${STATE_FILE}.tmp"

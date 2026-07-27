@@ -4,6 +4,7 @@ package com.camon.domain.game.ninja.dto;
 // ErrorCode.NINJA_ALREADY_CLAIMED로 응답 — 방 관련 도메인의 ROOM_FULL/ALREADY_JOINED와 같은 패턴.
 public record AttackResponse(
     int round,
+    int exchange,
     String attackerToken,
     Long skillId
 ) {

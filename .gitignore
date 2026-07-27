@@ -1,4 +1,6 @@
 ham_log/
+.vscode/
+.idea/
 deploy/.env
 deploy/.deployed-images
 deploy/secrets/

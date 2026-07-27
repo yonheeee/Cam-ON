@@ -248,3 +248,152 @@
 .ninja-panel__error {
   color: #ff6b6b;
 }
+
+/* --- 인터미션(이펙트 재생 → 카운트다운) --- */
+
+/* 이펙트 파티클은 화면 전체를 덮는 캔버스에 그리되, 클릭을 가로채지 않는다. */
+.ninja-effect-overlay {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 40;
+}
+
+.ninja-panel__intermission {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  min-height: 8rem;
+  padding: 1rem 0;
+}
+
+.ninja-panel__intermission-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  text-align: center;
+  color: #ffd400;
+}
+
+.ninja-panel__countdown {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.ninja-panel__countdown-label {
+  font-size: 0.9rem;
+  opacity: 0.75;
+}
+
+.ninja-panel__countdown-number {
+  font-size: 4rem;
+  font-weight: 800;
+  line-height: 1;
+  color: #6f9fff;
+  animation: ninja-countdown-pop 1s ease-out infinite;
+}
+
+@keyframes ninja-countdown-pop {
+  0% {
+    transform: scale(1.4);
+    opacity: 0.4;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* --- 판 표시 / 누적 점수 스코어보드 --- */
+
+.ninja-panel__exchange {
+  opacity: 0.8;
+  font-weight: 600;
+}
+
+.ninja-panel__totals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.9rem;
+  list-style: none;
+  padding: 0.5rem 0.75rem;
+  margin: 0.5rem 0;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  font-size: 0.9rem;
+}
+
+.ninja-panel__totals li {
+  opacity: 0.85;
+}
+
+.ninja-panel__totals-me {
+  color: #6f9fff;
+  font-weight: 700;
+  opacity: 1;
+}
+
+/* --- 판 종료 결과 창 (라운드별 순위 + 획득 점수) --- */
+
+.ninja-panel__bout-result {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1rem 1.25rem;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+  animation: ninja-bout-result-in 0.3s ease-out;
+}
+
+@keyframes ninja-bout-result-in {
+  from { transform: scale(0.9); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+.ninja-panel__bout-result-title {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: #ffd400;
+}
+
+.ninja-panel__bout-result ol {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  min-width: 12rem;
+}
+
+.ninja-panel__bout-result li {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.35rem 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.ninja-panel__bout-result li:first-child {
+  border-top: none;
+  font-weight: 700;
+}
+
+.ninja-panel__bout-result-points {
+  color: #7ee081;
+  font-weight: 700;
+}
+
+.ninja-panel__bout-result-next {
+  margin-top: 0.4rem;
+  font-size: 0.95rem;
+  opacity: 0.85;
+}
