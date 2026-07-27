@@ -7,6 +7,7 @@ import com.camon.domain.game.ninja.domain.NinjaPhase;
 import com.camon.domain.game.ninja.domain.Skill;
 import com.camon.domain.game.ninja.dto.AttackRequest;
 import com.camon.domain.game.ninja.dto.AttackResponse;
+import com.camon.domain.game.ninja.dto.BoutResultEntry;
 import com.camon.domain.game.ninja.dto.LastAttackResponse;
 import com.camon.domain.game.ninja.dto.NextSkillPreview;
 import com.camon.domain.game.ninja.dto.NinjaStateResponse;
@@ -209,6 +210,10 @@ public class NinjaGameService {
             (phase == NinjaPhase.INTERMISSION && effectUntil != null && round != null && exchange != null)
                 ? buildLastAttack(roomCode, seq, round, exchange)
                 : null;
+        // 판 종료 인터미션이면 방금 끝난 판의 순위+획득 점수를 노출한다(공통 GameResult에 이미 저장된 값을 읽음).
+        List<BoutResultEntry> boutResult = (phase == NinjaPhase.INTERMISSION && round != null)
+            ? buildBoutResult(room, seq, round)
+            : null;
 
         return new NinjaStateResponse(
             round == null ? 0 : round,
@@ -222,8 +227,25 @@ public class NinjaGameService {
             effectUntil,
             nextRoundAt,
             lastAttack,
-            sessionTotals(room, seq)
+            sessionTotals(room, seq),
+            boutResult
         );
+    }
+
+    // 방금 끝난 판의 결과 = 그 판의 round results(참가자→획득 점수). 점수 내림차순이 곧 그 판의 순위다.
+    // 판이 아직 점수화되지 않았으면(교환 사이/일반 진행) 빈 결과 → null 반환.
+    private List<BoutResultEntry> buildBoutResult(Room room, int seq, int round) {
+        Map<UUID, Long> results = gameScoreService.getRoundResults(room.roomId(), seq, round);
+        if (results.isEmpty()) {
+            return null;
+        }
+        List<Map.Entry<UUID, Long>> sorted = results.entrySet().stream()
+            .sorted(Comparator.comparingLong((Map.Entry<UUID, Long> e) -> e.getValue()).reversed()
+                .thenComparing(e -> e.getKey().toString()))
+            .toList();
+        return IntStream.range(0, sorted.size())
+            .mapToObj(i -> new BoutResultEntry(sorted.get(i).getKey().toString(), i + 1, sorted.get(i).getValue()))
+            .toList();
     }
 
     // 판을 가로질러 누적된 참가자별 점수(최종 발표 합산용). 아직 점수가 없는 참가자도 0으로 채운다.

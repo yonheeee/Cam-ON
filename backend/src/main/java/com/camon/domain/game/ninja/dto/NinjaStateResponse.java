@@ -27,6 +27,8 @@ public record NinjaStateResponse(
     Instant nextRoundAt,
     LastAttackResponse lastAttack,
     // 판을 가로질러 누적된 참가자별 점수(최종 발표 합산용) — 게임 진행 중에도 실시간으로 노출한다.
-    Map<String, Long> sessionTotals
+    Map<String, Long> sessionTotals,
+    // 방금 끝난 판의 순위+획득 점수. 판 종료 인터미션 동안에만 채워진다(교환 사이/일반 진행 땐 null).
+    List<BoutResultEntry> boutResult
 ) {
 }

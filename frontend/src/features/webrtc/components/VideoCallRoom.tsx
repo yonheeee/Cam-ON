@@ -7,7 +7,6 @@ import { GestureBoard } from '../../gesture/components/GestureBoard';
 import { NinjaGamePanel } from '../../ninja/components/NinjaGamePanel';
 import { useRoomGameStarted } from '../../ninja/hooks/useRoomGameStarted';
 import { LobbyScreen } from '../../room/components/LobbyScreen';
-import { ChatPanel } from '../../chat/components/ChatPanel';
 import { useRoomChat } from '../../chat/hooks/useRoomChat';
 import { PixelConfirmModal } from '../../system/components/PixelConfirmModal';
 import { useRoomHeartbeat } from '../../room/hooks/useRoomHeartbeat';
@@ -183,7 +182,8 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
           <VideoConference />
           <GesturePanel />
           <GestureBoard />
-          <ChatPanel variant="floating" messages={messages} onSend={sendMessage} />
+          {/* 닌자 게임 중엔 채팅 창을 띄우지 않는다(손동작 게임이라 불필요). 채팅이 필요한
+              게임(몸으로 말해요 등)이 추가되면 그때 gameId로 분기해 다시 노출한다. */}
         </>
       )}
       {/* 게임 중에만 마운트 — 대기방에선 ninja state 폴링을 아예 돌리지 않는다(불필요한

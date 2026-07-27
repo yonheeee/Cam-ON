@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ninjaApi,
   NinjaApiError,
+  type BoutResultEntry,
   type LastAttack,
   type NinjaPhase,
   type RankingEntry,
@@ -45,6 +46,11 @@ export function useNinjaRound(
   const [lastAttack, setLastAttack] = useState<LastAttack | null>(null);
   // 판을 가로질러 누적된 참가자별 점수(최종 발표 합산). 게임 진행 중에도 실시간 노출.
   const [sessionTotals, setSessionTotals] = useState<Record<string, number>>({});
+  // 공격 제출이 "서버에서 수락된"(=공격권 선점 성공, 200) 교환 키. 클라의 콤보 완성이 아니라 이 값으로
+  // "공격 성공" 표시를 판단한다 — 콤보를 완성해도 남이 먼저 선점했으면 여기엔 안 들어온다.
+  const [attackAckKey, setAttackAckKey] = useState<string | null>(null);
+  // 방금 끝난 판의 순위+획득 점수(판 종료 인터미션 동안만 채워짐).
+  const [boutResult, setBoutResult] = useState<BoutResultEntry[] | null>(null);
 
   // requiredSkill이 실제로 바뀔 때만(=라운드 전환) 새 배열이 되도록 메모.
   // 그냥 매 렌더 .map()을 새로 만들면 참조가 매번 달라져서, useSequenceProgress의
@@ -92,6 +98,7 @@ export function useNinjaRound(
       setNextRoundAt(state.nextRoundAt ? Date.parse(state.nextRoundAt) : null);
       setLastAttack(state.lastAttack);
       setSessionTotals(state.sessionTotals ?? {});
+      setBoutResult(state.boutResult ?? null);
     } catch {
       // 세션이 아직 없으면 404 — 조용히 무시하고 다음 폴링을 기다린다.
     }
@@ -139,21 +146,34 @@ export function useNinjaRound(
     };
   }, [participantId, round, exchange, gameId, accessToken]);
 
-  // 시퀀스 완성 시 공격 제출 — 같은 "교환"에 두 번 쏘지 않도록 마지막으로 제출한 (판,교환)을 기억한다.
-  // (라운드만 키로 쓰면 한 판 안의 두 번째 교환부터 제출이 막힌다.)
+  // 콤보 완성 → 공격 제출.
+  // 함정: 교환이 넘어가도 이전 교환의 completed=true가 한 렌더 남아있다(useSequenceProgress의 시퀀스
+  // 리셋이 이펙트라 한 박자 늦음). 그 stale 완성을 새 교환의 완성으로 오인하면 안 된다. 그래서 "이 교환에서
+  // completed=false를 한 번이라도 본" 뒤(=그 교환의 스킬로 시퀀스가 리셋된 뒤)에 올라온 완성만 진짜로 친다(armed).
+  // 이러면 전환 직후 stale 완성은 무시되고, 진짜 완성은 절대 놓치지 않는다. 같은 교환 중복 제출은 (판:교환) 키로 방지.
   const attackedKeyRef = useRef<string | null>(null);
+  const armedKeyRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!completed || !participantId || !requiredSkill || round == null || exchange == null) return;
-    // 인터미션(이펙트/카운트다운) 중엔 입력을 받지 않는다 — 다음 교환이 서버에서 열리기 전까진
-    // 공격 제출 자체가 무의미하고(교환 이미 닫힘), 선입력으로 이어질 수 있다.
-    if (phase !== 'ROUND') return;
+    if (round == null || exchange == null) return;
     const key = `${round}:${exchange}`;
+    if (!completed) {
+      // 이 교환의 콤보를 아직 완성 안 한 상태를 봤다 → 이제부터의 완성은 이 교환의 진짜 완성이다.
+      armedKeyRef.current = key;
+      return;
+    }
+    if (armedKeyRef.current !== key) return; // 전환 직후 넘어온 이전 교환의 stale 완성 → 무시.
+    // 인터미션(이펙트/카운트다운) 중엔 입력을 받지 않는다(선입력 방지).
+    if (phase !== 'ROUND' || !participantId || !requiredSkill) return;
     if (attackedKeyRef.current === key) return;
     attackedKeyRef.current = key;
 
     ninjaApi
       .submitAttack(gameId, round, requiredSkill.skillId, accessToken)
-      .then(() => poll())
+      .then(() => {
+        // 서버가 공격권 선점을 수락(200)한 교환만 "공격 성공"으로 표시한다.
+        setAttackAckKey(key);
+        void poll();
+      })
       .catch((err: unknown) => {
         // 이미 다른 참가자가 선점(NINJA_ALREADY_CLAIMED)한 것도 정상적인 결과라 에러로만 표시.
         setError(err instanceof NinjaApiError ? err.message : '공격 제출 실패');
@@ -195,6 +215,8 @@ export function useNinjaRound(
       await ninjaApi.reset(roomId, accessToken);
       attackedKeyRef.current = null;
       targetedKeyRef.current = null;
+      armedKeyRef.current = null;
+      setAttackAckKey(null);
       await poll();
     } catch (err) {
       setError(err instanceof NinjaApiError ? err.message : '게임 초기화 실패');
@@ -204,6 +226,9 @@ export function useNinjaRound(
   }, [poll, roomId, accessToken]);
 
   const isMyAttack = participantId !== null && currentAttackerToken === participantId;
+  // 현재 교환에서 내 공격 제출이 서버에 수락됐는가(콤보 완성이 아니라 서버 200 기준).
+  const attackAccepted =
+    round != null && exchange != null && attackAckKey === `${round}:${exchange}`;
   const gameEnded = ranking.length > 0;
 
   // 라운드 제한시간(15초) 카운트다운. 서버 데드라인을 못 받아서(폴링 기반) round가 바뀔 때마다
@@ -277,6 +302,7 @@ export function useNinjaRound(
     stepIndex,
     completed,
     holdProgress,
+    attackAccepted,
     ranking,
     gameEnded,
     error,
@@ -291,5 +317,6 @@ export function useNinjaRound(
     inCountdown,
     countdownSeconds,
     lastAttack,
+    boutResult,
   };
 }

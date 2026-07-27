@@ -242,6 +242,10 @@ public class NinjaRedisRepository {
         redis.delete(aliveKey(roomCode, seq, round));
         redis.delete(hpKey(roomCode, seq, round));
         redis.delete(eliminatedKey(roomCode, seq, round));
+        // 공통 점수 저장(GameResult) Lua 스크립트가 "round 키 존재"로 라운드가 열렸는지 검증하므로,
+        // 판(bout)이 열릴 때 bout 키(room:...:round:{r})에 마커를 남겨 그 검증을 통과시킨다.
+        // (판별 alive/hp/eliminated/ex는 하위 키라 이 검증 대상이 아니다.)
+        redis.opsForHash().put(boutKey(roomCode, seq, round), "round", String.valueOf(round));
         redis.opsForSet().add(aliveKey(roomCode, seq, round), tokens.toArray(String[]::new));
         String hp = hpKey(roomCode, seq, round);
         for (String token : tokens) {

@@ -40,6 +40,7 @@ export function NinjaGamePanel({ roomId, gameId, accessToken, onActiveChange }: 
     stepIndex,
     completed,
     holdProgress,
+    attackAccepted,
     ranking,
     gameEnded,
     error,
@@ -51,6 +52,7 @@ export function NinjaGamePanel({ roomId, gameId, accessToken, onActiveChange }: 
     inCountdown,
     countdownSeconds,
     lastAttack,
+    boutResult,
   } = useNinjaRound(roomId, gameId, accessToken, myParticipantId, comboLabel, comboConfidence);
 
   const [otherParticipantIds, setOtherParticipantIds] = useState<Record<string, string>>({});
@@ -162,31 +164,55 @@ export function NinjaGamePanel({ roomId, gameId, accessToken, onActiveChange }: 
 
           {isIntermission && (
             <div className="ninja-panel__intermission">
-              {inEffectPlayback && requiredSkill && (
-                <>
-                  <NinjaEffectOverlay effect={requiredSkill.effect} />
-                  <p className="ninja-panel__intermission-title">
-                    {lastAttack ? (
-                      <>
-                        {displayName(lastAttack.attackerToken)} → {displayName(lastAttack.targetToken)}
-                        {' · '}
-                        {requiredSkill.skillName} ({lastAttack.damage} 데미지)
-                        {lastAttack.targetEliminated && ' · 탈락!'}
-                      </>
-                    ) : (
-                      '라운드 종료'
-                    )}
-                  </p>
-                </>
-              )}
-              {inCountdown && (
-                <div className="ninja-panel__countdown">
-                  <p className="ninja-panel__countdown-label">다음 라운드까지</p>
-                  <p className="ninja-panel__countdown-number">{countdownSeconds}</p>
+              {/* 판이 끝난 인터미션이면(boutResult 존재) 이펙트 대신 그 판의 순위+획득 점수를 보여준다. */}
+              {boutResult && boutResult.length > 0 ? (
+                <div className="ninja-panel__bout-result">
+                  {inEffectPlayback && requiredSkill && <NinjaEffectOverlay effect={requiredSkill.effect} />}
+                  <p className="ninja-panel__bout-result-title">🥷 라운드 {round} 결과</p>
+                  <ol>
+                    {boutResult.map((entry) => (
+                      <li
+                        key={entry.token}
+                        className={entry.token === myParticipantId ? 'ninja-panel__ranking-me' : ''}
+                      >
+                        {entry.rank}위 — {displayName(entry.token)}
+                        <span className="ninja-panel__bout-result-points"> +{entry.points}점</span>
+                      </li>
+                    ))}
+                  </ol>
+                  {inCountdown && countdownSeconds !== null && (
+                    <p className="ninja-panel__bout-result-next">다음 라운드 시작까지 {countdownSeconds}</p>
+                  )}
                 </div>
-              )}
-              {!inEffectPlayback && !inCountdown && (
-                <p className="ninja-panel__intermission-title">정리 중...</p>
+              ) : (
+                <>
+                  {inEffectPlayback && requiredSkill && (
+                    <>
+                      <NinjaEffectOverlay effect={requiredSkill.effect} />
+                      <p className="ninja-panel__intermission-title">
+                        {lastAttack ? (
+                          <>
+                            {displayName(lastAttack.attackerToken)} → {displayName(lastAttack.targetToken)}
+                            {' · '}
+                            {requiredSkill.skillName} ({lastAttack.damage} 데미지)
+                            {lastAttack.targetEliminated && ' · 탈락!'}
+                          </>
+                        ) : (
+                          '교환 종료'
+                        )}
+                      </p>
+                    </>
+                  )}
+                  {inCountdown && (
+                    <div className="ninja-panel__countdown">
+                      <p className="ninja-panel__countdown-label">다음 교환까지</p>
+                      <p className="ninja-panel__countdown-number">{countdownSeconds}</p>
+                    </div>
+                  )}
+                  {!inEffectPlayback && !inCountdown && (
+                    <p className="ninja-panel__intermission-title">정리 중...</p>
+                  )}
+                </>
               )}
             </div>
           )}
@@ -227,7 +253,12 @@ export function NinjaGamePanel({ roomId, gameId, accessToken, onActiveChange }: 
                   </li>
                 ))}
               </ol>
-              {completed && <p className="ninja-panel__combo-done">⚡ 콤보 완성! 공격 제출됨</p>}
+              {/* "공격 제출됨"이 아니라 서버가 공격권 선점을 수락(200)했을 때만 성공으로 표시한다.
+                  콤보만 완성하고 아직 응답 전이면 "전송 중", 남이 먼저 선점했으면 아래 attacker-info로 표시. */}
+              {completed && !attackAccepted && !currentAttackerToken && (
+                <p className="ninja-panel__combo-done">⚡ 콤보 완성! 공격 전송 중…</p>
+              )}
+              {attackAccepted && <p className="ninja-panel__combo-done">⚡ 공격권 획득!</p>}
             </div>
           )}
 

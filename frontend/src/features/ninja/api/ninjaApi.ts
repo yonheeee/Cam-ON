@@ -72,6 +72,13 @@ export interface RankingEntry {
   rank: number;
 }
 
+// 방금 끝난 판(bout)의 순위 한 줄 — 그 판의 등수와 그 판으로 얻은 점수.
+export interface BoutResultEntry {
+  token: string;
+  rank: number;
+  points: number;
+}
+
 // 라운드 진행의 서버 기준 단계. 백엔드 NinjaPhase와 1:1.
 export type NinjaPhase = 'ROUND' | 'INTERMISSION' | 'ENDED';
 
@@ -104,6 +111,8 @@ export interface NinjaStateResponse {
   lastAttack: LastAttack | null;
   // 판을 가로질러 누적된 참가자별 점수(최종 발표 합산용).
   sessionTotals: Record<string, number>;
+  // 방금 끝난 판의 순위+획득 점수. 판 종료 인터미션 동안에만 채워지고, 그 외엔 null.
+  boutResult: BoutResultEntry[] | null;
 }
 
 export class NinjaApiError extends Error {
