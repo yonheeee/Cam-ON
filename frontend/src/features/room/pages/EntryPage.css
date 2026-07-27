@@ -1,0 +1,77 @@
+/* 코드 입력(JoinRoomPage)·닉네임 입력(NicknamePage) 공용 스타일 — Pixel Arcade Plaza */
+
+.entry__card {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: min(420px, 90vw);
+  padding: 32px;
+  box-sizing: border-box;
+}
+
+.entry__title {
+  margin: 0;
+  font-size: 24px;
+  text-align: center;
+}
+
+.entry__hint {
+  margin: -8px 0 0;
+  font-family: var(--pap-font-body);
+  font-size: 14px;
+  text-align: center;
+  color: var(--pap-ink);
+  opacity: 0.7;
+}
+
+.entry__input {
+  width: 100%;
+  text-align: center;
+}
+
+.entry__input--code {
+  font-size: 28px;
+  letter-spacing: 8px;
+  text-transform: uppercase;
+}
+
+.entry__players {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  font-family: var(--pap-font-body);
+  font-size: 15px;
+  color: var(--pap-ink);
+}
+
+.entry__players-btn {
+  font-size: 16px;
+  padding: 10px 16px;
+}
+
+/* 선택된 인원 버튼 — 눌린 상태로 고정된 픽셀 버튼 느낌 */
+.entry__players-btn--selected {
+  background: var(--pap-arcade-teal);
+  color: var(--pap-white);
+  transform: translate(var(--pap-shadow-offset), var(--pap-shadow-offset));
+  box-shadow: 0 0 0 0 var(--pap-ink);
+}
+
+.entry__actions {
+  display: flex;
+  gap: 12px;
+}
+
+.entry__actions > * {
+  flex: 1;
+}
+
+.entry__error {
+  margin: 0;
+  font-family: var(--pap-font-body);
+  font-size: 14px;
+  text-align: center;
+  color: var(--pap-festival-coral);
+  font-weight: 600;
+}

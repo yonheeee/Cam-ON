@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router';
+import { Navigate, useNavigate, useSearchParams } from 'react-router';
 import { createSession, SessionApiError } from '../../session/api/sessionApi';
 import { saveSession } from '../../session/lib/sessionStorage';
 import { roomApi, RoomApiError } from '../api/roomApi';
@@ -11,11 +11,15 @@ const NICKNAME_PATTERN = /^[\p{L}\p{N}]{1,8}$/u;
 
 type Mode = 'create' | 'join';
 
-// 방 생성/입장 없이 닉네임만으로 세션(회원)이 먼저 만들어지는 걸 막기 위해, "방 생성"/"방 입장"을
-// 먼저 고르게 하고 그 안에서 닉네임을 받아 세션 발급 + 방 생성(또는 입장)을 한 번에 처리한다.
+// 방 생성/입장 없이 닉네임만으로 세션(회원)이 먼저 만들어지는 걸 막기 위해, 랜딩에서
+// "방 만들기"/"코드로 참여"를 먼저 고르게 하고(?mode=create|join) 여기서 닉네임을 받아
+// 세션 발급 + 방 생성(또는 입장)을 한 번에 처리한다.
 export function RoomGate() {
   const navigate = useNavigate();
-  const [mode, setMode] = useState<Mode | null>(null);
+  const [searchParams] = useSearchParams();
+  const modeParam = searchParams.get('mode');
+  const mode: Mode | null =
+    modeParam === 'create' || modeParam === 'join' ? modeParam : null;
   const [nickname, setNickname] = useState('');
   const [maxPlayers, setMaxPlayers] = useState(4);
   const [roomCode, setRoomCode] = useState('');
@@ -58,14 +62,9 @@ export function RoomGate() {
     }
   };
 
+  // 모드 선택 화면은 랜딩(/)이 담당 — 모드 없이 직접 들어오면 랜딩으로 돌려보낸다.
   if (mode === null) {
-    return (
-      <div>
-        <h1>시작하기</h1>
-        <button type="button" onClick={() => setMode('create')}>방 생성</button>
-        <button type="button" onClick={() => setMode('join')}>방 입장</button>
-      </div>
-    );
+    return <Navigate to="/" replace />;
   }
 
   return (
@@ -108,7 +107,7 @@ export function RoomGate() {
         <button type="submit" disabled={submitting}>
           {submitting ? '처리 중...' : mode === 'create' ? '방 생성' : '방 입장'}
         </button>
-        <button type="button" onClick={() => setMode(null)} disabled={submitting}>
+        <button type="button" onClick={() => navigate('/')} disabled={submitting}>
           뒤로
         </button>
       </form>
