@@ -29,6 +29,8 @@ export function useNinjaRound(
   comboConfidence: number,
 ) {
   const [round, setRound] = useState<number | null>(null);
+  // round=판(bout), exchange=판 안의 교환. 판이 이어지는 동안 exchange가 늘고, 판이 바뀌면 1로 리셋된다.
+  const [exchange, setExchange] = useState<number | null>(null);
   const [totalRounds, setTotalRounds] = useState<number | null>(null);
   const [alivePlayers, setAlivePlayers] = useState<string[]>([]);
   const [hp, setHp] = useState<Record<string, number>>({});
@@ -41,6 +43,8 @@ export function useNinjaRound(
   const [effectUntil, setEffectUntil] = useState<number | null>(null);
   const [nextRoundAt, setNextRoundAt] = useState<number | null>(null);
   const [lastAttack, setLastAttack] = useState<LastAttack | null>(null);
+  // 판을 가로질러 누적된 참가자별 점수(최종 발표 합산). 게임 진행 중에도 실시간 노출.
+  const [sessionTotals, setSessionTotals] = useState<Record<string, number>>({});
 
   // requiredSkill이 실제로 바뀔 때만(=라운드 전환) 새 배열이 되도록 메모.
   // 그냥 매 렌더 .map()을 새로 만들면 참조가 매번 달라져서, useSequenceProgress의
@@ -77,6 +81,7 @@ export function useNinjaRound(
       const state = await ninjaApi.getState(gameId, accessToken);
       if (!mountedRef.current) return;
       setRound(state.round || null);
+      setExchange(state.exchange || null);
       setTotalRounds(state.totalRounds || null);
       setAlivePlayers(state.alivePlayers);
       setHp(state.hp);
@@ -86,6 +91,7 @@ export function useNinjaRound(
       setEffectUntil(state.effectUntil ? Date.parse(state.effectUntil) : null);
       setNextRoundAt(state.nextRoundAt ? Date.parse(state.nextRoundAt) : null);
       setLastAttack(state.lastAttack);
+      setSessionTotals(state.sessionTotals ?? {});
     } catch {
       // 세션이 아직 없으면 404 — 조용히 무시하고 다음 폴링을 기다린다.
     }
@@ -108,8 +114,10 @@ export function useNinjaRound(
     return () => clearInterval(interval);
   }, [participantId, poll]);
 
+  // 판이 이어지는 동안 교환마다 요구 스킬이 바뀌므로, (round, exchange)가 바뀔 때마다 다시 조회한다
+  // (서버는 "현재 교환"의 스킬을 돌려준다).
   useEffect(() => {
-    if (!participantId || round == null) {
+    if (!participantId || round == null || exchange == null) {
       setRequiredSkill(null);
       return;
     }
@@ -129,17 +137,19 @@ export function useNinjaRound(
     return () => {
       cancelled = true;
     };
-  }, [participantId, round, gameId, accessToken]);
+  }, [participantId, round, exchange, gameId, accessToken]);
 
-  // 시퀀스 완성 시 공격 제출 — 같은 라운드에 두 번 쏘지 않도록 마지막으로 제출한 라운드를 기억.
-  const attackedRoundRef = useRef<number | null>(null);
+  // 시퀀스 완성 시 공격 제출 — 같은 "교환"에 두 번 쏘지 않도록 마지막으로 제출한 (판,교환)을 기억한다.
+  // (라운드만 키로 쓰면 한 판 안의 두 번째 교환부터 제출이 막힌다.)
+  const attackedKeyRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!completed || !participantId || !requiredSkill || round == null) return;
-    // 인터미션(이펙트/카운트다운) 중엔 입력을 받지 않는다 — 다음 라운드가 서버에서 열리기 전까진
-    // 공격 제출 자체가 무의미하고(라운드 이미 닫힘), 선입력으로 이어질 수 있다.
+    if (!completed || !participantId || !requiredSkill || round == null || exchange == null) return;
+    // 인터미션(이펙트/카운트다운) 중엔 입력을 받지 않는다 — 다음 교환이 서버에서 열리기 전까진
+    // 공격 제출 자체가 무의미하고(교환 이미 닫힘), 선입력으로 이어질 수 있다.
     if (phase !== 'ROUND') return;
-    if (attackedRoundRef.current === round) return;
-    attackedRoundRef.current = round;
+    const key = `${round}:${exchange}`;
+    if (attackedKeyRef.current === key) return;
+    attackedKeyRef.current = key;
 
     ninjaApi
       .submitAttack(gameId, round, requiredSkill.skillId, accessToken)
@@ -148,7 +158,7 @@ export function useNinjaRound(
         // 이미 다른 참가자가 선점(NINJA_ALREADY_CLAIMED)한 것도 정상적인 결과라 에러로만 표시.
         setError(err instanceof NinjaApiError ? err.message : '공격 제출 실패');
       });
-  }, [completed, participantId, requiredSkill, round, phase, poll, gameId, accessToken]);
+  }, [completed, participantId, requiredSkill, round, exchange, phase, poll, gameId, accessToken]);
 
   const submitTarget = useCallback(
     async (targetToken: string) => {
@@ -165,16 +175,17 @@ export function useNinjaRound(
 
   // 공격권을 획득했는데 생존한 상대가 정확히 한 명이면(2인전 등) 굳이 고를 필요가 없어서 자동으로
   // 그 상대를 공격한다 — 상대가 둘 이상이면 진짜 전략적 선택이라 수동 지정을 그대로 둔다.
-  const targetedRoundRef = useRef<number | null>(null);
+  const targetedKeyRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!participantId || round == null || currentAttackerToken !== participantId) return;
+    if (!participantId || round == null || exchange == null || currentAttackerToken !== participantId) return;
     if (phase !== 'ROUND') return; // 인터미션에 접어들면 이미 대상 지정이 끝난 상태라 재시도하지 않는다.
-    if (targetedRoundRef.current === round) return;
+    const key = `${round}:${exchange}`;
+    if (targetedKeyRef.current === key) return;
     const others = alivePlayers.filter((token) => token !== participantId);
     if (others.length !== 1) return;
-    targetedRoundRef.current = round;
+    targetedKeyRef.current = key;
     void submitTarget(others[0]);
-  }, [participantId, round, currentAttackerToken, phase, alivePlayers, submitTarget]);
+  }, [participantId, round, exchange, currentAttackerToken, phase, alivePlayers, submitTarget]);
 
   const [resetting, setResetting] = useState(false);
   const resetGame = useCallback(async () => {
@@ -182,8 +193,8 @@ export function useNinjaRound(
     setError(null);
     try {
       await ninjaApi.reset(roomId, accessToken);
-      attackedRoundRef.current = null;
-      targetedRoundRef.current = null;
+      attackedKeyRef.current = null;
+      targetedKeyRef.current = null;
       await poll();
     } catch (err) {
       setError(err instanceof NinjaApiError ? err.message : '게임 초기화 실패');
@@ -200,7 +211,7 @@ export function useNinjaRound(
   // 승부는 이미 난 거라 0으로 확정해서 "타이머가 멈췄다"는 걸 보여준다.
   const [roundTimerSeconds, setRoundTimerSeconds] = useState<number | null>(null);
   useEffect(() => {
-    if (round == null) {
+    if (round == null || exchange == null) {
       setRoundTimerSeconds(null);
       return;
     }
@@ -209,7 +220,7 @@ export function useNinjaRound(
       setRoundTimerSeconds((prev) => (prev !== null && prev > 0 ? prev - 1 : 0));
     }, 1000);
     return () => clearInterval(interval);
-  }, [round]);
+  }, [round, exchange]);
 
   useEffect(() => {
     if (currentAttackerToken) setRoundTimerSeconds(0);
@@ -228,7 +239,7 @@ export function useNinjaRound(
       setAttackTimerSeconds((prev) => (prev !== null && prev > 0 ? prev - 1 : 0));
     }, 1000);
     return () => clearInterval(interval);
-  }, [isMyAttack, round]);
+  }, [isMyAttack, round, exchange]);
 
   // 인터미션 진행은 서버 기준 시각으로만 판단한다 — 클라 로컬 카운터로 "몇 초 지났나"를 세지 않고,
   // effectUntil/nextRoundAt(절대 시각)까지 남은 시간을 매 틱 계산한다. 그래서 늦게 폴링한 클라이언트나
@@ -253,6 +264,8 @@ export function useNinjaRound(
 
   return {
     round,
+    exchange,
+    sessionTotals,
     totalRounds,
     alivePlayers,
     hp,

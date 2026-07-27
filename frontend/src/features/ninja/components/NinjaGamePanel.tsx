@@ -27,6 +27,8 @@ export function NinjaGamePanel({ roomId, gameId, accessToken, onActiveChange }: 
 
   const {
     round,
+    exchange,
+    sessionTotals,
     totalRounds,
     alivePlayers,
     hp,
@@ -111,11 +113,11 @@ export function NinjaGamePanel({ roomId, gameId, accessToken, onActiveChange }: 
 
       {gameStarted && gameEnded && (
         <div className="ninja-panel__ranking">
-          <p className="ninja-panel__ranking-title">🏆 게임 종료 — 최종 순위</p>
+          <p className="ninja-panel__ranking-title">🏆 게임 종료 — 최종 순위 (누적 점수)</p>
           <ol>
             {ranking.map((entry) => (
               <li key={entry.token} className={entry.token === myParticipantId ? 'ninja-panel__ranking-me' : ''}>
-                {entry.rank}위 — {displayName(entry.token)}
+                {entry.rank}위 — {displayName(entry.token)} · {sessionTotals[entry.token] ?? 0}점
               </li>
             ))}
           </ol>
@@ -126,10 +128,24 @@ export function NinjaGamePanel({ roomId, gameId, accessToken, onActiveChange }: 
         <>
           <p className="ninja-panel__round">
             라운드 {round} / {totalRounds}
+            {exchange !== null && <span className="ninja-panel__exchange"> · {exchange}번째 교환</span>}
             {!isIntermission && roundTimerSeconds !== null && (
               <span className="ninja-panel__round-timer"> — 남은 시간 {roundTimerSeconds}s</span>
             )}
           </p>
+
+          {/* 판을 가로질러 누적된 점수 — 최후 1인 판이 끝날 때마다 5/4/3/2점이 쌓인다. */}
+          {Object.keys(sessionTotals).length > 0 && (
+            <ul className="ninja-panel__totals">
+              {Object.entries(sessionTotals)
+                .sort(([, a], [, b]) => b - a)
+                .map(([token, points]) => (
+                  <li key={token} className={token === myParticipantId ? 'ninja-panel__totals-me' : ''}>
+                    {displayName(token)}: {points}점
+                  </li>
+                ))}
+            </ul>
+          )}
 
           <ul className="ninja-panel__hp">
             {Object.entries(hp).map(([token, value]) => {

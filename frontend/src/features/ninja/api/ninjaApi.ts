@@ -34,29 +34,36 @@ export interface NextSkillPreview {
 
 export interface RoundSkillResponse {
   round: number;
+  // 판(round) 안의 교환 번호 — (round, exchange)가 바뀌면 프론트가 이 스킬을 다시 조회한다.
+  exchange: number;
   skillId: number;
   skillName: string;
   skillDesc: string | null;
   gestures: GestureStep[];
   effect: EffectDto;
-  // 마지막 라운드면 null.
+  // 바로 다음 교환에 나올 스킬 예고 — 없으면 null.
   nextSkill: NextSkillPreview | null;
 }
 
 export interface AttackResponse {
   round: number;
+  exchange: number;
   attackerToken: string;
   skillId: number;
 }
 
 export interface TargetResponse {
   round: number;
+  exchange: number;
   attackerToken: string;
   targetToken: string;
   skillId: number;
   damage: number;
   targetHpAfter: number;
   targetEliminated: boolean;
+  // 이 교환으로 판이 끝났는가(최후 1인).
+  boutEnded: boolean;
+  // 이 공격이 게임 전체를 끝냈는가(마지막 판 종료).
   gameEnded: boolean;
 }
 
@@ -79,13 +86,15 @@ export interface LastAttack {
 }
 
 export interface NinjaStateResponse {
+  // round=판(1..totalRounds), exchange=판 안의 교환. alivePlayers/hp는 "현재 판" 기준(판마다 리셋).
   round: number;
+  exchange: number;
   totalRounds: number;
   alivePlayers: string[];
   hp: Record<string, number>;
   currentAttackerToken: string | null;
   // 게임이 끝나기 전엔 빈 배열. WS(ninja:game-ended) 없이도 폴링만으로 최종 순위를 알 수 있게
-  // 백엔드가 GET .../state에 같이 실어준다.
+  // 백엔드가 GET .../state에 같이 실어준다(순위는 누적 점수순).
   ranking: RankingEntry[];
   // 서버 주도 인터미션: 진행/전환을 클라 로컬 타이머가 아니라 이 서버 기준 시각(ISO 문자열)으로만
   // 판단한다. ROUND일 땐 effectUntil/nextRoundAt/lastAttack은 null.
@@ -93,6 +102,8 @@ export interface NinjaStateResponse {
   effectUntil: string | null;
   nextRoundAt: string | null;
   lastAttack: LastAttack | null;
+  // 판을 가로질러 누적된 참가자별 점수(최종 발표 합산용).
+  sessionTotals: Record<string, number>;
 }
 
 export class NinjaApiError extends Error {

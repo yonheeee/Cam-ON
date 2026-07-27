@@ -312,3 +312,32 @@
     opacity: 1;
   }
 }
+
+/* --- 판 표시 / 누적 점수 스코어보드 --- */
+
+.ninja-panel__exchange {
+  opacity: 0.8;
+  font-weight: 600;
+}
+
+.ninja-panel__totals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.9rem;
+  list-style: none;
+  padding: 0.5rem 0.75rem;
+  margin: 0.5rem 0;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  font-size: 0.9rem;
+}
+
+.ninja-panel__totals li {
+  opacity: 0.85;
+}
+
+.ninja-panel__totals-me {
+  color: #6f9fff;
+  font-weight: 700;
+  opacity: 1;
+}
