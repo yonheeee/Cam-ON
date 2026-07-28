@@ -183,17 +183,21 @@ export function LobbyScreen({
             {tracks.map((trackRef) => {
               const identity = trackRef.participant.identity;
               const info = infoByIdentity.get(identity);
+              const isHost = info?.isHost ?? false;
               const ready = info?.ready ?? false;
+              // 방장은 게임 시작 게이트를 위해 내부적으로 ready=true지만, 대기방 UI엔 준비 배지·
+              // 상태를 표시하지 않는다 — 방장은 준비 대상이 아니라 게임을 시작하는 주체이기 때문.
+              const showReady = ready && !isHost;
               const isMe = identity === participantId;
               return (
                 <div
                   key={identity}
                   className={`lobby-tile${info ? ` lobby-tile--p${info.colorIndex}` : ''}${
-                    ready ? ' lobby-tile--ready' : ''
+                    showReady ? ' lobby-tile--ready' : ''
                   }`}
                 >
                   <ParticipantTile trackRef={trackRef} disableSpeakingIndicator />
-                  {ready && <span className="lobby-tile__ready-badge">READY!</span>}
+                  {showReady && <span className="lobby-tile__ready-badge">READY!</span>}
                   <div className="lobby-tile__bar">
                     <span className="lobby-tile__name">
                       {info?.nickname ?? trackRef.participant.name ?? '...'}
@@ -223,12 +227,14 @@ export function LobbyScreen({
                         </button>
                       </span>
                     )}
-                    <span
-                      className={`lobby-tile__status${ready ? ' lobby-tile__status--ready' : ''}`}
-                      title={ready ? '준비 완료' : '대기 중'}
-                    >
-                      {ready ? ReadyIcon : WaitingIcon}
-                    </span>
+                    {!isHost && (
+                      <span
+                        className={`lobby-tile__status${ready ? ' lobby-tile__status--ready' : ''}`}
+                        title={ready ? '준비 완료' : '대기 중'}
+                      >
+                        {ready ? ReadyIcon : WaitingIcon}
+                      </span>
+                    )}
                   </div>
                 </div>
               );

@@ -5,14 +5,15 @@ import { ConnectionState, VideoPresets, type RoomOptions } from 'livekit-client'
 import { GesturePanel } from '../../gesture/components/GesturePanel';
 import { GestureBoard } from '../../gesture/components/GestureBoard';
 import { NinjaGamePanel } from '../../ninja/components/NinjaGamePanel';
+import { useRoomGameStarted } from '../../ninja/hooks/useRoomGameStarted';
 import { LobbyScreen } from '../../room/components/LobbyScreen';
-import { ChatPanel } from '../../chat/components/ChatPanel';
 import { useRoomChat } from '../../chat/hooks/useRoomChat';
 import { PixelConfirmModal } from '../../system/components/PixelConfirmModal';
 import { useRoomHeartbeat } from '../../room/hooks/useRoomHeartbeat';
 import { clearRoom } from '../../room/lib/roomStorage';
 import { FetchObjectGame } from '../../fetch/components/FetchObjectGame';
 import { useFetchGame } from '../../fetch/hooks/useFetchGame';
+import { roomApi, RoomApiError } from '../../room/api/roomApi';
 import '@livekit/components-styles';
 import './VideoCallRoom.css';
 
@@ -39,8 +40,9 @@ const roomOptions: RoomOptions = {
 // LiveKit Cloud 프로젝트 서버 URL — 고정값이라 매번 입력받을 필요 없음.
 const LIVEKIT_SERVER_URL = 'wss://plaiground-gkmfgv1j.livekit.cloud';
 
-// gameId 고정 — 코스에서 게임을 고르는 흐름이 생기면 그쪽에서 받아오도록 교체.
+// gameId/라운드 수 고정 — 코스에서 게임을 고르는 흐름이 생기면 그쪽에서 받아오도록 교체.
 const NINJA_GAME_ID = 1;
+const DEFAULT_TOTAL_ROUNDS = 5;
 
 interface VideoCallRoomProps {
   // 방 생성/입장 플로우를 마치고 들어오는 화면이라, 여기 도달한 시점엔 넷 다 이미 확보돼 있다.
@@ -117,14 +119,16 @@ interface RoomContentProps {
 // LiveKitRoom 컨텍스트 안에서 동작하는 부분 — 대기방(LobbyScreen) ↔ 게임 화면을 전환한다.
 // 채팅 상태는 여기(useRoomChat)가 소유해서 화면 전환으로 패널이 리마운트돼도 내역이 유지된다.
 function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomContentProps) {
-  // 게임이 실제로 열려 있는지(NinjaGamePanel이 폴링으로 판단)에 따라 대기방/게임 화면을 전환한다.
+  // 대기방↔게임 화면 전환. 닌자 진입은 game:started 이벤트 기준이고,
   // 손 인식(GesturePanel/GestureBoard)은 닌자 게임 중에만 켠다.
   const [gameActive, setGameActive] = useState(false);
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
   const { messages, sendMessage } = useRoomChat();
 
-  // 물건 가져오기 게임 상태 (LiveKit 데이터 채널 mock — Spring course/mission API 확정 전 임시)
+  // 물건 가져오기 게임 상태 (LiveKit 데이터 채널 mock — Spring course/mission API 확정 전 임시).
+  // ⚠ 로비의 "게임 시작" 버튼은 정식 백엔드 플로우(닌자)를 부르고, 물건 가져오기는
+  //   /dev/fetch 진입로로만 시작한다 — 코스 도메인(게임 선택/순서)이 생기면 그쪽으로 통합.
   const fetchGame = useFetchGame();
   const fetchActive = fetchGame.state.phase !== 'idle';
 
@@ -142,20 +146,40 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
     void fetchGame.startGame(undefined, searchParams.get('target') ?? undefined);
   }, [searchParams, connectionState, fetchGame.startGame]);
 
-  // 게임 시작 트리거 — 임시로 "게임 구성" mock 1세트인 물건 가져오기를 시작한다.
-  // (닌자는 기존 dev seed 방식이 NinjaGamePanel에 남아 있고, 코스 도메인이 생기면
-  //  세트 순서대로 게임을 고르는 흐름으로 교체)
+  // 게임 진입은 game:started 이벤트로 한다(폴링 아님) — 방에 연결된 모든 클라이언트가 브로드캐스트를
+  // 동시에 받아 함께 게임 화면으로 전환된다. 폴링에 의존하던 이전 방식은 일부 참가자가 전환을
+  // 놓치는 문제가 있었다.
+  useRoomGameStarted(roomId, accessToken, () => setGameActive(true));
+  // 이벤트를 놓친 경우(늦은 접속/재접속) 방 status로 복구한다 — PLAYING이면 이미 시작된 게임이다.
+  useEffect(() => {
+    let cancelled = false;
+    roomApi
+      .getRoom(roomId, accessToken)
+      .then((room) => {
+        if (!cancelled && room.status === 'PLAYING') setGameActive(true);
+      })
+      .catch(() => {
+        // 조회 실패는 무시 — game:started 이벤트가 주 경로다.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [roomId, accessToken]);
+
+  // 게임 시작 트리거(정식). 방장이 누르면 서버가 방장 여부·전원 준비를 검증하고 방을 PLAYING으로
+  // 전환한 뒤 세션을 연다. 참가자 토큰은 서버가 방의 실제 참가자 목록에서 만들므로 넘기지 않는다.
   const startGame = useCallback(async () => {
     setStarting(true);
     setStartError(null);
     try {
-      await fetchGame.startGame();
-    } catch {
-      setStartError('게임 시작 실패 — AI 서버가 켜져 있는지 확인하세요');
+      await roomApi.startGame(roomId, NINJA_GAME_ID, DEFAULT_TOTAL_ROUNDS, accessToken);
+      // 화면 전환은 서버가 브로드캐스트하는 game:started 이벤트로 이뤄진다(방장 본인 포함 전원).
+    } catch (err) {
+      setStartError(err instanceof RoomApiError ? err.message : '게임 시작 실패');
     } finally {
       setStarting(false);
     }
-  }, [fetchGame.startGame]);
+  }, [roomId, accessToken]);
 
   return (
     <>
@@ -188,15 +212,20 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
           <VideoConference />
           <GesturePanel />
           <GestureBoard />
-          <ChatPanel variant="floating" messages={messages} onSend={sendMessage} />
+          {/* 닌자 게임 중엔 채팅 창을 띄우지 않는다(손동작 게임이라 불필요). 채팅이 필요한
+              게임(몸으로 말해요 등)이 추가되면 그때 gameId로 분기해 다시 노출한다. */}
         </>
       )}
-      <NinjaGamePanel
-        roomId={roomId}
-        gameId={NINJA_GAME_ID}
-        accessToken={accessToken}
-        onActiveChange={setGameActive}
-      />
+      {/* 게임 중에만 마운트 — 대기방에선 ninja state 폴링을 아예 돌리지 않는다(불필요한
+          NINJA_SESSION_NOT_FOUND 요청 제거). 세션이 사라지면 onActiveChange(false)로 대기방 복귀. */}
+      {gameActive && (
+        <NinjaGamePanel
+          roomId={roomId}
+          gameId={NINJA_GAME_ID}
+          accessToken={accessToken}
+          onActiveChange={setGameActive}
+        />
+      )}
     </>
   );
 }

@@ -35,6 +35,11 @@ export interface UpdateReadyResult {
   allReady: boolean;
 }
 
+export interface StartGameResult {
+  gameId: number;
+  totalRounds: number;
+}
+
 export class RoomApiError extends Error {
   code?: string;
 
@@ -80,5 +85,14 @@ export const roomApi = {
     request<UpdateReadyResult>(`/api/rooms/${roomId}/members/me/ready`, accessToken, {
       method: 'PATCH',
       body: JSON.stringify({ ready }),
+    }),
+
+  // 방장이 대기방에서 게임을 시작한다. 참가자 토큰은 서버가 방의 실제 참가자 목록에서 만들므로
+  // 클라이언트가 넘기지 않는다. 서버가 방장 여부·전원 준비를 검증하고 방을 PLAYING으로 전환한 뒤
+  // 세션을 열며 game:started를 브로드캐스트한다.
+  startGame: (roomId: string, gameId: number, totalRounds: number, accessToken: string) =>
+    request<StartGameResult>(`/api/rooms/${roomId}/start`, accessToken, {
+      method: 'POST',
+      body: JSON.stringify({ gameId, totalRounds }),
     }),
 };
