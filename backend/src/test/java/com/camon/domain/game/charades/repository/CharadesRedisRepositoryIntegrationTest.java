@@ -66,12 +66,12 @@ class CharadesRedisRepositoryIntegrationTest {
             UUID.randomUUID()
         );
 
-        repository.initialize(ROOM_CODE, SESSION_SEQ, 5, 7L, presenterOrder);
+        repository.initialize(ROOM_CODE, SESSION_SEQ, 1, 7L, presenterOrder);
 
         CharadesGameState state = repository.findState(ROOM_CODE, SESSION_SEQ)
             .orElseThrow();
         assertThat(state.currentRound()).isZero();
-        assertThat(state.totalRounds()).isEqualTo(5);
+        assertThat(state.totalRounds()).isEqualTo(1);
         assertThat(state.currentTurn()).isZero();
         assertThat(state.totalTurnsInRound()).isEqualTo(3);
         assertThat(state.topicId()).isEqualTo(7L);
@@ -91,7 +91,7 @@ class CharadesRedisRepositoryIntegrationTest {
         repository.initialize(
             ROOM_CODE,
             SESSION_SEQ,
-            3,
+            1,
             7L,
             List.of(presenterId, UUID.randomUUID(), UUID.randomUUID())
         );
@@ -129,7 +129,7 @@ class CharadesRedisRepositoryIntegrationTest {
         repository.initialize(
             ROOM_CODE,
             SESSION_SEQ,
-            3,
+            1,
             7L,
             List.of(presenterId, UUID.randomUUID(), UUID.randomUUID())
         );
@@ -154,7 +154,7 @@ class CharadesRedisRepositoryIntegrationTest {
         repository.initialize(
             ROOM_CODE,
             SESSION_SEQ,
-            3,
+            1,
             7L,
             List.of(presenterId, UUID.randomUUID(), UUID.randomUUID())
         );
@@ -187,7 +187,7 @@ class CharadesRedisRepositoryIntegrationTest {
         repository.initialize(
             ROOM_CODE,
             SESSION_SEQ,
-            3,
+            1,
             7L,
             List.of(presenterId, firstAnswererId, secondAnswererId)
         );
@@ -233,7 +233,7 @@ class CharadesRedisRepositoryIntegrationTest {
         repository.initialize(
             ROOM_CODE,
             SESSION_SEQ,
-            3,
+            1,
             7L,
             List.of(presenterId, answererId, UUID.randomUUID())
         );
@@ -259,7 +259,7 @@ class CharadesRedisRepositoryIntegrationTest {
         repository.initialize(
             ROOM_CODE,
             SESSION_SEQ,
-            3,
+            1,
             7L,
             List.of(presenterId, UUID.randomUUID(), UUID.randomUUID())
         );
@@ -310,7 +310,7 @@ class CharadesRedisRepositoryIntegrationTest {
         repository.initialize(
             ROOM_CODE,
             SESSION_SEQ,
-            3,
+            1,
             7L,
             List.of(oldPresenter, UUID.randomUUID(), UUID.randomUUID())
         );
@@ -323,12 +323,12 @@ class CharadesRedisRepositoryIntegrationTest {
             UUID.randomUUID()
         );
 
-        repository.initialize(ROOM_CODE, SESSION_SEQ, 7, 8L, newOrder);
+        repository.initialize(ROOM_CODE, SESSION_SEQ, 1, 8L, newOrder);
 
         CharadesGameState state = repository.findState(ROOM_CODE, SESSION_SEQ)
             .orElseThrow();
         assertThat(state.currentRound()).isZero();
-        assertThat(state.totalRounds()).isEqualTo(7);
+        assertThat(state.totalRounds()).isEqualTo(1);
         assertThat(state.currentTurn()).isZero();
         assertThat(state.totalTurnsInRound()).isEqualTo(3);
         assertThat(state.topicId()).isEqualTo(8L);
@@ -344,7 +344,7 @@ class CharadesRedisRepositoryIntegrationTest {
         repository.initialize(
             ROOM_CODE,
             SESSION_SEQ,
-            3,
+            1,
             7L,
             List.of(presenterId, UUID.randomUUID(), UUID.randomUUID())
         );
@@ -364,19 +364,19 @@ class CharadesRedisRepositoryIntegrationTest {
     }
 
     @Test
-    void validatesRoundCountAndPresenterOrder() {
+    void validatesSingleRoundAndPresenterOrder() {
         UUID participantId = UUID.randomUUID();
 
         assertThatThrownBy(() -> repository.initialize(
             ROOM_CODE, SESSION_SEQ, 2, 7L, List.of(participantId)
         )).isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("one of 3, 5, 7, 9");
+            .hasMessageContaining("must be 1");
         assertThatThrownBy(() -> repository.initialize(
-            ROOM_CODE, SESSION_SEQ, 4, 7L, List.of(participantId)
+            ROOM_CODE, SESSION_SEQ, 3, 7L, List.of(participantId)
         )).isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("one of 3, 5, 7, 9");
+            .hasMessageContaining("must be 1");
         assertThatThrownBy(() -> repository.initialize(
-            ROOM_CODE, SESSION_SEQ, 3, 7L, List.of(participantId, participantId)
+            ROOM_CODE, SESSION_SEQ, 1, 7L, List.of(participantId, participantId)
         )).isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("duplicates");
     }

@@ -52,7 +52,7 @@ public class CharadesGameService {
 
     static final int MIN_PLAYERS = 3;
     static final int MAX_PLAYERS = 4;
-    static final Set<Integer> ALLOWED_ROUND_COUNTS = Set.of(3, 5, 7, 9);
+    static final int TOTAL_ROUNDS = 1;
     static final Duration TURN_DURATION = Duration.ofMinutes(1);
 
     private static final String MISSION_TYPE = "CHARADES";
@@ -107,20 +107,15 @@ public class CharadesGameService {
     public CharadesTurnStartedPayload startSession(
         UUID roomId,
         Long gameId,
-        Long topicId,
-        int totalRounds
+        Long topicId
     ) {
-        validateRoundCount(totalRounds);
         Room room = resolveRoom(roomId);
         List<Participant> participants = connectedParticipants(roomId);
         validatePlayerCount(participants.size());
         validateTopic(gameId, topicId);
 
         List<Mission> missions = findTopicMissions(gameId, topicId);
-        int requiredMissionCount = Math.multiplyExact(
-            participants.size(),
-            totalRounds
-        );
+        int requiredMissionCount = participants.size();
         if (missions.size() < requiredMissionCount) {
             throw new BusinessException(ErrorCode.CHARADES_NOT_ENOUGH_MISSIONS);
         }
@@ -133,7 +128,7 @@ public class CharadesGameService {
         charadesRedis.initialize(
             room.roomCode(),
             sessionSeq,
-            totalRounds,
+            TOTAL_ROUNDS,
             topicId,
             presenterOrder
         );
@@ -142,7 +137,7 @@ public class CharadesGameService {
             room.roomId(),
             gameId,
             sessionSeq,
-            totalRounds
+            TOTAL_ROUNDS
         );
         return openTurn(
             room,
@@ -799,12 +794,6 @@ public class CharadesGameService {
             || !missionTopicRepository
                 .existsByTopicIdAndGameGameIdAndIsActiveTrue(topicId, gameId)) {
             throw new BusinessException(ErrorCode.CHARADES_TOPIC_NOT_FOUND);
-        }
-    }
-
-    private static void validateRoundCount(int totalRounds) {
-        if (!ALLOWED_ROUND_COUNTS.contains(totalRounds)) {
-            throw new BusinessException(ErrorCode.CHARADES_INVALID_ROUND_COUNT);
         }
     }
 
