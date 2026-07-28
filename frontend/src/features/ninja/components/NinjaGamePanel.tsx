@@ -7,7 +7,7 @@ import './NinjaGamePanel.css';
 
 const ATTACK_TARGET_TIMER_SECONDS = 30;
 
-// 게임 시작(seed)은 이제 대기방(RoomLobby/VideoCallRoom)에서 트리거한다. 이 패널은 폴링으로
+// 게임 시작은 이제 대기방(LobbyScreen/VideoCallRoom)에서 트리거한다. 이 패널은 폴링으로
 // 진행 상태만 읽어서 게임이 실제로 열려 있을 때만 렌더링하고, 그 활성 여부를 onActiveChange로
 // 부모에 알려 부모가 대기방/게임 화면 전환과 손 인식 패널 on/off를 결정하게 한다.
 interface NinjaGamePanelProps {
