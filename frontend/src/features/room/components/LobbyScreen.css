@@ -274,6 +274,12 @@
   background: var(--pap-festival-coral);
 }
 
+/* 강퇴 버튼(방장 전용) — 평소엔 조용히, 올리면 위험색으로 */
+.lobby-tile__control--kick:hover {
+  color: var(--pap-white);
+  background: var(--pap-festival-coral);
+}
+
 .lobby-tile__control--off:hover {
   background: #d94f63;
 }

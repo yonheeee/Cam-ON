@@ -4,6 +4,7 @@ import { Track } from 'livekit-client';
 import { ChatPanel } from '../../chat/components/ChatPanel';
 import type { ChatMessage } from '../../chat/hooks/useRoomChat';
 import { PixelConfirmModal } from '../../system/components/PixelConfirmModal';
+import { roomApi, RoomApiError } from '../api/roomApi';
 import { useRoomLobby } from '../hooks/useRoomLobby';
 import {
   CamOffIcon,
@@ -16,6 +17,7 @@ import {
   FetchGameIcon,
   GearIcon,
   HandGameIcon,
+  KickIcon,
   LinkIcon,
   MicOffIcon,
   MicOnIcon,
@@ -59,11 +61,16 @@ export function LobbyScreen({
   chatMessages,
   onSendChat,
 }: LobbyScreenProps) {
-  const { room, error, toggleReady } = useRoomLobby(roomId, accessToken);
+  const { room, error, toggleReady, kicked } = useRoomLobby(roomId, accessToken, participantId);
   const [toast, setToast] = useState<string | null>(null);
   const [courseCollapsed, setCourseCollapsed] = useState(false);
   const [confirmLeave, setConfirmLeave] = useState(false);
   const [readyPending, setReadyPending] = useState(false);
+  // 강퇴 확인 팝업 대상. 닉네임은 팝업 문구용.
+  const [kickTarget, setKickTarget] = useState<{ participantId: string; nickname: string } | null>(
+    null,
+  );
+  const [kickPending, setKickPending] = useState(false);
 
   // 내 캠/마이크 상태·토글 (내 타일의 정보 바에 버튼으로 노출)
   const { localParticipant, isCameraEnabled, isMicrophoneEnabled } = useLocalParticipant();
@@ -75,6 +82,8 @@ export function LobbyScreen({
 
   const self = room?.participants.find((p) => p.participantId === participantId);
   const isHost = participantId === room?.hostParticipantId;
+  // 타일 map 안에서 isHost가 "이 타일 주인이 방장인가"로 섀도잉되므로, "내가 방장인가"는 별칭으로 들고 간다.
+  const amHost = isHost;
   // 타일 테두리·표시에 쓸 참가자 정보 (LiveKit identity == participantId)
   const infoByIdentity = new Map(
     (room?.participants ?? []).map((p, index) => [
@@ -125,6 +134,21 @@ export function LobbyScreen({
       showToast(kind === 'code' ? '코드 복사 완료!' : '링크 복사 완료!');
     } catch {
       // clipboard 접근이 막힌 환경(비 HTTPS 등) — 코드는 화면에 그대로 보이니 조용히 넘어간다.
+    }
+  };
+
+  const handleKick = async () => {
+    if (!kickTarget || kickPending) return;
+    setKickPending(true);
+    try {
+      await roomApi.kickMember(roomId, kickTarget.participantId, accessToken);
+      // 목록 갱신은 서버가 쏘는 member:left(KICKED) 브로드캐스트가 처리한다.
+      setKickTarget(null);
+    } catch (err) {
+      setKickTarget(null);
+      showToast(err instanceof RoomApiError ? err.message : '강퇴에 실패했어요');
+    } finally {
+      setKickPending(false);
     }
   };
 
@@ -246,6 +270,23 @@ export function LobbyScreen({
                           aria-label={isMicrophoneEnabled ? '마이크 끄기' : '마이크 켜기'}
                         >
                           {isMicrophoneEnabled ? MicOnIcon : MicOffIcon}
+                        </button>
+                      </span>
+                    )}
+                    {/* 방장에게만: 다른 참가자 타일에 강퇴 버튼. 대상이 방장 타일인 경우는
+                        없다(방장=나, 내 타일엔 안 그림). 실제 실행은 확인 팝업을 거친다. */}
+                    {amHost && !isMe && info && (
+                      <span className="lobby-tile__controls">
+                        <button
+                          type="button"
+                          className="lobby-tile__control lobby-tile__control--kick"
+                          onClick={() =>
+                            setKickTarget({ participantId: identity, nickname: info.nickname })
+                          }
+                          title="강퇴"
+                          aria-label={`${info.nickname} 강퇴`}
+                        >
+                          {KickIcon}
                         </button>
                       </span>
                     )}
@@ -373,6 +414,27 @@ export function LobbyScreen({
           tone="danger"
           onConfirm={onLeave}
           onCancel={() => setConfirmLeave(false)}
+        />
+      )}
+      {kickTarget && (
+        <PixelConfirmModal
+          title={`'${kickTarget.nickname}' 님을 강퇴할까요?`}
+          message="강퇴된 참가자는 이 방에 다시 들어올 수 없어요."
+          confirmLabel={kickPending ? '강퇴 중...' : '강퇴'}
+          cancelLabel="취소"
+          tone="danger"
+          onConfirm={() => void handleKick()}
+          onCancel={() => !kickPending && setKickTarget(null)}
+        />
+      )}
+      {/* 내가 강퇴당한 경우 — member:left(KICKED)에서 내 id를 확인한 결과. 확인을 눌러야
+          방을 떠난다(onLeave가 정리 + 메인 이동. leaveRoom API는 404가 나지만 조용히 무시됨). */}
+      {kicked && (
+        <PixelConfirmModal
+          title="강퇴되었습니다"
+          message="방장이 회원님을 방에서 내보냈어요."
+          confirmLabel="메인으로"
+          onConfirm={onLeave}
         />
       )}
     </div>
