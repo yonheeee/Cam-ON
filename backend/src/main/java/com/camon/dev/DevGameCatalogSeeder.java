@@ -52,22 +52,22 @@ public class DevGameCatalogSeeder implements ApplicationRunner {
     @Override
     @Transactional
     public void run(ApplicationArguments args) {
+        // 라운드 범위는 요구사항명세서(닌자 3~10 / 물건가져오기 참여자수~10 / 몸으로말해요 항상 1)와
+        // 다르다 — 코스에서 라운드 수를 자유롭게 정하기로 방향이 바뀌어 하한을 전부 1로 통일했다.
+        // 명세서/AGENTS.md/ERD 쪽 갱신은 아직 보류 상태다.
         seedGame(
             NINJA,
             "제시된 손동작 콤보를 가장 빨리 완성해 공격권을 얻고, 최후의 1인이 남을 때까지 겨룬다.",
-            2, 4, 3, 10
+            2, 4, 1, 10
         );
         seedGame(
             FETCH_OBJECT,
             "제시된 물건을 제한시간 안에 카메라 앞으로 가져온다. 빨리 가져온 순서대로 점수를 얻는다.",
-            // min_rounds가 null이면 "참여자 수"를 최소 라운드로 앱이 계산한다.
-            2, 4, null, 10
+            2, 4, 1, 3
         );
         Game charades = seedGame(
             CHARADES,
             "고른 주제의 제시어를 말 없이 몸으로 설명하고, 나머지 참가자가 채팅으로 정답을 맞힌다.",
-            // 요구사항 명세엔 3~10라운드로 적혀 있지만 실제 구현은 1라운드부터 성립한다
-            // (1라운드 = 참가자 전원이 한 번씩 표현). 코드가 실제로 지원하는 범위로 맞춘다.
             3, 4, 1, 10
         );
 
