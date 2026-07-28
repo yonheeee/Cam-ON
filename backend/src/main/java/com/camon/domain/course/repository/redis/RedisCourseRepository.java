@@ -5,6 +5,7 @@ import com.camon.domain.course.repository.CourseReplaceResult;
 import com.camon.domain.course.repository.CourseRepository;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -146,6 +147,24 @@ public class RedisCourseRepository implements CourseRepository {
             ));
         }
         return items;
+    }
+
+    @Override
+    public void openSession(
+        String roomCode,
+        int sessionSeq,
+        Long gameId,
+        int totalRounds
+    ) {
+        // HSET이라 이미 있으면 값만 덮어쓴다 — 같은 세션을 다시 여는 경우는 없지만,
+        // 있더라도 코스가 정한 값으로 맞춰지는 편이 안전하다.
+        redisTemplate.opsForHash().putAll(
+            RedisCourseKeys.session(roomCode, sessionSeq),
+            Map.of(
+                "game_id", Long.toString(gameId),
+                "total_rounds", Integer.toString(totalRounds)
+            )
+        );
     }
 
     @Override

@@ -15,4 +15,12 @@ public interface CourseRepository {
     List<CourseItem> findAll(UUID roomId, String roomCode);
 
     Optional<CourseItem> find(UUID roomId, String roomCode, int idx);
+
+    // 코스의 한 칸을 실제 세션으로 연다 — room:{code}:session:{seq}에 game_id/total_rounds를
+    // 코스에서 그대로 복사한다(설계 문서의 "session:{seq}가 course:{seq}를 읽어 복사" 그대로).
+    //
+    // 게임이 아니라 코스가 이 키를 만드는 이유: 공통 점수 저장(GameResultRepository)이 이 키의
+    // 존재로 "세션이 열렸는지"를 검증하는데, 게임마다 각자 만들게 두면 빠뜨린 게임에서
+    // 점수 저장이 통째로 실패한다(몸으로 말해요가 실제로 그랬다).
+    void openSession(String roomCode, int sessionSeq, Long gameId, int totalRounds);
 }

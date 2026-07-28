@@ -211,6 +211,14 @@ public class CourseRunner {
         }
         log.info("[Course] openSession : roomCode={} seq={} game={} rounds={} topicId={}",
             room.roomCode(), seq, game.getName(), item.roundCount(), item.topicId());
+        // 게임을 시작시키기 전에 세션 키를 먼저 만든다 — 공통 점수 저장이 이 키의 존재로
+        // "세션이 열렸는지"를 검증하므로, 게임이 첫 라운드 점수를 저장하는 시점엔 이미 있어야 한다.
+        courseRepository.openSession(
+            room.roomCode(),
+            seq,
+            item.gameId(),
+            item.roundCount()
+        );
         // game:started 브로드캐스트는 각 게임이 세션을 열면서 발행한다 — 프론트의 화면 전환은
         // 그 이벤트 하나로 통일돼 있어서, 코스가 별도 "다음 게임" 이벤트를 만들지 않는다.
         starter.start(

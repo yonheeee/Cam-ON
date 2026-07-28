@@ -20,4 +20,10 @@ final class RedisCourseKeys {
     static String coursePrefix(String roomCode) {
         return ROOM_PREFIX + roomCode + ":course:";
     }
+
+    // 진행 중인 게임 세션. 게임 도메인들도 같은 키를 쓰므로(닌자가 여기에 자기 진행 상태를 얹는다)
+    // 키 모양이 바뀌면 게임 쪽과 함께 깨진다.
+    static String session(String roomCode, int sessionSeq) {
+        return ROOM_PREFIX + roomCode + ":session:" + sessionSeq;
+    }
 }
