@@ -13,6 +13,7 @@ import com.camon.domain.room.dto.ParticipantResponse;
 import com.camon.domain.room.dto.RoomSnapshotResponse;
 import com.camon.domain.room.dto.UpdateReadyRequest;
 import com.camon.domain.room.dto.UpdateReadyResponse;
+import com.camon.domain.room.event.ParticipantLeftEvent;
 import com.camon.domain.room.repository.RoomRepository;
 import com.camon.domain.room.repository.JoinParticipantResult;
 import com.camon.domain.room.repository.ParticipantRepository;
@@ -29,6 +30,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -44,6 +46,7 @@ public class RoomService {
     private final RoomEventPublisher roomEventPublisher;
     private final LiveKitTokenService liveKitTokenService;
     private final Clock clock;
+    private final ApplicationEventPublisher applicationEventPublisher;
 
     public RoomService(
         RoomRepository roomRepository,
@@ -53,7 +56,8 @@ public class RoomService {
         RoomInviteLinkGenerator inviteLinkGenerator,
         RoomEventPublisher roomEventPublisher,
         LiveKitTokenService liveKitTokenService,
-        Clock jwtClock
+        Clock jwtClock,
+        ApplicationEventPublisher applicationEventPublisher
     ) {
         this.roomRepository = roomRepository;
         this.participantRepository = participantRepository;
@@ -63,6 +67,7 @@ public class RoomService {
         this.roomEventPublisher = roomEventPublisher;
         this.liveKitTokenService = liveKitTokenService;
         this.clock = jwtClock;
+        this.applicationEventPublisher = applicationEventPublisher;
     }
 
     public CreateRoomResponse createRoom(
@@ -183,6 +188,13 @@ public class RoomService {
                 result.newHostParticipantId()
             );
         }
+        applicationEventPublisher.publishEvent(
+            new ParticipantLeftEvent(
+                roomId,
+                participantId,
+                "LEFT"
+            )
+        );
     }
 
     public UpdateReadyResponse updateReady(

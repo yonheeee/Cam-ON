@@ -40,6 +40,21 @@ public class GameScoreService {
         );
     }
 
+    public SaveRoundResult saveRoundScores(
+        UUID roomId,
+        int sessionSeq,
+        int round,
+        Map<UUID, Long> scores
+    ) {
+        validateScores(scores);
+        return gameResultRepository.saveRoundResults(
+            roomId,
+            sessionSeq,
+            round,
+            new LinkedHashMap<>(scores)
+        );
+    }
+
     public Map<UUID, Long> getRoundResults(
         UUID roomId,
         int sessionSeq,
@@ -70,6 +85,24 @@ public class GameScoreService {
             != participantIdsByRank.size()) {
             throw new IllegalArgumentException(
                 "ranking must not contain duplicate participants"
+            );
+        }
+    }
+
+    private static void validateScores(Map<UUID, Long> scores) {
+        if (scores == null || scores.isEmpty()) {
+            throw new IllegalArgumentException("scores must not be empty");
+        }
+        if (scores.size() > POINTS_BY_RANK.size()) {
+            throw new IllegalArgumentException("scores support up to 4 participants");
+        }
+        if (scores.entrySet().stream().anyMatch(entry ->
+            entry.getKey() == null
+                || entry.getValue() == null
+                || entry.getValue() < 0
+        )) {
+            throw new IllegalArgumentException(
+                "scores must contain non-null participants and non-negative points"
             );
         }
     }
