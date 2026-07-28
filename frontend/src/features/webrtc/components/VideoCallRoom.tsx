@@ -63,9 +63,13 @@ export function VideoCallRoom({ accessToken, token, roomId, participantId }: Vid
 
   const leaveRoom = useCallback(() => {
     leavingRef.current = true;
+    // 서버에 자발적 퇴장을 즉시 알린다 — 이게 없으면 백엔드는 하트비트 만료(15초)로만 퇴장을
+    // 감지하고, 방장이 나간 방은 그동안 방장 없이 참가자만 남아 게임을 시작할 수 없다.
+    // 실패해도 하트비트 스윕이 뒷정리를 하므로 화면 전환은 막지 않는다.
+    void roomApi.leaveRoom(roomId, accessToken).catch(() => {});
     clearRoom();
     navigate('/', { replace: true });
-  }, [navigate]);
+  }, [navigate, roomId, accessToken]);
 
   return (
     <>
