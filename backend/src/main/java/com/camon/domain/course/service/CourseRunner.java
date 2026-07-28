@@ -166,23 +166,32 @@ public class CourseRunner {
         for (int seq = finishedSeq + 1; seq <= items.size(); seq++) {
             CourseItem item = items.get(seq - 1);
             Optional<String> skipReason = findSkipReason(item, participants.size());
-            if (skipReason.isPresent()) {
-                log.info("[Course] advance : roomCode={} seq={} 건너뜀 — {}",
-                    room.roomCode(), seq, skipReason.get());
-                courseEventPublisher.publishSessionSkipped(
-                    roomId,
-                    new CourseSessionSkippedPayload(
-                        seq,
-                        item.gameId(),
-                        gameCatalogService.findName(item.gameId()),
-                        skipReason.get()
-                    )
-                );
-                continue;
+            if (skipReason.isEmpty()) {
+                roomRepository.updateCurrentSessionSeq(roomId, seq);
+                try {
+                    openSession(room, seq, item, participants);
+                    return;
+                } catch (RuntimeException e) {
+                    // 이 메서드는 스케줄러 스레드에서 돈다 — 여기서 예외가 빠져나가면 아무도 잡지
+                    // 않고 코스가 PLAYING 상태로 영원히 멈춘다. 그 게임만 건너뛰고 계속 간다.
+                    // (게임별 검증이 코스 검증보다 엄격한 경우, 세션을 여는 순간 인원이 또 바뀐 경우 등)
+                    log.warn("[Course] advance : roomCode={} seq={} 세션 오픈 실패 — 건너뜀",
+                        room.roomCode(), seq, e);
+                    skipReason = Optional.of("START_FAILED");
+                }
             }
-            roomRepository.updateCurrentSessionSeq(roomId, seq);
-            openSession(room, seq, item, participants);
-            return;
+
+            log.info("[Course] advance : roomCode={} seq={} 건너뜀 — {}",
+                room.roomCode(), seq, skipReason.get());
+            courseEventPublisher.publishSessionSkipped(
+                roomId,
+                new CourseSessionSkippedPayload(
+                    seq,
+                    item.gameId(),
+                    gameCatalogService.findName(item.gameId()),
+                    skipReason.get()
+                )
+            );
         }
 
         finishCourse(room, items.size());

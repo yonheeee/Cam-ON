@@ -233,6 +233,51 @@ class CourseRunnerTest {
     }
 
     @Test
+    void skipsGameWhoseSessionFailsToOpenInsteadOfStalling() {
+        givenRoom(RoomStatus.PLAYING, 1);
+        givenConnected(3);
+        givenCourse(
+            new CourseItem(1, NINJA_ID, 3, null),
+            new CourseItem(2, CHARADES_ID, 2, TOPIC_ID),
+            new CourseItem(3, NINJA_ID, 2, null)
+        );
+        givenGame(CHARADES_ID, "CHARADES", 3, 4);
+        givenGame(NINJA_ID, "NINJA", 2, 4);
+        lenient().when(gameCatalogService.findName(CHARADES_ID)).thenReturn("CHARADES");
+        // 게임별 검증이 코스 검증보다 엄격해 세션 오픈이 터지는 경우(제시어 부족 등).
+        charadesStarter.failure = new BusinessException(
+            ErrorCode.CHARADES_NOT_ENOUGH_MISSIONS
+        );
+
+        runner.advance(roomId, 1);
+
+        // 스케줄러 스레드에서 예외가 빠져나가면 코스가 PLAYING으로 멈춘다 — 건너뛰고 계속 가야 한다.
+        verify(courseEventPublisher).publishSessionSkipped(eq(roomId), any());
+        assertThat(ninjaStarter.specs).containsExactly(new GameSessionSpec(NINJA_ID, 2, null));
+        verify(roomRepository).updateCurrentSessionSeq(roomId, 3);
+    }
+
+    @Test
+    void finishesCourseWhenEveryRemainingGameIsUnplayable() {
+        givenRoom(RoomStatus.PLAYING, 1);
+        // 1명만 남으면 어떤 게임도 최소 인원을 못 채운다 → 코스를 끝내고 종합 결과로 간다.
+        givenConnected(1);
+        givenCourse(
+            new CourseItem(1, NINJA_ID, 3, null),
+            new CourseItem(2, NINJA_ID, 2, null)
+        );
+        givenGame(NINJA_ID, "NINJA", 2, 4);
+        lenient().when(gameCatalogService.findName(NINJA_ID)).thenReturn("NINJA");
+        when(gameScoreService.getCourseTotals(roomId)).thenReturn(Map.of());
+
+        runner.advance(roomId, 1);
+
+        verify(courseEventPublisher).publishSessionSkipped(eq(roomId), any());
+        verify(roomRepository).updateStatus(roomId, RoomStatus.FINISHED);
+        verify(courseEventPublisher).publishCourseFinished(eq(roomId), any());
+    }
+
+    @Test
     void ignoresFinishNoticeFromAlreadyPassedSession() {
         // 이미 2번째 게임이 진행 중인데 1번째의 늦은 종료 통보가 도착한 경우(중복 이벤트/좀비 타이머).
         givenRoom(RoomStatus.PLAYING, 2);
