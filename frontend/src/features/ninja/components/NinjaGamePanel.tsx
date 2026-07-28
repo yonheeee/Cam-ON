@@ -2,7 +2,6 @@ import { useLocalParticipant, useParticipants } from '@livekit/components-react'
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useGestureBoardStore } from '../../gesture/store/gestureBoardStore';
 import { useNinjaRound } from '../hooks/useNinjaRound';
-import { NinjaEffectOverlay } from './NinjaEffectOverlay';
 import './NinjaGamePanel.css';
 
 const ATTACK_TARGET_TIMER_SECONDS = 30;
@@ -167,7 +166,6 @@ export function NinjaGamePanel({ roomId, gameId, accessToken, onActiveChange }: 
               {/* 판이 끝난 인터미션이면(boutResult 존재) 이펙트 대신 그 판의 순위+획득 점수를 보여준다. */}
               {boutResult && boutResult.length > 0 ? (
                 <div className="ninja-panel__bout-result">
-                  {inEffectPlayback && requiredSkill && <NinjaEffectOverlay effect={requiredSkill.effect} />}
                   <p className="ninja-panel__bout-result-title">🥷 라운드 {round} 결과</p>
                   <ol>
                     {boutResult.map((entry) => (
@@ -187,21 +185,18 @@ export function NinjaGamePanel({ roomId, gameId, accessToken, onActiveChange }: 
               ) : (
                 <>
                   {inEffectPlayback && requiredSkill && (
-                    <>
-                      <NinjaEffectOverlay effect={requiredSkill.effect} />
-                      <p className="ninja-panel__intermission-title">
-                        {lastAttack ? (
-                          <>
-                            {displayName(lastAttack.attackerToken)} → {displayName(lastAttack.targetToken)}
-                            {' · '}
-                            {requiredSkill.skillName} ({lastAttack.damage} 데미지)
-                            {lastAttack.targetEliminated && ' · 탈락!'}
-                          </>
-                        ) : (
-                          '교환 종료'
-                        )}
-                      </p>
-                    </>
+                    <p className="ninja-panel__intermission-title">
+                      {lastAttack ? (
+                        <>
+                          {displayName(lastAttack.attackerToken)} → {displayName(lastAttack.targetToken)}
+                          {' · '}
+                          {requiredSkill.skillName} ({lastAttack.damage} 데미지)
+                          {lastAttack.targetEliminated && ' · 탈락!'}
+                        </>
+                      ) : (
+                        '교환 종료'
+                      )}
+                    </p>
                   )}
                   {inCountdown && (
                     <div className="ninja-panel__countdown">

@@ -268,6 +268,10 @@
   height: 100%;
 }
 
+.ninja-effect-overlay--pixel canvas {
+  image-rendering: pixelated;
+}
+
 .ninja-panel__intermission {
   display: flex;
   flex-direction: column;
