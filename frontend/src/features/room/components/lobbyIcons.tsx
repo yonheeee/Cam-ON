@@ -106,6 +106,13 @@ export const HandGameIcon = (
   </svg>
 );
 
+// 강퇴 버튼(방장 전용) — 캠/마이크 토글과 같은 크기의 X.
+export const KickIcon = (
+  <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <path d="m4 4 8 8M12 4l-8 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+  </svg>
+);
+
 // 연결 끊김(재접속 유예 중) 타일 오버레이용 — 다른 아이콘보다 크게 쓰므로 32px.
 export const DisconnectedIcon = (
   <svg width="32" height="32" viewBox="0 0 16 16" fill="none" aria-hidden="true">
