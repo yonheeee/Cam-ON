@@ -205,6 +205,9 @@ export function LobbyScreen({
                   }`}
                 >
                   <ParticipantTile trackRef={trackRef} disableSpeakingIndicator />
+                  {/* 타일이 입장 순서로 고정돼 더는 "좌측 상단 = 나"가 아니므로 내 타일을 표시해준다.
+                      READY 배지(우측 상단)와 반대쪽에 둬서 둘 다 떠도 겹치지 않는다. */}
+                  {isMe && <span className="lobby-tile__me-badge">ME</span>}
                   {showReady && <span className="lobby-tile__ready-badge">READY!</span>}
                   <div className="lobby-tile__bar">
                     <span className="lobby-tile__name">

@@ -152,6 +152,23 @@
   display: none;
 }
 
+/* 내 타일 표식 — READY 배지와 같은 픽셀 스티커 스타일에 좌측 상단/반대 기울기로 대칭을 맞췄다.
+   (READY는 우측 상단이라 내가 준비 완료여도 두 배지가 겹치지 않는다) */
+.lobby-tile__me-badge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 2;
+  font-family: var(--pap-font-pixel);
+  font-size: 12px;
+  color: var(--pap-ink);
+  background: var(--pap-play-yellow);
+  border: 2px solid var(--pap-ink);
+  border-radius: 5px;
+  padding: 3px 7px;
+  transform: rotate(-3deg);
+}
+
 .lobby-tile__ready-badge {
   position: absolute;
   top: 8px;
