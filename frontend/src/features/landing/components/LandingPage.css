@@ -1,0 +1,36 @@
+/* 전체 화면/배경은 theme.css의 .pap-plaza-screen 공용 클래스가 담당 */
+.landing {
+  gap: 48px;
+  image-rendering: pixelated;
+}
+
+.landing__logo {
+  width: min(640px, 82vw);
+  height: auto;
+  /* 하늘 위에서 살짝 떠 보이게 — 배경과 붙지 않도록 은은한 드롭섀도 */
+  filter: drop-shadow(0 6px 0 rgb(43 24 51 / 0.25));
+}
+
+.landing__actions {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.landing__cta {
+  font-size: 24px;
+  padding: 18px 36px;
+  min-width: 240px;
+}
+
+@media (max-width: 640px) {
+  .landing {
+    gap: 32px;
+  }
+
+  .landing__cta {
+    font-size: 20px;
+    min-width: 200px;
+  }
+}
