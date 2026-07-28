@@ -124,21 +124,20 @@ class CharadesGameServiceTest {
     @SuppressWarnings("unchecked")
     void startsSessionWithConnectedParticipantsInJoinOrder() {
         List<Participant> participants = participants(3);
-        stubValidStart(participants, 3);
+        stubValidStart(participants);
         Instant beforeStart = Instant.now();
 
         CharadesTurnStartedPayload result = service.startSession(
             roomId,
             GAME_ID,
-            TOPIC_ID,
-            3
+            TOPIC_ID
         );
 
         ArgumentCaptor<List<UUID>> orderCaptor = ArgumentCaptor.forClass(List.class);
         verify(charadesRedis).initialize(
             eq(ROOM_CODE),
             eq(SESSION_SEQ),
-            eq(3),
+            eq(1),
             eq(TOPIC_ID),
             orderCaptor.capture()
         );
@@ -160,7 +159,7 @@ class CharadesGameServiceTest {
             roomId,
             GAME_ID,
             SESSION_SEQ,
-            3
+            1
         );
         verify(charadesEventPublisher).publish(
             eq(roomId),
@@ -186,21 +185,12 @@ class CharadesGameServiceTest {
             .thenReturn(participants(2));
 
         assertBusinessError(
-            () -> service.startSession(roomId, GAME_ID, TOPIC_ID, 3),
+            () -> service.startSession(roomId, GAME_ID, TOPIC_ID),
             ErrorCode.CHARADES_NOT_ENOUGH_PLAYERS
         );
         verify(charadesRedis, never()).initialize(
             any(), anyInt(), anyInt(), any(Long.class), anyList()
         );
-    }
-
-    @Test
-    void rejectsInvalidRoundCountBeforeAccessingRoom() {
-        assertBusinessError(
-            () -> service.startSession(roomId, GAME_ID, TOPIC_ID, 4),
-            ErrorCode.CHARADES_INVALID_ROUND_COUNT
-        );
-        verify(roomRepository, never()).findById(any());
     }
 
     @Test
@@ -213,7 +203,7 @@ class CharadesGameServiceTest {
             .thenReturn(false);
 
         assertBusinessError(
-            () -> service.startSession(roomId, GAME_ID, TOPIC_ID, 3),
+            () -> service.startSession(roomId, GAME_ID, TOPIC_ID),
             ErrorCode.CHARADES_TOPIC_NOT_FOUND
         );
     }
@@ -231,10 +221,10 @@ class CharadesGameServiceTest {
                 GAME_ID,
                 TOPIC_ID,
                 "CHARADES"
-            )).thenReturn(missions(8));
+            )).thenReturn(missions(2));
 
         assertBusinessError(
-            () -> service.startSession(roomId, GAME_ID, TOPIC_ID, 3),
+            () -> service.startSession(roomId, GAME_ID, TOPIC_ID),
             ErrorCode.CHARADES_NOT_ENOUGH_MISSIONS
         );
         verify(charadesRedis, never()).initialize(
@@ -279,31 +269,36 @@ class CharadesGameServiceTest {
     }
 
     @Test
-    void wrapsPresenterOrderAtStartOfNextRound() {
+    void completesGameAfterEveryParticipantPresentsOnce() {
         List<Participant> participants = participants(3);
         UUID first = participants.get(0).participantId();
         UUID second = participants.get(1).participantId();
         UUID third = participants.get(2).participantId();
-        stubExistingSession(
-            new CharadesGameState(
-                1, 3, 3, 3, TOPIC_ID, third, 41L,
-                Instant.now(), CharadesTurnStatus.CORRECT
-            ),
-            participants.stream().map(Participant::participantId).toList()
+        CharadesGameState completedRound = new CharadesGameState(
+            1, 1, 3, 3, TOPIC_ID, third, 41L,
+            Instant.now(), CharadesTurnStatus.CORRECT
         );
-        when(participantRepository.findById(roomId, first))
-            .thenReturn(Optional.of(participants.get(0)));
+        List<UUID> presenterOrder = participants.stream()
+            .map(Participant::participantId)
+            .toList();
+        when(roomRepository.findById(roomId)).thenReturn(Optional.of(room));
+        when(charadesRedis.findState(ROOM_CODE, SESSION_SEQ))
+            .thenReturn(Optional.of(completedRound));
+        when(charadesRedis.getPresenterOrder(ROOM_CODE, SESSION_SEQ))
+            .thenReturn(presenterOrder);
         when(charadesRedis.getRoundScores(ROOM_CODE, SESSION_SEQ, 1))
             .thenReturn(Map.of(first, 2L, second, 1L, third, 1L));
         when(gameScoreService.getSessionTotals(roomId, SESSION_SEQ))
             .thenReturn(Map.of(first, 2L, second, 1L, third, 1L));
 
-        CharadesTurnStartedPayload result = service.startNextTurn(roomId)
-            .orElseThrow();
+        Optional<CharadesTurnStartedPayload> result =
+            service.startNextTurn(roomId);
 
-        assertThat(result.round()).isEqualTo(2);
-        assertThat(result.turn()).isEqualTo(1);
-        assertThat(result.presenterId()).isEqualTo(first);
+        assertThat(result).isEmpty();
+        verify(charadesRedis, never()).openTurn(
+            any(), anyInt(), anyInt(), anyInt(),
+            any(), any(Long.class), any(Instant.class)
+        );
         verify(gameScoreService).saveRoundScores(
             roomId,
             SESSION_SEQ,
@@ -619,14 +614,18 @@ class CharadesGameServiceTest {
         Participant nextPresenter =
             participant(UUID.randomUUID(), "다음표현자");
         UUID lastPresenterId = UUID.randomUUID();
-        Instant expiresAt = Instant.now().minusSeconds(1);
+        Instant scheduledExpiresAt =
+            Instant.parse("2026-07-27T12:00:00.123456789Z");
+        Instant redisExpiresAt = Instant.ofEpochMilli(
+            scheduledExpiresAt.toEpochMilli()
+        );
         CharadesGameState playing = new CharadesGameState(
             1, 3, 1, 3, TOPIC_ID, presenterId, 42L,
-            expiresAt, CharadesTurnStatus.PLAYING
+            redisExpiresAt, CharadesTurnStatus.PLAYING
         );
         CharadesGameState timeout = new CharadesGameState(
             1, 3, 1, 3, TOPIC_ID, presenterId, 42L,
-            expiresAt, CharadesTurnStatus.TIMEOUT
+            redisExpiresAt, CharadesTurnStatus.TIMEOUT
         );
         when(roomRepository.findById(roomId)).thenReturn(Optional.of(room));
         when(charadesRedis.findState(ROOM_CODE, SESSION_SEQ))
@@ -658,7 +657,7 @@ class CharadesGameServiceTest {
             SESSION_SEQ,
             1,
             1,
-            expiresAt
+            scheduledExpiresAt
         );
 
         verify(charadesEventPublisher).publish(
@@ -954,10 +953,7 @@ class CharadesGameServiceTest {
         );
     }
 
-    private void stubValidStart(
-        List<Participant> participants,
-        int totalRounds
-    ) {
+    private void stubValidStart(List<Participant> participants) {
         when(roomRepository.findById(roomId)).thenReturn(Optional.of(room));
         when(participantRepository.findAll(roomId)).thenReturn(participants);
         when(missionTopicRepository
@@ -968,11 +964,11 @@ class CharadesGameServiceTest {
                 GAME_ID,
                 TOPIC_ID,
                 "CHARADES"
-            )).thenReturn(missions(participants.size() * totalRounds));
+            )).thenReturn(missions(participants.size()));
         when(charadesRedis.findState(ROOM_CODE, SESSION_SEQ))
             .thenReturn(Optional.of(new CharadesGameState(
                 0,
-                totalRounds,
+                1,
                 0,
                 participants.size(),
                 TOPIC_ID,

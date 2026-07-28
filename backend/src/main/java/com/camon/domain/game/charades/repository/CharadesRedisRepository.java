@@ -16,8 +16,6 @@ import org.springframework.stereotype.Repository;
 @Repository
 public class CharadesRedisRepository {
 
-    private static final Set<Integer> ALLOWED_ROUND_COUNTS = Set.of(3, 5, 7, 9);
-
     private static final String CURRENT_ROUND_FIELD = "current_round";
     private static final String TOTAL_ROUNDS_FIELD = "total_rounds";
     private static final String CURRENT_TURN_FIELD = "current_turn";
@@ -342,8 +340,8 @@ public class CharadesRedisRepository {
     }
 
     private static void validateTotalRounds(int totalRounds) {
-        if (!ALLOWED_ROUND_COUNTS.contains(totalRounds)) {
-            throw new IllegalArgumentException("totalRounds must be one of 3, 5, 7, 9");
+        if (totalRounds != 1) {
+            throw new IllegalArgumentException("totalRounds must be 1");
         }
     }
 
