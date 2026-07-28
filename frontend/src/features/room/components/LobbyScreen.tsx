@@ -86,6 +86,20 @@ export function LobbyScreen({
       },
     ]),
   );
+  // useTracks는 로컬 참가자를 항상 맨 앞에 놓기 때문에, 각자 자기 타일이 좌측 상단에 오는
+  // 서로 다른 배치를 보게 된다("왼쪽에서 두 번째" 같은 말이 안 통함). 서버 스냅샷의 참가자
+  // 순서(= 입장 순서. RedisParticipantRepository.findAll이 joined_at으로 정렬해서 내려준다)에
+  // 맞춰 재정렬해 전원이 같은 자리 배치를 보게 한다. 타일 색(colorIndex)도 같은 순서를 쓰므로
+  // 자리와 색이 함께 고정된다. 스냅샷에 아직 반영 안 된 트랙은 뒤로 보낸다.
+  const joinOrderByIdentity = new Map(
+    (room?.participants ?? []).map((p, index) => [p.participantId, index]),
+  );
+  const orderedTracks = [...tracks].sort(
+    (a, b) =>
+      (joinOrderByIdentity.get(a.participant.identity) ?? Number.MAX_SAFE_INTEGER) -
+      (joinOrderByIdentity.get(b.participant.identity) ?? Number.MAX_SAFE_INTEGER),
+  );
+
   const joinedCount = room?.participants.length ?? 0;
   const emptySlots = Math.max(0, (room?.maxPlayers ?? 0) - joinedCount);
 
@@ -171,10 +185,10 @@ export function LobbyScreen({
           {error && <p className="lobby-screen__error">방 정보를 불러오지 못했습니다: {error}</p>}
           <div
             className={`lobby-screen__grid${
-              tracks.length + emptySlots === 3 ? ' lobby-screen__grid--3' : ''
+              orderedTracks.length + emptySlots === 3 ? ' lobby-screen__grid--3' : ''
             }`}
           >
-            {tracks.map((trackRef) => {
+            {orderedTracks.map((trackRef) => {
               const identity = trackRef.participant.identity;
               const info = infoByIdentity.get(identity);
               const isHost = info?.isHost ?? false;
