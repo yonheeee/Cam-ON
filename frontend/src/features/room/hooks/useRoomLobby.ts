@@ -2,7 +2,7 @@ import { Client } from '@stomp/stompjs';
 import { useCallback, useEffect, useState } from 'react';
 import { roomApi, type ParticipantResponse, type RoomSnapshotResponse } from '../api/roomApi';
 
-// useRoomGameStarted.ts와 동일한 연결 패턴(brokerURL, connectHeaders, reconnectDelay) —
+// course/hooks/useCourseProgress.ts와 동일한 연결 패턴(brokerURL, connectHeaders, reconnectDelay) —
 // 백엔드가 /topic/rooms/{roomId} 하나에 이벤트 종류(event 필드)만 다르게 실어 보내므로
 // 대기방 전용 구독을 별도 훅으로 분리했다.
 interface RoomEvent<T> {

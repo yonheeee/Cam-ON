@@ -508,3 +508,11 @@
     min-height: 220px;
   }
 }
+
+/* 코스가 비었거나 조회에 실패했을 때의 안내 문구 (칩 목록 자리) */
+.lobby-screen__course-empty {
+  margin: 4px 0 0;
+  font-size: 11px;
+  opacity: 0.7;
+  line-height: 1.4;
+}

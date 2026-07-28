@@ -157,11 +157,4 @@ export const ninjaApi = {
       method: 'POST',
       body: JSON.stringify({ targetToken }),
     }),
-
-  // TEMP — 테스트 중 판을 통째로 리셋하는 버튼용. room/course/session 도메인이 완성되면 지운다.
-  reset: (roomId: string, accessToken: string) =>
-    request<void>(`/api/dev/ninja/reset`, accessToken, {
-      method: 'POST',
-      body: JSON.stringify({ roomId }),
-    }),
 };
