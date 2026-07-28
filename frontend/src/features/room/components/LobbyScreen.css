@@ -169,6 +169,39 @@
   transform: rotate(-3deg);
 }
 
+/* ---- 연결 끊김(재접속 유예 중) ----
+   나간 게 아니라 "돌아올 수도 있는" 상태라, 타일을 지우지 않고 회색으로 죽여서 자리만 지킨다.
+   유예가 끝나면 서버의 member:left로 타일 자체가 사라진다. */
+.lobby-tile--offline {
+  border-color: rgb(43 24 51 / 0.35);
+}
+
+.lobby-tile--offline .lk-participant-tile {
+  filter: grayscale(1) brightness(0.5);
+}
+
+.lobby-tile__offline {
+  position: absolute;
+  /* 이름 바(position: relative + z-index)는 덮지 않아서 누가 끊겼는지 계속 보인다 */
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: rgb(43 24 51 / 0.55);
+  color: var(--pap-white);
+  font-family: var(--pap-font-pixel);
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  pointer-events: none;
+}
+
+.lobby-tile--offline .lobby-tile__bar {
+  color: rgb(43 24 51 / 0.45);
+}
+
 .lobby-tile__ready-badge {
   position: absolute;
   top: 8px;
@@ -185,6 +218,9 @@
 }
 
 .lobby-tile__bar {
+  /* 연결 끊김 오버레이(z-index 3)에 가리지 않도록 — 누가 끊겼는지는 계속 읽혀야 한다 */
+  position: relative;
+  z-index: 4;
   display: flex;
   align-items: center;
   gap: 8px;

@@ -106,6 +106,16 @@ export const HandGameIcon = (
   </svg>
 );
 
+// 연결 끊김(재접속 유예 중) 타일 오버레이용 — 다른 아이콘보다 크게 쓰므로 32px.
+export const DisconnectedIcon = (
+  <svg width="32" height="32" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <path d="M1.9 5.9a8.6 8.6 0 0 1 12.2 0" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    <path d="M4.5 8.6a5 5 0 0 1 7 0" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    <circle cx="8" cy="12.2" r="1.1" fill="currentColor" />
+    <path d="m2.2 2.2 11.6 11.6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+  </svg>
+);
+
 export const CharadesGameIcon = (
   <svg width="18" height="18" viewBox="0 0 16 16" fill="none" aria-hidden="true">
     <circle cx="8" cy="3.5" r="2" stroke="currentColor" strokeWidth="1.6" />

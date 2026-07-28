@@ -2,7 +2,9 @@ package com.camon.domain.room.ws;
 
 import com.camon.global.ws.StompBroadcaster;
 import com.camon.global.ws.StompEvent;
+import com.camon.domain.room.domain.ConnectionStatus;
 import com.camon.domain.room.ws.payload.HostChangedPayload;
+import com.camon.domain.room.ws.payload.MemberConnectionPayload;
 import com.camon.domain.room.ws.payload.MemberJoinedPayload;
 import com.camon.domain.room.ws.payload.MemberLeftPayload;
 import com.camon.domain.room.ws.payload.MemberReadyPayload;
@@ -104,6 +106,22 @@ public class RoomEventPublisher {
                 previousHostParticipantId,
                 newHostParticipantId
             )
+        );
+    }
+
+    /**
+     * 재접속 유예 동안 다른 참가자 화면에 "연결 끊김"으로 보이게 하기 위한 이벤트.
+     * 퇴장(member:left)과는 별개다 — 유예 안에 돌아오면 CONNECTED로 한 번 더 나간다.
+     */
+    public void publishMemberConnectionChanged(
+        UUID roomId,
+        UUID participantId,
+        ConnectionStatus connectionStatus
+    ) {
+        publish(
+            roomId,
+            "member:connection-changed",
+            new MemberConnectionPayload(participantId, connectionStatus)
         );
     }
 
