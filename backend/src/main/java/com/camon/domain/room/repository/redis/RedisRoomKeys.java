@@ -40,6 +40,11 @@ final class RedisRoomKeys {
         return room(roomId) + ":nicknames";
     }
 
+    // 강퇴당한 참가자 id 집합. 재입장 차단에 쓰고, 방이 사라질 때 함께 지운다.
+    static String banned(UUID roomId) {
+        return room(roomId) + ":banned";
+    }
+
     static String participantRoomPrefix() {
         return PARTICIPANT_ROOM_PREFIX;
     }
