@@ -335,7 +335,9 @@ public class CharadesGameService {
             state.topicId(),
             charadesRedis.getUsedMissionIds(room.roomCode(), sessionSeq)
         );
-        Instant expiresAt = Instant.now().plus(TURN_DURATION);
+        Instant expiresAt = Instant.ofEpochMilli(
+            Instant.now().plus(TURN_DURATION).toEpochMilli()
+        );
         boolean opened = charadesRedis.openTurn(
             room.roomCode(),
             sessionSeq,
@@ -686,7 +688,8 @@ public class CharadesGameService {
             && state.status() == CharadesTurnStatus.PLAYING
             && state.currentRound() == round
             && state.currentTurn() == turn
-            && expiresAt.equals(state.expiresAt());
+            && state.expiresAt() != null
+            && expiresAt.toEpochMilli() == state.expiresAt().toEpochMilli();
     }
 
     private void cancelPendingTimeout(String roomCode, int sessionSeq) {

@@ -619,14 +619,18 @@ class CharadesGameServiceTest {
         Participant nextPresenter =
             participant(UUID.randomUUID(), "다음표현자");
         UUID lastPresenterId = UUID.randomUUID();
-        Instant expiresAt = Instant.now().minusSeconds(1);
+        Instant scheduledExpiresAt =
+            Instant.parse("2026-07-27T12:00:00.123456789Z");
+        Instant redisExpiresAt = Instant.ofEpochMilli(
+            scheduledExpiresAt.toEpochMilli()
+        );
         CharadesGameState playing = new CharadesGameState(
             1, 3, 1, 3, TOPIC_ID, presenterId, 42L,
-            expiresAt, CharadesTurnStatus.PLAYING
+            redisExpiresAt, CharadesTurnStatus.PLAYING
         );
         CharadesGameState timeout = new CharadesGameState(
             1, 3, 1, 3, TOPIC_ID, presenterId, 42L,
-            expiresAt, CharadesTurnStatus.TIMEOUT
+            redisExpiresAt, CharadesTurnStatus.TIMEOUT
         );
         when(roomRepository.findById(roomId)).thenReturn(Optional.of(room));
         when(charadesRedis.findState(ROOM_CODE, SESSION_SEQ))
@@ -658,7 +662,7 @@ class CharadesGameServiceTest {
             SESSION_SEQ,
             1,
             1,
-            expiresAt
+            scheduledExpiresAt
         );
 
         verify(charadesEventPublisher).publish(
