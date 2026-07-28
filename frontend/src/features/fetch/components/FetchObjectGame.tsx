@@ -337,11 +337,14 @@ export function FetchObjectGame({
         </div>
       )}
 
-      {/* 3·2·1 카운트다운 → GO! */}
+      {/* 3·2·1 카운트다운 → GO! (제시어 읽는 시간 + 인식 팁) */}
       {inCountdown && (
         <div className="fetch-game__countdown">
           <span key={Math.ceil(countdownLeft / 1000)} className="pap-pixel-title">
             {Math.ceil(countdownLeft / 1000)}
+          </span>
+          <span className="fetch-game__tip">
+            Tip. 물건이 잘 안 잡히면 다양한 각도로 돌려보세요!
           </span>
         </div>
       )}
