@@ -34,6 +34,12 @@ public class Mission {
     @JoinColumn(name = "game_id", nullable = false)
     private Game game;
 
+    // 몸으로 말해요는 사용자가 고른 주제 안에서 제시어를 선택한다.
+    // 다른 게임 미션은 주제를 쓰지 않을 수 있으므로 nullable이다.
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "topic_id")
+    private MissionTopic topic;
+
     // HAND_POSE / OBJECT / CHARADES. HAND_POSE는 실제 콤보 판정엔 안 쓰이고
     // skill_gesture 쪽 데이터가 그 역할을 대신한다 — round:{n}은 mission_id 대신 skill_id를 직접 참조.
     @Column(name = "mission_type", nullable = false)

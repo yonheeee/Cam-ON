@@ -2,11 +2,26 @@ import { useState } from 'react';
 import { Navigate, useNavigate, useSearchParams } from 'react-router';
 import { SessionApiError } from '../../session/api/sessionApi';
 import { RoomApiError } from '../api/roomApi';
+import { PixelConfirmModal } from '../../system/components/PixelConfirmModal';
 import { EntryModal } from '../components/EntryModal';
 import { enterRoom, NICKNAME_PATTERN, ROOM_CODE_PATTERN, type EnterMode } from '../lib/enterRoom';
 import './EntryPage.css';
 
 const PLAYER_OPTIONS = [2, 3, 4];
+
+// 닉네임을 다시 쳐도 결과가 같은 실패들 — 이 방에는 애초에 들어갈 수 없다. 폼 안 인라인
+// 메시지로 알리면 계속 재시도하게 되므로, 경고창으로 막고 메인으로 돌려보낸다.
+// (오타 난 코드/닉네임 형식처럼 재시도로 해결되는 실패는 그대로 인라인 처리한다)
+const BLOCKING_ERRORS: Record<string, { title: string; message: string }> = {
+  ROOM_ALREADY_STARTED: {
+    title: '게임 중인 방입니다',
+    message: '이미 게임이 시작돼서 입장할 수 없어요. 게임이 끝난 뒤에 다시 들어와주세요.',
+  },
+  ROOM_FULL: {
+    title: '방이 가득 찼습니다',
+    message: '정원이 모두 채워져서 더 들어갈 수 없어요.',
+  },
+};
 
 // 진입 플로우 마지막 단계 — 닉네임 입력 후 세션 발급 + 방 생성/입장을 한 번에 처리.
 // 랜딩 위 모달로 뜬다(LandingPage의 Outlet).
@@ -20,6 +35,9 @@ export function NicknamePage() {
   const [maxPlayers, setMaxPlayers] = useState(4);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // 재시도로 해결되는 실패(닉네임 형식, 오타 난 코드)는 폼 안에 인라인으로 알리고,
+  // 이 방에는 애초에 들어갈 수 없는 실패(게임 중/정원 초과)는 경고창으로 막고 메인으로 보낸다.
+  const [blocked, setBlocked] = useState<{ title: string; message: string } | null>(null);
 
   const modeParam = searchParams.get('mode');
   const mode: EnterMode | null =
@@ -45,7 +63,12 @@ export function NicknamePage() {
       const roomId = await enterRoom({ mode, nickname, roomCode, maxPlayers });
       navigate(`/rooms/${roomId}`);
     } catch (err) {
-      if (err instanceof RoomApiError && err.code === 'ROOM_NOT_FOUND') {
+      const blockedBy = err instanceof RoomApiError && err.code
+        ? BLOCKING_ERRORS[err.code]
+        : undefined;
+      if (blockedBy) {
+        setBlocked(blockedBy);
+      } else if (err instanceof RoomApiError && err.code === 'ROOM_NOT_FOUND') {
         // 형식은 맞지만 존재하지 않는 코드 — "6자입니다" 같은 형식 안내와 구분해서,
         // 코드를 잘못 쳤거나 방이 사라졌음을 인지할 수 있게 한다.
         setError(`코드 ${roomCode}에 해당하는 방을 찾을 수 없어요. 코드를 다시 확인해주세요.`);
@@ -58,6 +81,18 @@ export function NicknamePage() {
       setSubmitting(false);
     }
   };
+
+  // 들어갈 수 없는 방이면 입력 폼 대신 경고창만 띄운다 — 재시도 여지를 주지 않는다.
+  if (blocked) {
+    return (
+      <PixelConfirmModal
+        title={blocked.title}
+        message={blocked.message}
+        confirmLabel="메인으로"
+        onConfirm={() => navigate('/', { replace: true })}
+      />
+    );
+  }
 
   return (
     // 입장 처리 중에는 백드롭/ESC로 닫히지 않게 한다

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { LiveKitRoom, VideoConference } from '@livekit/components-react';
 import { VideoPresets, type RoomOptions } from 'livekit-client';
+import { CharadesMicrophoneController } from '../../charades/components/CharadesMicrophoneController';
 import { GesturePanel } from '../../gesture/components/GesturePanel';
 import { GestureBoard } from '../../gesture/components/GestureBoard';
 import { NinjaGamePanel } from '../../ninja/components/NinjaGamePanel';
@@ -63,9 +64,13 @@ export function VideoCallRoom({ accessToken, token, roomId, participantId }: Vid
 
   const leaveRoom = useCallback(() => {
     leavingRef.current = true;
+    // 서버에 자발적 퇴장을 즉시 알린다 — 이게 없으면 백엔드는 하트비트 만료(15초)로만 퇴장을
+    // 감지하고, 방장이 나간 방은 그동안 방장 없이 참가자만 남아 게임을 시작할 수 없다.
+    // 실패해도 하트비트 스윕이 뒷정리를 하므로 화면 전환은 막지 않는다.
+    void roomApi.leaveRoom(roomId, accessToken).catch(() => {});
     clearRoom();
     navigate('/', { replace: true });
-  }, [navigate]);
+  }, [navigate, roomId, accessToken]);
 
   return (
     <>
@@ -122,6 +127,7 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
   const [gameActive, setGameActive] = useState(false);
   const [seeding, setSeeding] = useState(false);
   const [seedError, setSeedError] = useState<string | null>(null);
+  const [isCharadesPresenter, setIsCharadesPresenter] = useState(false);
   const { messages, sendMessage } = useRoomChat();
 
   // 게임 진입은 game:started 이벤트로 한다(폴링 아님) — 방에 연결된 모든 클라이언트가 브로드캐스트를
@@ -164,6 +170,12 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
 
   return (
     <>
+      <CharadesMicrophoneController
+        roomId={roomId}
+        accessToken={accessToken}
+        participantId={participantId}
+        onPresenterChange={setIsCharadesPresenter}
+      />
       {!gameActive && (
         <LobbyScreen
           roomId={roomId}
@@ -179,7 +191,13 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
       )}
       {gameActive && (
         <>
-          <VideoConference />
+          <VideoConference
+            className={
+              isCharadesPresenter
+                ? 'lk-video-conference video-call-room__charades-presenter'
+                : 'lk-video-conference'
+            }
+          />
           <GesturePanel />
           <GestureBoard />
           {/* 닌자 게임 중엔 채팅 창을 띄우지 않는다(손동작 게임이라 불필요). 채팅이 필요한

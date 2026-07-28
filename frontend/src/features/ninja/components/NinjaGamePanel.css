@@ -259,6 +259,8 @@
   height: 100vh;
   pointer-events: none;
   z-index: 40;
+  /* Pixel*Effect 컴포넌트(div 컨테이너 + 내부 canvas)용 — 기존 NinjaEffectOverlay(canvas 단일
+     요소)에는 하위 canvas 셀렉터가 매칭되지 않아 무해하다. */
   overflow: hidden;
 }
 

@@ -77,6 +77,18 @@ public class RoomController {
         return ResponseEntity.noContent().build();
     }
 
+    // 방장의 참가자 강퇴. "me"가 아닌 특정 participantId를 지우는 유일한 멤버 삭제 경로 —
+    // 방장 검증은 서비스(원자적 Lua 스크립트)가 한다.
+    @DeleteMapping("/{roomId}/members/{participantId}")
+    public ResponseEntity<Void> kickMember(
+        @AuthenticationPrincipal GuestPrincipal principal,
+        @PathVariable UUID roomId,
+        @PathVariable UUID participantId
+    ) {
+        roomService.kick(roomId, principal.participantId(), participantId);
+        return ResponseEntity.noContent().build();
+    }
+
     @PatchMapping("/{roomId}/members/me/ready")
     public ResponseEntity<ApiResponse<UpdateReadyResponse>> updateReady(
         @AuthenticationPrincipal GuestPrincipal principal,

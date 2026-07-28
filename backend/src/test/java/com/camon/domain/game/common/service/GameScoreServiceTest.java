@@ -83,6 +83,26 @@ class GameScoreServiceTest {
     }
 
     @Test
+    void savesGameSpecificScoresWithoutRankConversion() {
+        UUID roomId = UUID.randomUUID();
+        UUID presenter = UUID.randomUUID();
+        UUID answerer = UUID.randomUUID();
+        Map<UUID, Long> scores = Map.of(presenter, 1L, answerer, 1L);
+        when(gameResultRepository.saveRoundResults(roomId, 1, 2, scores))
+            .thenReturn(SaveRoundResult.SUCCESS);
+
+        SaveRoundResult result = gameScoreService.saveRoundScores(
+            roomId,
+            1,
+            2,
+            scores
+        );
+
+        assertThat(result).isEqualTo(SaveRoundResult.SUCCESS);
+        verify(gameResultRepository).saveRoundResults(roomId, 1, 2, scores);
+    }
+
+    @Test
     void rejectsInvalidRankings() {
         UUID participantId = UUID.randomUUID();
 
