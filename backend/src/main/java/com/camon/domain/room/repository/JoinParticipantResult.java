@@ -6,5 +6,6 @@ public enum JoinParticipantResult {
     ROOM_FULL,
     ROOM_ALREADY_STARTED,
     NICKNAME_DUPLICATED,
-    ALREADY_JOINED
+    ALREADY_JOINED,
+    BANNED
 }

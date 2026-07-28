@@ -2,6 +2,7 @@ package com.camon.domain.room.service;
 
 import com.camon.domain.room.config.RoomConnectionProperties;
 import com.camon.domain.room.domain.ConnectionStatus;
+import com.camon.domain.room.event.ParticipantLeftEvent;
 import com.camon.domain.room.repository.ConnectionRepository;
 import com.camon.domain.room.repository.HeartbeatRefreshResult;
 import com.camon.domain.room.repository.LeaveRoomResult;
@@ -17,6 +18,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ScheduledFuture;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.TaskScheduler;
 import org.springframework.stereotype.Service;
 
@@ -31,6 +33,7 @@ public class RoomConnectionService {
     private final RoomEventPublisher roomEventPublisher;
     private final RoomConnectionProperties properties;
     private final TaskScheduler taskScheduler;
+    private final ApplicationEventPublisher applicationEventPublisher;
     private final ConcurrentMap<UUID, TimeoutTask> timeoutTasks =
         new ConcurrentHashMap<>();
     // 참가자 1명이 STOMP 연결을 여러 개 연다(프론트의 로비/하트비트/게임시작 훅이 각자 연결한다).
@@ -48,13 +51,15 @@ public class RoomConnectionService {
         ParticipantRepository participantRepository,
         RoomEventPublisher roomEventPublisher,
         RoomConnectionProperties properties,
-        @Qualifier("roomConnectionTaskScheduler") TaskScheduler taskScheduler
+        @Qualifier("roomConnectionTaskScheduler") TaskScheduler taskScheduler,
+        ApplicationEventPublisher applicationEventPublisher
     ) {
         this.connectionRepository = connectionRepository;
         this.participantRepository = participantRepository;
         this.roomEventPublisher = roomEventPublisher;
         this.properties = properties;
         this.taskScheduler = taskScheduler;
+        this.applicationEventPublisher = applicationEventPublisher;
     }
 
     public void connected(UUID roomId, UUID participantId, String sessionId) {
@@ -168,6 +173,11 @@ public class RoomConnectionService {
         UUID participantId,
         UUID timeoutId
     ) {
+        TimeoutTask activeTask = timeoutTasks.get(participantId);
+        if (activeTask == null
+            || !activeTask.timeoutId().equals(timeoutId)) {
+            return;
+        }
         try {
             LeaveRoomResult result =
                 participantRepository.leaveIfHeartbeatExpired(
@@ -203,6 +213,14 @@ public class RoomConnectionService {
             // 방에서 실제로 빠졌으니 연결 추적 상태도 버린다. 남겨두면 같은 사람이 재입장했을 때
             // "끊겼다 돌아온 것"으로 오인해 불필요한 CONNECTED 이벤트가 나간다.
             forget(participantId);
+            // 게임(charades 등) 리스너에게 이탈을 알린다 — 진행 중 게임의 턴/세션 정리용.
+            applicationEventPublisher.publishEvent(
+                new ParticipantLeftEvent(
+                    roomId,
+                    participantId,
+                    "TIMEOUT"
+                )
+            );
         } finally {
             timeoutTasks.computeIfPresent(
                 participantId,
