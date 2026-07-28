@@ -13,8 +13,10 @@ import com.camon.domain.room.dto.ParticipantResponse;
 import com.camon.domain.room.dto.RoomSnapshotResponse;
 import com.camon.domain.room.dto.UpdateReadyRequest;
 import com.camon.domain.room.dto.UpdateReadyResponse;
+import com.camon.domain.room.event.ParticipantLeftEvent;
 import com.camon.domain.room.repository.RoomRepository;
 import com.camon.domain.room.repository.JoinParticipantResult;
+import com.camon.domain.room.repository.KickParticipantResult;
 import com.camon.domain.room.repository.ParticipantRepository;
 import com.camon.domain.room.repository.LeaveRoomResult;
 import com.camon.domain.room.repository.LeaveRoomStatus;
@@ -29,6 +31,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -44,6 +47,7 @@ public class RoomService {
     private final RoomEventPublisher roomEventPublisher;
     private final LiveKitTokenService liveKitTokenService;
     private final Clock clock;
+    private final ApplicationEventPublisher applicationEventPublisher;
 
     public RoomService(
         RoomRepository roomRepository,
@@ -53,7 +57,8 @@ public class RoomService {
         RoomInviteLinkGenerator inviteLinkGenerator,
         RoomEventPublisher roomEventPublisher,
         LiveKitTokenService liveKitTokenService,
-        Clock jwtClock
+        Clock jwtClock,
+        ApplicationEventPublisher applicationEventPublisher
     ) {
         this.roomRepository = roomRepository;
         this.participantRepository = participantRepository;
@@ -63,6 +68,7 @@ public class RoomService {
         this.roomEventPublisher = roomEventPublisher;
         this.liveKitTokenService = liveKitTokenService;
         this.clock = jwtClock;
+        this.applicationEventPublisher = applicationEventPublisher;
     }
 
     public CreateRoomResponse createRoom(
@@ -183,6 +189,32 @@ public class RoomService {
                 result.newHostParticipantId()
             );
         }
+        applicationEventPublisher.publishEvent(
+            new ParticipantLeftEvent(
+                roomId,
+                participantId,
+                "LEFT"
+            )
+        );
+    }
+
+    public void kick(UUID roomId, UUID requesterId, UUID targetId) {
+        KickParticipantResult result = participantRepository.kick(
+            roomId,
+            requesterId,
+            targetId
+        );
+        if (result != KickParticipantResult.SUCCESS) {
+            throw new BusinessException(toErrorCode(result));
+        }
+
+        // 강퇴도 퇴장의 한 형태 — 이유만 다르게 실어 같은 채널(member:left)로 전파한다.
+        // 강퇴당한 본인 클라이언트도 이 브로드캐스트에서 자기 id + KICKED를 보고 방을 떠난다.
+        // 방장은 대상이 될 수 없으므로(스크립트가 SELF_KICK/NOT_HOST로 거른다) 위임은 없다.
+        roomEventPublisher.publishMemberLeft(roomId, targetId, null, "KICKED");
+        applicationEventPublisher.publishEvent(
+            new ParticipantLeftEvent(roomId, targetId, "KICKED")
+        );
     }
 
     public UpdateReadyResponse updateReady(
@@ -269,8 +301,22 @@ public class RoomService {
             case ROOM_ALREADY_STARTED -> ErrorCode.ROOM_ALREADY_STARTED;
             case NICKNAME_DUPLICATED -> ErrorCode.NICKNAME_DUPLICATED;
             case ALREADY_JOINED -> ErrorCode.ALREADY_JOINED;
+            case BANNED -> ErrorCode.ROOM_BANNED;
             case SUCCESS -> throw new IllegalArgumentException(
                 "Successful join has no error code"
+            );
+        };
+    }
+
+    private ErrorCode toErrorCode(KickParticipantResult result) {
+        return switch (result) {
+            case ROOM_NOT_FOUND -> ErrorCode.ROOM_NOT_FOUND;
+            case ROOM_ALREADY_STARTED -> ErrorCode.ROOM_ALREADY_STARTED;
+            case NOT_HOST -> ErrorCode.ROOM_NOT_HOST;
+            case SELF_KICK -> ErrorCode.ROOM_KICK_SELF;
+            case PARTICIPANT_NOT_FOUND -> ErrorCode.ROOM_PARTICIPANT_NOT_FOUND;
+            case SUCCESS -> throw new IllegalArgumentException(
+                "Successful kick has no error code"
             );
         };
     }

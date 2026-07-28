@@ -2,8 +2,8 @@ package com.camon.domain.room.service;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -13,6 +13,7 @@ import static org.mockito.Mockito.when;
 import com.camon.domain.room.config.RoomConnectionProperties;
 import com.camon.domain.room.domain.ConnectionStatus;
 import com.camon.domain.room.domain.Participant;
+import com.camon.domain.room.event.ParticipantLeftEvent;
 import com.camon.domain.room.repository.ConnectionRepository;
 import com.camon.domain.room.repository.HeartbeatRefreshResult;
 import com.camon.domain.room.repository.LeaveRoomResult;
@@ -26,6 +27,7 @@ import java.util.UUID;
 import java.util.concurrent.ScheduledFuture;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.TaskScheduler;
 
 class RoomConnectionServiceTest {
@@ -75,7 +77,8 @@ class RoomConnectionServiceTest {
                 participantRepository,
                 publisher,
                 new RoomConnectionProperties(Duration.ofSeconds(15)),
-                scheduler
+                scheduler,
+                mock(ApplicationEventPublisher.class)
             ),
             participantRepository,
             publisher,
@@ -165,6 +168,8 @@ class RoomConnectionServiceTest {
         );
         RoomEventPublisher publisher = mock(RoomEventPublisher.class);
         TaskScheduler scheduler = mock(TaskScheduler.class);
+        ApplicationEventPublisher applicationEventPublisher =
+            mock(ApplicationEventPublisher.class);
         ScheduledFuture<?> future = mock(ScheduledFuture.class);
         ArgumentCaptor<Runnable> task = ArgumentCaptor.forClass(Runnable.class);
         UUID roomId = UUID.randomUUID();
@@ -194,10 +199,12 @@ class RoomConnectionServiceTest {
             participantRepository,
             publisher,
             new RoomConnectionProperties(Duration.ofSeconds(15)),
-            scheduler
+            scheduler,
+            applicationEventPublisher
         );
 
         service.heartbeat(roomId, participantId);
+        task.getValue().run();
         task.getValue().run();
 
         verify(publisher).publishMemberLeft(
@@ -206,7 +213,16 @@ class RoomConnectionServiceTest {
             newHostId,
             "TIMEOUT"
         );
-        verify(publisher).publishHostChanged(roomId, participantId, newHostId);
+        verify(publisher).publishHostChanged(
+            roomId,
+            participantId,
+            newHostId
+        );
+        verify(applicationEventPublisher).publishEvent(
+            new ParticipantLeftEvent(roomId, participantId, "TIMEOUT")
+        );
+        verify(participantRepository, times(1))
+            .leaveIfHeartbeatExpired(roomId, participantId);
         verify(scheduler).schedule(eq(task.getValue()), any(Instant.class));
     }
 
@@ -220,6 +236,8 @@ class RoomConnectionServiceTest {
         );
         RoomEventPublisher publisher = mock(RoomEventPublisher.class);
         TaskScheduler scheduler = mock(TaskScheduler.class);
+        ApplicationEventPublisher applicationEventPublisher =
+            mock(ApplicationEventPublisher.class);
         ScheduledFuture<?> future = mock(ScheduledFuture.class);
         ArgumentCaptor<Runnable> task = ArgumentCaptor.forClass(Runnable.class);
         UUID roomId = UUID.randomUUID();
@@ -248,16 +266,19 @@ class RoomConnectionServiceTest {
             participantRepository,
             publisher,
             new RoomConnectionProperties(Duration.ofSeconds(15)),
-            scheduler
+            scheduler,
+            applicationEventPublisher
         );
 
         service.heartbeat(roomId, participantId);
         task.getValue().run();
 
-        // 하트비트가 살아 있어 이번엔 제거하지 않았지만, 다시 무장해 두지 않으면 이 참가자는
-        // (방장이라면 위임까지) 영영 재검사되지 않는다.
-        verify(scheduler, times(2)).schedule(any(Runnable.class), any(Instant.class));
+        verify(scheduler, times(2)).schedule(
+            any(Runnable.class),
+            any(Instant.class)
+        );
         verifyNoInteractions(publisher);
+        verify(applicationEventPublisher, never()).publishEvent(any());
     }
 
     @Test
@@ -270,6 +291,8 @@ class RoomConnectionServiceTest {
         );
         RoomEventPublisher publisher = mock(RoomEventPublisher.class);
         TaskScheduler scheduler = mock(TaskScheduler.class);
+        ApplicationEventPublisher applicationEventPublisher =
+            mock(ApplicationEventPublisher.class);
         ScheduledFuture<?> future = mock(ScheduledFuture.class);
         ArgumentCaptor<Runnable> task = ArgumentCaptor.forClass(Runnable.class);
         UUID roomId = UUID.randomUUID();
@@ -299,17 +322,83 @@ class RoomConnectionServiceTest {
             participantRepository,
             publisher,
             new RoomConnectionProperties(Duration.ofSeconds(15)),
-            scheduler
+            scheduler,
+            applicationEventPublisher
         );
 
         service.heartbeat(roomId, participantId);
         task.getValue().run();
 
-        verify(publisher).publishMemberLeft(roomId, participantId, null, "TIMEOUT");
+        verify(publisher).publishMemberLeft(
+            roomId,
+            participantId,
+            null,
+            "TIMEOUT"
+        );
         verify(publisher, never()).publishHostChanged(
             any(UUID.class),
             any(UUID.class),
             any(UUID.class)
         );
+        verify(applicationEventPublisher).publishEvent(
+            new ParticipantLeftEvent(roomId, participantId, "TIMEOUT")
+        );
+    }
+
+    @Test
+    void reconnectWithinGracePeriodKeepsParticipantAndIgnoresOldTimeout() {
+        ConnectionRepository connectionRepository = mock(
+            ConnectionRepository.class
+        );
+        ParticipantRepository participantRepository = mock(
+            ParticipantRepository.class
+        );
+        RoomEventPublisher publisher = mock(RoomEventPublisher.class);
+        TaskScheduler scheduler = mock(TaskScheduler.class);
+        ApplicationEventPublisher applicationEventPublisher =
+            mock(ApplicationEventPublisher.class);
+        ScheduledFuture<?> disconnectedFuture = mock(ScheduledFuture.class);
+        ScheduledFuture<?> reconnectedFuture = mock(ScheduledFuture.class);
+        ArgumentCaptor<Runnable> tasks =
+            ArgumentCaptor.forClass(Runnable.class);
+        UUID roomId = UUID.randomUUID();
+        UUID participantId = UUID.randomUUID();
+        Participant participant = new Participant(
+            participantId,
+            "presenter",
+            true,
+            ConnectionStatus.CONNECTED,
+            Instant.now()
+        );
+        when(participantRepository.findById(roomId, participantId))
+            .thenReturn(Optional.of(participant));
+        when(connectionRepository.refreshHeartbeat(
+            participantId,
+            roomId,
+            Duration.ofSeconds(15)
+        )).thenReturn(HeartbeatRefreshResult.SUCCESS);
+        doReturn(disconnectedFuture, reconnectedFuture)
+            .when(scheduler)
+            .schedule(tasks.capture(), any(Instant.class));
+        RoomConnectionService service = new RoomConnectionService(
+            connectionRepository,
+            participantRepository,
+            publisher,
+            new RoomConnectionProperties(Duration.ofSeconds(15)),
+            scheduler,
+            applicationEventPublisher
+        );
+
+        // 세션 추적 도입 후 disconnected는 "등록된 마지막 소켓"이 닫힐 때만 동작하므로,
+        // 먼저 connect로 소켓을 등록해야 원래 시나리오(끊김→유예 내 재접속)가 재현된다.
+        service.connected(roomId, participantId, "socket-1");
+        service.disconnected(roomId, participantId, "socket-1");
+        service.connected(roomId, participantId, "socket-2");
+        tasks.getAllValues().getFirst().run();
+
+        verify(disconnectedFuture).cancel(false);
+        verify(participantRepository, never())
+            .leaveIfHeartbeatExpired(roomId, participantId);
+        verify(applicationEventPublisher, never()).publishEvent(any());
     }
 }
