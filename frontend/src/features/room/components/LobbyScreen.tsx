@@ -12,6 +12,7 @@ import {
   ChevronDownIcon,
   ChevronUpIcon,
   CopyIcon,
+  DisconnectedIcon,
   FetchGameIcon,
   GearIcon,
   HandGameIcon,
@@ -82,6 +83,7 @@ export function LobbyScreen({
         nickname: p.nickname,
         ready: p.ready,
         isHost: p.participantId === room?.hostParticipantId,
+        offline: p.connectionStatus === 'DISCONNECTED',
         colorIndex: (index % 4) + 1,
       },
     ]),
@@ -197,17 +199,26 @@ export function LobbyScreen({
               // 상태를 표시하지 않는다 — 방장은 준비 대상이 아니라 게임을 시작하는 주체이기 때문.
               const showReady = ready && !isHost;
               const isMe = identity === participantId;
+              // 연결이 끊긴 참가자는 재접속 유예(15초) 동안 자리를 지킨 채 회색으로만 표시된다.
+              // 유예가 끝나면 서버가 member:left를 보내고 그때 타일이 사라진다(방장이면 위임까지).
+              const offline = info?.offline ?? false;
               return (
                 <div
                   key={identity}
                   className={`lobby-tile${info ? ` lobby-tile--p${info.colorIndex}` : ''}${
                     showReady ? ' lobby-tile--ready' : ''
-                  }`}
+                  }${offline ? ' lobby-tile--offline' : ''}`}
                 >
                   <ParticipantTile trackRef={trackRef} disableSpeakingIndicator />
                   {/* 타일이 입장 순서로 고정돼 더는 "좌측 상단 = 나"가 아니므로 내 타일을 표시해준다.
                       READY 배지(우측 상단)와 반대쪽에 둬서 둘 다 떠도 겹치지 않는다. */}
                   {isMe && <span className="lobby-tile__me-badge">ME</span>}
+                  {offline && (
+                    <div className="lobby-tile__offline">
+                      {DisconnectedIcon}
+                      <span>연결 끊김</span>
+                    </div>
+                  )}
                   {showReady && <span className="lobby-tile__ready-badge">READY!</span>}
                   <div className="lobby-tile__bar">
                     <span className="lobby-tile__name">
