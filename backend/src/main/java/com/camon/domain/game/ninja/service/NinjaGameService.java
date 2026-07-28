@@ -1,5 +1,6 @@
 package com.camon.domain.game.ninja.service;
 
+import com.camon.domain.game.common.event.GameSessionFinishedEvent;
 import com.camon.domain.game.common.repository.SaveRoundResult;
 import com.camon.domain.game.common.service.GameScoreService;
 import com.camon.domain.game.common.ws.GameEventPublisher;
@@ -41,6 +42,7 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.TaskScheduler;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -77,6 +79,7 @@ public class NinjaGameService {
     private final GameEventPublisher gameEventPublisher;
     private final GameScoreService gameScoreService;
     private final TaskScheduler taskScheduler;
+    private final ApplicationEventPublisher applicationEventPublisher;
 
     // 교환 타임아웃/인터미션 태스크는 JVM 메모리의 TaskScheduler 타이머로 도는데, 리셋/중복 시작 시
     // 옛 타이머가 안 죽고 살아남아 방금 연 교환을 조기 종료시키는 버그가 있었다. 방(roomCode:seq)마다
@@ -90,7 +93,8 @@ public class NinjaGameService {
         NinjaEventPublisher eventPublisher,
         GameEventPublisher gameEventPublisher,
         GameScoreService gameScoreService,
-        TaskScheduler taskScheduler
+        TaskScheduler taskScheduler,
+        ApplicationEventPublisher applicationEventPublisher
     ) {
         this.roomRepository = roomRepository;
         this.skillRepository = skillRepository;
@@ -99,6 +103,7 @@ public class NinjaGameService {
         this.gameEventPublisher = gameEventPublisher;
         this.gameScoreService = gameScoreService;
         this.taskScheduler = taskScheduler;
+        this.applicationEventPublisher = applicationEventPublisher;
     }
 
     // 요구사항명세서 GAME02_RANGE01: 닌자는 2~4명. 점수 부여(5/4/3/2)도 최대 4명 기준이라 상한을 지킨다.
@@ -483,6 +488,11 @@ public class NinjaGameService {
         ninjaRedis.enterEnded(room.roomCode(), seq);
         log.info("[Service] finishGame : roomCode={} seq={} 최종 순위(누적점수순)={}", room.roomCode(), seq, ranking);
         eventPublisher.publish(room.roomId(), "ninja:game-ended", new GameEndedPayload(ranking));
+        // 이 게임이 끝났다는 사실만 알린다 — 코스의 다음 칸으로 넘길지 종합 결과로 갈지는
+        // 코스 도메인의 판단이다(닌자는 자기가 코스의 몇 번째인지도 모른다).
+        applicationEventPublisher.publishEvent(
+            new GameSessionFinishedEvent(room.roomId(), seq)
+        );
     }
 
     // 한 판 안에서의 순위(점수 부여용): 생존자 HP 내림차순 → 이 판 탈락자(늦게 탈락 순).

@@ -45,6 +45,24 @@ public enum ErrorCode {
     CHARADES_PRESENTER_CANNOT_GUESS(HttpStatus.FORBIDDEN, "현재 표현자는 정답을 제출할 수 없습니다."),
     CHARADES_WORD_NOT_FOUND(HttpStatus.NOT_FOUND, "현재 턴의 제시어를 찾을 수 없습니다."),
     GAME_NOT_CURRENT(HttpStatus.CONFLICT, "현재 진행 중인 게임이 아닙니다."),
+    GAME_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않거나 선택할 수 없는 게임입니다."),
+    COURSE_EMPTY(HttpStatus.CONFLICT, "코스에 게임을 최소 1개 담아야 게임을 시작할 수 있습니다."),
+    COURSE_TOO_LONG(HttpStatus.BAD_REQUEST, "코스에 담을 수 있는 게임 수를 초과했습니다."),
+    COURSE_INVALID_ROUND_COUNT(
+        HttpStatus.BAD_REQUEST,
+        "해당 게임에 허용되지 않는 라운드 수입니다."
+    ),
+    COURSE_GAME_NOT_SUPPORTED(
+        HttpStatus.BAD_REQUEST,
+        "아직 준비 중인 게임이라 코스에 담을 수 없습니다."
+    ),
+    COURSE_TOPIC_REQUIRED(HttpStatus.BAD_REQUEST, "이 게임은 주제를 함께 선택해야 합니다."),
+    COURSE_TOPIC_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "이 게임은 주제를 선택하지 않습니다."),
+    // 코스 저장 시점엔 인원이 계속 바뀌므로, 게임별 인원 조건은 시작 시점에만 검증한다.
+    COURSE_PLAYERS_NOT_ELIGIBLE(
+        HttpStatus.CONFLICT,
+        "현재 인원으로는 코스에 담긴 게임을 진행할 수 없습니다."
+    ),
     INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "서버 오류가 발생했습니다.");
 
     private final HttpStatus status;

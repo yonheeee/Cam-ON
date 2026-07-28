@@ -50,6 +50,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.TaskScheduler;
 
 // RoomRepository/Redis/JPA/스케줄러를 전부 모킹해 인프라 없이 NinjaGameService의 판정 로직만 검증한다.
@@ -71,6 +72,8 @@ class NinjaGameServiceTest {
     private GameScoreService gameScoreService;
     @Mock
     private TaskScheduler taskScheduler;
+    @Mock
+    private ApplicationEventPublisher applicationEventPublisher;
 
     private NinjaGameService service;
 
@@ -94,7 +97,7 @@ class NinjaGameServiceTest {
     void setUp() {
         service = new NinjaGameService(
             roomRepository, skillRepository, ninjaRedis, eventPublisher,
-            gameEventPublisher, gameScoreService, taskScheduler
+            gameEventPublisher, gameScoreService, taskScheduler, applicationEventPublisher
         );
 
         Room room = new Room(roomId, roomCode, UUID.randomUUID(), 4, RoomStatus.PLAYING, seq, Instant.now());
