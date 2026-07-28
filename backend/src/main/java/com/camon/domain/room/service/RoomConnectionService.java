@@ -117,6 +117,13 @@ public class RoomConnectionService {
                     roomId,
                     participantId
                 );
+            if (result.status() == LeaveRoomStatus.HEARTBEAT_ACTIVE) {
+                // 아직 하트비트가 살아 있으면 이번 스윕은 건너뛴다. 다만 여기서 그냥 끝내면
+                // 이 참가자는 다음 하트비트/끊김 이벤트가 오기 전까지 재검사 대상에서 빠지므로,
+                // 방장이 이 상태로 조용히 사라지면 위임 자체가 영영 일어나지 않는다. 다시 무장한다.
+                scheduleTimeout(roomId, participantId);
+                return;
+            }
             if (result.status() != LeaveRoomStatus.SUCCESS) {
                 return;
             }
@@ -129,6 +136,13 @@ public class RoomConnectionService {
                 newHostParticipantId,
                 "TIMEOUT"
             );
+            if (result.hostChanged()) {
+                roomEventPublisher.publishHostChanged(
+                    roomId,
+                    result.previousHostParticipantId(),
+                    result.newHostParticipantId()
+                );
+            }
         } finally {
             timeoutTasks.computeIfPresent(
                 participantId,

@@ -173,6 +173,16 @@ public class RoomService {
             participantId,
             newHostParticipantId
         );
+        // 위임 사실을 member:left의 부가 필드로만 흘리면, 그 이벤트 하나를 놓친 클라이언트는
+        // (재접속 중이었거나 스냅샷 로딩 전이었으면) 떠난 사람을 계속 방장으로 들고 있게 된다.
+        // 방장 교체는 그 자체로 독립된 사건이라 별도 이벤트로도 전파한다.
+        if (result.hostChanged()) {
+            roomEventPublisher.publishHostChanged(
+                roomId,
+                result.previousHostParticipantId(),
+                result.newHostParticipantId()
+            );
+        }
     }
 
     public UpdateReadyResponse updateReady(

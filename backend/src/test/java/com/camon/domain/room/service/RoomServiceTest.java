@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -324,6 +325,32 @@ class RoomServiceTest {
             roomId,
             hostId,
             newHostId
+        );
+        verify(roomEventPublisher).publishHostChanged(roomId, hostId, newHostId);
+    }
+
+    @Test
+    void doesNotPublishHostChangedWhenLeaverIsNotHost() {
+        UUID roomId = UUID.randomUUID();
+        UUID hostId = UUID.randomUUID();
+        UUID memberId = UUID.randomUUID();
+        when(participantRepository.leave(roomId, memberId)).thenReturn(
+            new LeaveRoomResult(
+                    LeaveRoomStatus.SUCCESS,
+                    memberId,
+                    hostId,
+                    hostId,
+                    false
+            )
+        );
+
+        roomService.leaveRoom(roomId, memberId);
+
+        verify(roomEventPublisher).publishMemberLeft(roomId, memberId, null);
+        verify(roomEventPublisher, never()).publishHostChanged(
+            any(UUID.class),
+            any(UUID.class),
+            any(UUID.class)
         );
     }
 
