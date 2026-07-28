@@ -95,6 +95,20 @@ export const roomApi = {
     }
   },
 
+  // 방장의 참가자 강퇴. 서버가 방장 여부/대기방 상태를 검증하고, 성공 시
+  // member:left(reason=KICKED)를 브로드캐스트한다(강퇴된 참가자는 재입장 불가).
+  // leaveRoom과 같은 이유(204 No Content)로 request()를 쓰지 않는다.
+  kickMember: async (roomId: string, participantId: string, accessToken: string): Promise<void> => {
+    const response = await fetch(`${BASE_URL}/api/rooms/${roomId}/members/${participantId}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!response.ok) {
+      const body = await response.json().catch(() => null);
+      throw new RoomApiError(body?.message ?? `요청 실패 (HTTP ${response.status})`, body?.code);
+    }
+  },
+
   updateReady: (roomId: string, ready: boolean, accessToken: string) =>
     request<UpdateReadyResult>(`/api/rooms/${roomId}/members/me/ready`, accessToken, {
       method: 'PATCH',
