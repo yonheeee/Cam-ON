@@ -18,6 +18,8 @@
   --pap-ink: #2b1833;
   --pap-white: #fffdf5;
   --pap-success-lime: #b8ff4f;
+  --pap-arcade-orange: #f6a13a; /* Figma Action — 주요 버튼 */
+  --pap-arcade-blue: #4169c8; /* Figma Info — 게임 순서·정보 강조 */
 
   /* 플레이어 대표색 (1~4P) */
   --pap-player-1: var(--pap-arcade-teal);
