@@ -9,16 +9,15 @@
 #
 # 이전 버전 풀(50종 v1, 20종 v2)은 git 히스토리 참고.
 
-# 프롬프트 템플릿 — 게임의 실제 촬영 조건(웹캠 앞에서 손에 들고 보여줌)을 담은 변형을
-# 함께 사용한다. 라벨별 점수는 모든 (템플릿 × 형태) 조합 중 최고점이라 변형 추가는 손해가 없고,
-# 텍스트 임베딩 캐시 덕에 런타임 비용도 없다 (기동 후 첫 요청에서 1회 인코딩).
+# 프롬프트 템플릿 — 단일 기본형만 사용한다.
+# ⚠ 촬영 맥락 템플릿("held up in a hand" 등)은 실측 후 롤백함 (2026-07-27):
+#   손/동작 유사도가 물건 형태를 압도해서 (1) 빈손·대체물 시늉이 라벨 점수를 얻고
+#   (2) 진짜 물건(0.457)과 시늉(0.398)의 간격이 위험하게 좁아짐.
+#   단일 템플릿 실측은 정답 0.7+ / 차순위 _none으로 판별력이 훨씬 좋았다.
 PROMPT_TEMPLATES = [
     "This is a photo of {}.",
-    "This is a webcam photo of {} held up in a hand.",
-    "A person holding {} in front of a webcam.",
 ]
 
-# 네거티브는 이미 완결된 구문이라 기본 템플릿 하나만 쓴다
 PROMPT_TEMPLATE = PROMPT_TEMPLATES[0]
 
 # 제시어(한국어) → 허용하는 영어 프롬프트 구문들
@@ -60,6 +59,13 @@ NEGATIVE_PROMPTS = [
     # 정체불명 물건 (open-set 흡수)
     "a hand holding an unidentifiable object",
     "a hand holding some random household item",
+    # 빈손 팬터마임 — 물건 없이 쥐는 시늉만 해도 가는 물건(숟가락 등)이 통과되던 문제 대응
+    "an empty hand pretending to hold something",
+    "an empty hand with fingers pinched together, holding nothing",
+    # ⚠ 화면 사진 치팅 네거티브("...phone screen...")는 롤백함 (2026-07-27):
+    #   진짜 휴대폰(특히 화면 꺼진 검은 폰)을 _none 0.646으로 흡수해버림 — 휴대폰이
+    #   미션 라벨인 이상 본질적으로 충돌. 사진 치팅 방어는 "전원이 서로의 화면을 실시간으로
+    #   보고 있다"는 사회적 레이어에 맡긴다.
 ]
 
 
