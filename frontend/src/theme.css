@@ -201,3 +201,100 @@
     transition: none;
   }
 }
+
+/* ---- 닌자 게임 다크(달밤) 오버라이드 ----
+ * 라이트 테마 프리미티브(.pap-pixel-card, .pap-input, .pap-pixel-btn, .pap-pixel-title)를
+ * 어두운 배경 위에서도 쓸 수 있게 색만 교체한다. 형태 토큰(border-width/shadow-offset/radius)과
+ * 포인트 컬러 버튼 변형(--primary/--teal/--coral), 포커스 아웃라인, 토스트는 그대로 재사용 —
+ * 채도 높은 원색이라 다크 배경에서도 대비가 유지되기 때문 (design.md 다크 확장 섹션 참고).
+ */
+.ninja-screen {
+  --ninja-night-deep: #123a3a; /* 배경 이미지 로드 전/여백 노출 시 letterbox 색 */
+  --ninja-moon-glow: #e7eef5; /* 달빛 — 카드·타이틀 텍스트, 밝은 테두리 (은빛 톤) */
+  --ninja-card-bg: #131b24; /* 카드/인풋 배경 — 차분한 다크 슬레이트 */
+  --ninja-hp-red: #d3453f; /* 체력바 전용 — 이 컨텍스트에서만 쓰는 색이라 공용 팔레트에 안 넣음 */
+  /* 잉크/순검정 하드섀도는 이 다크 배경에 흡수돼서 거의 안 보인다 — 라이트 테마의
+     "테두리+그림자로 요소가 붕 떠 보이는" 키치한 느낌을 유지하려면 그림자 자체를
+     달빛색 글로우로 바꿔야 카드가 배경에서 분리되어 보인다. */
+  --ninja-shadow: rgb(231 238 245 / 0.25);
+
+  /* 로비(.lobby-screen)와 동일하게 화면을 꽉 채운다 — 가운데 정렬된 좁은 칼럼이 아니라
+     16px 안팎 패딩만 두고 헤더/카드/그리드가 뷰포트 너비 전체를 쓴다. */
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 20px;
+  box-sizing: border-box;
+  /* 달/기와/스카이라인을 CSS로 근사했던 것을 실제 생성 배경 이미지로 교체 —
+     bottom 기준으로 고정해 좁은 화면에서도 전경 기와 라인이 잘리지 않게 한다. */
+  background: var(--ninja-night-deep) url('/assets/ninja-background-v2-test.png') center bottom / cover no-repeat;
+  overflow: hidden;
+  color: var(--ninja-moon-glow);
+  text-align: left;
+}
+
+.ninja-screen > * {
+  position: relative;
+  z-index: 1;
+}
+
+.ninja-screen .pap-pixel-card {
+  background: var(--ninja-card-bg);
+  border-color: var(--ninja-moon-glow);
+  border-width: 4px;
+  box-shadow: var(--pap-shadow-offset) var(--pap-shadow-offset) 0 0 var(--ninja-shadow);
+  color: var(--ninja-moon-glow);
+}
+
+.ninja-screen .pap-input {
+  background: var(--ninja-card-bg);
+  color: var(--ninja-moon-glow);
+  border-color: var(--ninja-moon-glow);
+}
+
+.ninja-screen .pap-pixel-btn {
+  background: var(--ninja-card-bg);
+  color: var(--ninja-moon-glow);
+  border-color: var(--ninja-moon-glow);
+  box-shadow: var(--pap-shadow-offset) var(--pap-shadow-offset) 0 0 var(--ninja-shadow);
+}
+
+.ninja-screen .pap-pixel-btn:hover:not(:disabled) {
+  box-shadow: calc(var(--pap-shadow-offset) + 1px) calc(var(--pap-shadow-offset) + 1px) 0 0 var(--ninja-shadow);
+}
+
+.ninja-screen .pap-pixel-btn:active:not(:disabled) {
+  box-shadow: 0 0 0 0 var(--ninja-shadow);
+}
+
+/* 포인트 컬러 변형은 원색 그대로 재사용 — 배경만 살짝 어둡게 깔린 카드 위에 올릴 때도
+   충분히 밝아서 오버라이드 불필요. 라벤더(4P)만 다크 배경에서 채도가 죽어서 보정. */
+.ninja-screen .pap-pixel-btn--primary,
+.ninja-screen .pap-pixel-btn--teal,
+.ninja-screen .pap-pixel-btn--coral {
+  color: var(--pap-ink);
+}
+.ninja-screen .pap-pixel-btn--teal,
+.ninja-screen .pap-pixel-btn--coral {
+  color: var(--pap-white);
+}
+
+.ninja-screen .pap-pixel-title {
+  color: var(--ninja-moon-glow);
+}
+
+.ninja-screen .pap-modal-backdrop {
+  background: rgb(0 0 0 / 0.55);
+}
+
+/* 라이트 테마에서 흰 배경 대비용으로 어둡게 보정했던 상태 텍스트는 다크에서 반대 방향(원색 그대로
+   또는 더 밝게)으로 다시 정의 — #4a9d23/#1d8b85 같은 다크닝 보정값을 그대로 쓰면 안 보인다. */
+.ninja-screen .ninja-ready-text {
+  color: var(--pap-success-lime);
+}
+
+.ninja-screen .ninja-accent-text {
+  color: var(--pap-arcade-teal);
+}

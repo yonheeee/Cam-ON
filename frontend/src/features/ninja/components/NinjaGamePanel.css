@@ -1,250 +1,500 @@
-.ninja-panel {
-  position: fixed;
-  left: 1rem;
-  top: 1rem;
-  width: 300px;
-  background: rgba(20, 20, 20, 0.9);
-  color: #fff;
-  padding: 0.75rem;
-  border-radius: 8px;
-  z-index: 50;
-  font-size: 0.85rem;
-}
+/* 닌자 전투 화면 — Pixel Arcade Plaza 다크(달밤/목탑) 확장(.ninja-screen, theme.css).
+   구조: 좌/우 2단 플레이어 카드(실제 캠) + 가운데 라운드·현재 술법·공격 패널. */
 
-.ninja-reset-button {
-  position: fixed;
-  right: 1rem;
-  top: 1rem;
-  z-index: 50;
-  padding: 0.5rem 0.75rem;
-  border-radius: 8px;
-  border: none;
-  background: rgba(255, 107, 107, 0.9);
-  color: #fff;
-  font-size: 0.85rem;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.ninja-reset-button:disabled {
-  opacity: 0.6;
-  cursor: default;
-}
-
-.ninja-panel h2 {
-  margin: 0 0 0.5rem;
-  font-size: 0.95rem;
-}
-
-.ninja-panel__debug {
-  color: #aaa;
-  font-size: 0.75rem;
-  margin: 0 0 0.5rem;
-  word-break: break-all;
-}
-
-.ninja-panel__start {
+.ninja-battle__header {
   width: 100%;
-  padding: 0.5rem;
-  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
-.ninja-panel__round {
-  font-weight: 600;
-  margin: 0 0 0.5rem;
+.ninja-battle__logo {
+  height: 34px;
+  width: auto;
 }
 
-.ninja-panel__round-timer {
-  font-weight: 400;
-  color: #aaa;
+.ninja-battle__layout {
+  --ninja-tile-gap: 16px;
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 1fr 320px 1fr;
+  gap: 16px;
 }
 
-.ninja-panel__hp {
-  list-style: none;
-  margin: 0 0 0.5rem;
-  padding: 0;
+/* 좌/우 컬럼 모두 --ninja-rows(=ceil(인원/2)) 개의 같은 높이 행으로 고정한다. 한쪽이 1명이고
+   반대쪽이 2명이어도(3인전) 행 높이가 같아서 모든 참가자 타일 크기가 항상 동일하다. 남는 행은
+   그냥 빈 칸으로 둔다. flex 컬럼이었을 땐 타일이 고정 높이(aspect-ratio)를 요구해서 2장이
+   쌓이면 컬럼 밖으로 넘쳐 아래쪽 타일이 잘렸다. */
+.ninja-battle__side {
+  display: grid;
+  grid-template-rows: repeat(var(--ninja-rows, 1), 1fr);
+  gap: var(--ninja-tile-gap);
+  min-height: 0;
+  place-items: center;
+  /* 타일이 자기 행 높이를 cqh로 읽어 16:9 폭을 역산할 수 있게 한다(아래 .ninja-battle__tile). */
+  container-type: size;
 }
 
-.ninja-panel__hp--dead {
-  opacity: 0.5;
-  text-decoration: line-through;
+.ninja-battle__center {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
 }
 
-.ninja-panel__current-gesture {
-  background: rgba(255, 212, 0, 0.1);
-  border: 1px solid rgba(255, 212, 0, 0.4);
-  border-radius: 6px;
-  padding: 0.5rem;
-  margin: 0 0 0.5rem;
+/* ---- 중앙: 라운드/타이머 ---- */
+.ninja-battle__round-row {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   text-align: center;
 }
 
-.ninja-panel__current-gesture-label {
+.ninja-battle__round-label {
   margin: 0;
-  font-size: 0.7rem;
-  color: #ccc;
+  font-size: 13px;
+  opacity: 0.75;
 }
 
-.ninja-panel__current-gesture-name {
-  margin: 0.15rem 0 0.4rem;
-  font-size: 1.1rem;
-  font-weight: 700;
-  color: #ffd400;
+.ninja-battle__timer-big {
+  font-family: var(--pap-font-pixel);
+  font-size: 32px;
+  margin-top: 2px;
 }
 
-.ninja-panel__current-gesture-name span {
-  font-size: 0.75rem;
-  font-weight: 400;
-  color: #aaa;
+/* ---- 중앙: 현재 술법 카드 ---- */
+.ninja-battle__skill-card {
+  text-align: center;
+  padding: 16px;
 }
 
-.ninja-panel__hold-bar {
+.ninja-battle__skill-label {
+  margin: 0 0 8px;
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+.ninja-battle__skill-name-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.ninja-battle__skill-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgb(211 69 63 / 0.2);
+  border: 2px solid var(--ninja-hp-red);
+  font-size: 18px;
+}
+
+.ninja-battle__skill-name {
+  font-family: var(--pap-font-pixel);
+  font-size: 22px;
+}
+
+.ninja-battle__sequence {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.ninja-battle__sequence-icon {
+  min-width: 40px;
+  height: 40px;
+  padding: 0 8px;
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid rgb(255 246 214 / 0.35);
+  font-size: 13px;
+  opacity: 0.55;
+}
+
+.ninja-battle__sequence-icon--done {
+  border-color: var(--pap-success-lime);
+  color: var(--pap-success-lime);
+  opacity: 1;
+}
+
+.ninja-battle__sequence-icon--active {
+  border-color: var(--ninja-moon-glow);
+  opacity: 1;
+  box-shadow: 0 0 0 3px rgb(255 246 214 / 0.15);
+}
+
+.ninja-battle__hold-bar {
   width: 100%;
-  height: 6px;
-  background: rgba(255, 255, 255, 0.15);
-  border-radius: 3px;
+  height: 8px;
+  border-radius: 4px;
+  background: rgb(255 246 214 / 0.15);
   overflow: hidden;
+  margin-bottom: 8px;
 }
 
-.ninja-panel__hold-bar-fill {
+.ninja-battle__hold-bar-fill {
   height: 100%;
-  background: #ffd400;
+  background: var(--pap-success-lime);
   transition: width 0.1s linear;
 }
 
-.ninja-panel__step-count {
-  margin: 0.3rem 0 0;
-  font-size: 0.7rem;
-  color: #ccc;
-}
-
-.ninja-panel__combo ol {
-  margin: 0.25rem 0;
-  padding-left: 1.25rem;
-}
-
-.ninja-panel__step--done {
-  color: #6f6;
-}
-
-.ninja-panel__step--active {
-  color: #ffd400;
-  font-weight: 600;
-}
-
-.ninja-panel__combo-done {
-  color: #ffd400;
-}
-
-.ninja-panel__next-skill {
-  margin-top: 0.5rem;
-  padding: 0.4rem 0.5rem;
-  border: 1px dashed rgba(255, 255, 255, 0.2);
-  border-radius: 6px;
-}
-
-.ninja-panel__next-skill-label {
+.ninja-battle__skill-hint {
   margin: 0;
-  font-size: 0.65rem;
-  color: #888;
-  text-transform: uppercase;
+  font-size: 12px;
+  opacity: 0.7;
 }
 
-.ninja-panel__next-skill-name {
-  margin: 0.15rem 0;
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: #ccc;
+/* ---- 중앙: 공격/대상 지정 카드 ---- */
+.ninja-battle__attack-card {
+  flex: 1;
+  min-height: 0;
+  padding: 14px;
+  text-align: center;
 }
 
-.ninja-panel__next-skill-gestures {
-  margin: 0;
-  font-size: 0.7rem;
-  color: #999;
+.ninja-battle__attack-title {
+  margin: 0 0 10px;
+  font-family: var(--pap-font-pixel);
+  font-size: 16px;
+  color: var(--pap-success-lime);
 }
 
-.ninja-panel__attacker-info {
-  color: #ffd400;
-  margin: 0 0 0.5rem;
-}
-
-.ninja-panel__target-picker {
-  margin-top: 0.5rem;
-  padding-top: 0.5rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.ninja-panel__target-picker-title {
-  margin: 0 0 0.4rem;
-  font-weight: 700;
-  color: #ffd400;
-}
-
-.ninja-panel__target-picker button {
-  margin: 0.15rem 0.25rem 0.15rem 0;
-  cursor: pointer;
-}
-
-.ninja-panel__timer {
-  position: relative;
+.ninja-battle__attack-timer {
   width: 100%;
-  height: 18px;
-  background: rgba(255, 255, 255, 0.15);
-  border-radius: 9px;
+  height: 16px;
+  border-radius: 8px;
+  background: rgb(255 246 214 / 0.15);
   overflow: hidden;
-  margin-bottom: 0.5rem;
+  position: relative;
+  margin-bottom: 12px;
 }
 
-.ninja-panel__timer-bar {
+.ninja-battle__attack-timer-fill {
   height: 100%;
-  background: #ff6b6b;
+  background: var(--ninja-hp-red);
   transition: width 1s linear;
 }
 
-.ninja-panel__timer-text {
+.ninja-battle__attack-timer-text {
   position: absolute;
   inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.7rem;
+  font-size: 11px;
   font-weight: 700;
-  color: #fff;
-  text-shadow: 0 0 3px rgba(0, 0, 0, 0.8);
 }
 
-.ninja-panel__ranking {
+.ninja-battle__idle-hint,
+.ninja-battle__attacker-info {
+  margin: 0;
+  font-size: 13px;
+  opacity: 0.75;
+}
+
+/* ---- 플레이어 타일 ---- */
+/* 타일 = 정확히 16:9 박스. 이름 바/HP 바/진행도는 전부 캠 위 오버레이라 카드가 영상에 딱
+   달라붙고 안쪽에 빈 공간이 안 생긴다.
+   폭은 "컬럼 폭"과 "행 높이에서 16:9로 역산한 폭" 중 작은 쪽 — 이래야 세로가 모자랄 때도
+   (한 컬럼에 2장) 비율을 깨거나 넘치지 않고 줄어든다. 행 높이는 인원수와 무관하게 좌우가
+   같으므로 2인이든 4인이든 모든 타일 크기가 동일하다. */
+.ninja-battle__tile {
+  --ninja-row-height: calc(
+    (100cqh - (var(--ninja-rows, 1) - 1) * var(--ninja-tile-gap)) / var(--ninja-rows, 1)
+  );
+  padding: 0;
+  position: relative;
+  overflow: hidden;
+  aspect-ratio: 16 / 9;
+  width: min(100cqw, var(--ninja-row-height) * 16 / 9);
+  transition: filter 0.4s ease, opacity 0.4s ease;
+}
+
+.ninja-battle__tile--active {
+  border-color: var(--pap-success-lime);
+  box-shadow: var(--pap-shadow-offset) var(--pap-shadow-offset) 0 0 rgb(184 255 79 / 0.4);
+}
+
+.ninja-battle__tile--dead {
+  opacity: 0.5;
+  filter: grayscale(1);
+}
+
+@keyframes ninja-hit-shake {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  20% {
+    transform: translate(-4px, 2px);
+  }
+  40% {
+    transform: translate(4px, -2px);
+  }
+  60% {
+    transform: translate(-3px, -1px);
+  }
+  80% {
+    transform: translate(3px, 1px);
+  }
+}
+
+.ninja-battle__tile--hit {
+  animation: ninja-hit-shake 0.4s ease-in-out;
+}
+
+.ninja-battle__tile-top {
+  position: absolute;
+  inset: 0 0 auto 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px 12px;
+  background: linear-gradient(to bottom, rgb(0 0 0 / 0.7), rgb(0 0 0 / 0));
+  pointer-events: none;
+}
+
+.ninja-battle__tile-id {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.ninja-battle__tile-badge {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--pap-ink);
+  flex-shrink: 0;
+}
+
+.ninja-battle__tile-name {
+  font-size: 13px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ninja-battle__tile-status {
+  font-size: 11px;
+  opacity: 0.7;
+  flex-shrink: 0;
+}
+
+.ninja-battle__tile-status--attack {
+  color: var(--pap-success-lime);
+  opacity: 1;
+  font-weight: 700;
+}
+
+.ninja-battle__cam {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: rgb(0 0 0 / 0.2);
+}
+
+/* 내 캠(GesturePanel)은 스스로 absolute inset:0로 칸을 채우는데, LiveKit 타일은 그런 규칙이
+   없어서 내용 크기대로 렌더된다 — 같은 방식으로 칸을 꽉 채우게 맞춘다. */
+.ninja-battle__cam .lk-participant-tile {
+  position: absolute;
+  inset: 0;
+}
+
+/* LiveKit 기본 이름표는 우리 이름 바와 중복이라 숨긴다(로비도 동일). */
+.ninja-battle__cam .lk-participant-metadata {
+  display: none;
+}
+
+/* 어떤 경우에도 확대/크롭하지 않는다 — 타일이 이미 16:9라 16:9 캠은 정확히 꽉 차고,
+   4:3 같은 다른 비율이 들어와도 잘리는 대신 좌우에 여백이 생긴다(LiveKit 기본은 cover=크롭). */
+.ninja-battle__cam .lk-participant-media-video {
+  object-fit: contain;
+  background: transparent;
+}
+
+.ninja-battle__cam--targetable {
+  cursor: pointer;
+  outline: 3px solid var(--ninja-hp-red);
+  outline-offset: -3px;
+}
+
+.ninja-battle__cam--targetable:hover {
+  filter: brightness(1.15);
+}
+
+.ninja-battle__target-hint {
+  position: absolute;
+  bottom: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 2px 10px;
+  border-radius: 10px;
+  background: var(--ninja-hp-red);
+  color: var(--pap-white);
+  font-size: 11px;
+  font-weight: 700;
+  pointer-events: none;
+}
+
+@keyframes ninja-hit-flash {
+  0% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.ninja-battle__hit-fx {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(circle, rgb(255 80 60 / 0.55) 0%, rgb(255 80 60 / 0) 70%);
+  animation: ninja-hit-flash 0.5s ease-out forwards;
+}
+
+.ninja-battle__hp-row {
+  position: absolute;
+  inset: auto 0 0 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 14px 10px 6px;
+  font-size: 12px;
+  background: linear-gradient(to top, rgb(0 0 0 / 0.75), rgb(0 0 0 / 0));
+  pointer-events: none;
+}
+
+.ninja-battle__hp-bar {
+  display: block;
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  background: rgb(255 246 214 / 0.15);
+  overflow: hidden;
+}
+
+.ninja-battle__hp-bar-fill {
+  display: block;
+  height: 100%;
+  background: var(--ninja-hp-red);
+  transition: width 0.3s ease-out;
+}
+
+/* 내 타일에만 있는 행이라 레이아웃에 끼면 내 캠만 그만큼 짧아진다 — HP 바 바로 위에 겹쳐
+   띄워서 모든 참가자의 타일 크기를 똑같이 유지한다. */
+.ninja-battle__progress-row {
+  position: absolute;
+  inset: auto 0 28px 0;
+  z-index: 1;
+  padding: 0 10px;
+  pointer-events: none;
+  text-shadow: 0 1px 3px rgb(0 0 0 / 0.9);
+}
+
+.ninja-battle__row-label {
+  margin: 0 0 4px;
+  font-size: 10px;
+  opacity: 0.6;
+}
+
+.ninja-battle__progress-icons {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ninja-battle__progress-icon {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  border: 2px solid rgb(255 246 214 / 0.25);
+  opacity: 0.4;
+}
+
+.ninja-battle__progress-icon--done {
+  opacity: 1;
+  border-color: var(--pap-success-lime);
+  color: var(--pap-success-lime);
+}
+
+.ninja-battle__progress-icon--active {
+  opacity: 1;
+  border-color: var(--ninja-moon-glow);
+}
+
+.ninja-battle__progress-count {
+  margin-left: auto;
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+/* ---- 게임 종료 순위 ---- */
+.ninja-battle__ranking {
+  margin: auto;
+  padding: 24px 32px;
   text-align: center;
 }
 
-.ninja-panel__ranking-title {
-  font-weight: 700;
-  color: #ffd400;
-  margin: 0 0 0.5rem;
+.ninja-battle__ranking-title {
+  margin: 0 0 12px;
+  font-size: 20px;
 }
 
-.ninja-panel__ranking ol {
+.ninja-battle__ranking ol {
   list-style: none;
   margin: 0;
   padding: 0;
 }
 
-.ninja-panel__ranking li {
-  padding: 0.3rem 0;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+.ninja-battle__ranking li {
+  padding: 6px 0;
+  font-size: 14px;
+  border-top: 2px dashed rgb(255 246 214 / 0.2);
 }
 
-.ninja-panel__ranking li:first-child {
+.ninja-battle__ranking li:first-child {
   border-top: none;
-  font-size: 1.05rem;
+  font-size: 18px;
+  font-family: var(--pap-font-pixel);
+  color: var(--pap-success-lime);
+}
+
+.ninja-battle__ranking-me {
+  color: var(--ninja-moon-glow);
   font-weight: 700;
-  color: #ffd400;
 }
 
-.ninja-panel__ranking-me {
-  color: #6f9fff;
-}
-
-.ninja-panel__error {
-  color: #ff6b6b;
+.ninja-battle__error {
+  margin: 0;
+  color: var(--ninja-hp-red);
+  font-weight: 600;
+  font-size: 13px;
 }

@@ -1,12 +1,9 @@
 import { useCallback, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { LiveKitRoom, VideoConference } from '@livekit/components-react';
+import { LiveKitRoom } from '@livekit/components-react';
 import { VideoPresets, type RoomOptions } from 'livekit-client';
-import { GesturePanel } from '../../gesture/components/GesturePanel';
-import { GestureBoard } from '../../gesture/components/GestureBoard';
 import { NinjaGamePanel } from '../../ninja/components/NinjaGamePanel';
 import { LobbyScreen } from '../../room/components/LobbyScreen';
-import { ChatPanel } from '../../chat/components/ChatPanel';
 import { useRoomChat } from '../../chat/hooks/useRoomChat';
 import { PixelConfirmModal } from '../../system/components/PixelConfirmModal';
 import { useRoomHeartbeat } from '../../room/hooks/useRoomHeartbeat';
@@ -119,7 +116,7 @@ interface RoomContentProps {
 // 채팅 상태는 여기(useRoomChat)가 소유해서 화면 전환으로 패널이 리마운트돼도 내역이 유지된다.
 function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomContentProps) {
   // 게임이 실제로 열려 있는지(NinjaGamePanel이 폴링으로 판단)에 따라 대기방/게임 화면을 전환한다.
-  // 손 인식(GesturePanel/GestureBoard)은 게임 중에만 켠다.
+  // 손 인식(GesturePanel)은 게임 중에만 켠다.
   const [gameActive, setGameActive] = useState(false);
   const [seeding, setSeeding] = useState(false);
   const [seedError, setSeedError] = useState<string | null>(null);
@@ -157,14 +154,10 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
           onSendChat={sendMessage}
         />
       )}
-      {gameActive && (
-        <>
-          <VideoConference />
-          <GesturePanel />
-          <GestureBoard />
-          <ChatPanel variant="floating" messages={messages} onSend={sendMessage} />
-        </>
-      )}
+      {/* NinjaGamePanel이 이제 자체 전체화면(.ninja-screen)에 실제 캠 타일까지 그려서
+          기본 VideoConference 그리드는 게임 중엔 중복이라 뺐다 — 대기방(LobbyScreen)에서만 쓴다.
+          닌자 게임엔 채팅 기능이 없어 게임 중엔 안 띄운다. 손동작 인식(GesturePanel)은
+          NinjaGamePanel이 내 캠 칸 안에 직접 렌더링해서 스켈레톤까지 보여준다. */}
       <NinjaGamePanel
         roomId={roomId}
         gameId={NINJA_GAME_ID}

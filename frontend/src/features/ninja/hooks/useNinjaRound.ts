@@ -3,7 +3,8 @@ import { ninjaApi, NinjaApiError, type RankingEntry, type RoundSkillResponse } f
 import { useSequenceProgress } from '../lib/sequenceProgress';
 
 const STATE_POLL_INTERVAL_MS = 1500;
-const ATTACK_TARGET_TIMER_SECONDS = 30;
+// 백엔드가 이 창을 강제하지 않는 프론트 전용 규칙 — 시간 내에 못 고르면 아무 생존자나 자동 공격한다.
+const ATTACK_TARGET_TIMER_SECONDS = 5;
 // 백엔드 NinjaGameService.ROUND_DURATION(30초)과 맞춤 — 서버가 실제 데드라인을 안 내려주기 때문에
 // (폴링 기반이라 WS RoundStartedPayload.deadline을 못 받음) 라운드 번호가 바뀔 때마다 클라이언트가
 // 자체적으로 다시 세는 근사치다. 폴링 텀(1.5초)만큼 서버 시각과 어긋날 수 있지만 UI 용도로는 충분.
@@ -206,8 +207,16 @@ export function useNinjaRound(
     if (currentAttackerToken) setRoundTimerSeconds(0);
   }, [currentAttackerToken]);
 
-  // 공격권을 획득하면 대상을 지정할 30초를 보여준다 — 백엔드가 이 창을 별도로 강제하진 않고
-  // (라운드 자체 타임아웃만 서버가 관리) 순수 UI 재촉용 타이머다.
+  // setInterval 클로저 안에서 매번 최신 생존자 목록을 읽기 위한 ref (effect는 [isMyAttack, round]가
+  // 바뀔 때만 다시 도는데, 그 사이 alivePlayers가 갱신될 수 있어서 state 그대로 캡처하면 stale하다).
+  const alivePlayersRef = useRef<string[]>(alivePlayers);
+  useEffect(() => {
+    alivePlayersRef.current = alivePlayers;
+  }, [alivePlayers]);
+
+  // 공격권을 획득하면 대상을 지정할 5초를 보여준다 — 백엔드가 이 창을 별도로 강제하진 않고
+  // (라운드 자체 타임아웃만 서버가 관리) 프론트 전용 규칙이다. 5초 안에 못 고르면 생존한 상대 중
+  // 아무나 자동으로 공격한다.
   const [attackTimerSeconds, setAttackTimerSeconds] = useState<number | null>(null);
   useEffect(() => {
     if (!isMyAttack) {
@@ -216,10 +225,22 @@ export function useNinjaRound(
     }
     setAttackTimerSeconds(ATTACK_TARGET_TIMER_SECONDS);
     const interval = setInterval(() => {
-      setAttackTimerSeconds((prev) => (prev !== null && prev > 0 ? prev - 1 : 0));
+      setAttackTimerSeconds((prev) => {
+        if (prev === null) return null;
+        if (prev > 1) return prev - 1;
+
+        if (participantId && round != null && targetedRoundRef.current !== round) {
+          const others = alivePlayersRef.current.filter((token) => token !== participantId);
+          if (others.length > 0) {
+            targetedRoundRef.current = round;
+            void submitTarget(others[Math.floor(Math.random() * others.length)]);
+          }
+        }
+        return 0;
+      });
     }, 1000);
     return () => clearInterval(interval);
-  }, [isMyAttack, round]);
+  }, [isMyAttack, round, participantId, submitTarget]);
 
   return {
     round,
