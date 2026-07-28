@@ -20,6 +20,7 @@ import com.camon.domain.room.dto.JoinRoomResponse;
 import com.camon.domain.room.dto.UpdateReadyRequest;
 import com.camon.domain.room.event.ParticipantLeftEvent;
 import com.camon.domain.room.repository.JoinParticipantResult;
+import com.camon.domain.room.repository.KickParticipantResult;
 import com.camon.domain.room.repository.ParticipantRepository;
 import com.camon.domain.room.repository.LeaveRoomResult;
 import com.camon.domain.room.repository.LeaveRoomStatus;
@@ -432,5 +433,74 @@ class RoomServiceTest {
             assertThat(exception.errorCode())
                 .isEqualTo(ErrorCode.ROOM_ALREADY_STARTED)
         );
+    }
+
+    @Test
+    void kicksParticipantAndPublishesKickedLeftEvent() {
+        UUID roomId = UUID.randomUUID();
+        UUID hostId = UUID.randomUUID();
+        UUID targetId = UUID.randomUUID();
+        when(participantRepository.kick(roomId, hostId, targetId))
+            .thenReturn(KickParticipantResult.SUCCESS);
+
+        roomService.kick(roomId, hostId, targetId);
+
+        verify(roomEventPublisher).publishMemberLeft(
+            roomId,
+            targetId,
+            null,
+            "KICKED"
+        );
+        verify(applicationEventPublisher).publishEvent(
+            new ParticipantLeftEvent(roomId, targetId, "KICKED")
+        );
+    }
+
+    @Test
+    void rejectsKickByNonHost() {
+        UUID roomId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        UUID targetId = UUID.randomUUID();
+        when(participantRepository.kick(roomId, requesterId, targetId))
+            .thenReturn(KickParticipantResult.NOT_HOST);
+
+        assertThatThrownBy(() -> roomService.kick(roomId, requesterId, targetId))
+            .isInstanceOfSatisfying(BusinessException.class, exception ->
+                assertThat(exception.errorCode()).isEqualTo(ErrorCode.ROOM_NOT_HOST)
+            );
+        verify(roomEventPublisher, never()).publishMemberLeft(
+            any(UUID.class),
+            any(UUID.class),
+            any(),
+            any(String.class)
+        );
+    }
+
+    @Test
+    void rejectsHostKickingThemselves() {
+        UUID roomId = UUID.randomUUID();
+        UUID hostId = UUID.randomUUID();
+        when(participantRepository.kick(roomId, hostId, hostId))
+            .thenReturn(KickParticipantResult.SELF_KICK);
+
+        assertThatThrownBy(() -> roomService.kick(roomId, hostId, hostId))
+            .isInstanceOfSatisfying(BusinessException.class, exception ->
+                assertThat(exception.errorCode()).isEqualTo(ErrorCode.ROOM_KICK_SELF)
+            );
+    }
+
+    @Test
+    void rejectsKickOfUnknownParticipant() {
+        UUID roomId = UUID.randomUUID();
+        UUID hostId = UUID.randomUUID();
+        UUID targetId = UUID.randomUUID();
+        when(participantRepository.kick(roomId, hostId, targetId))
+            .thenReturn(KickParticipantResult.PARTICIPANT_NOT_FOUND);
+
+        assertThatThrownBy(() -> roomService.kick(roomId, hostId, targetId))
+            .isInstanceOfSatisfying(BusinessException.class, exception ->
+                assertThat(exception.errorCode())
+                    .isEqualTo(ErrorCode.ROOM_PARTICIPANT_NOT_FOUND)
+            );
     }
 }

@@ -9,7 +9,11 @@ public enum ErrorCode {
     ROOM_FULL(HttpStatus.CONFLICT, "방 정원이 가득 찼습니다."),
     ROOM_ALREADY_STARTED(HttpStatus.CONFLICT, "이미 시작한 방입니다."),
     ROOM_ACCESS_DENIED(HttpStatus.FORBIDDEN, "방 참가자만 조회할 수 있습니다."),
-    ROOM_NOT_HOST(HttpStatus.FORBIDDEN, "방장만 게임을 시작할 수 있습니다."),
+    // 게임 시작 외에 강퇴 등 방장 전용 작업이 늘어나서 메시지를 작업 중립적으로 일반화했다.
+    ROOM_NOT_HOST(HttpStatus.FORBIDDEN, "방장만 할 수 있는 작업입니다."),
+    ROOM_PARTICIPANT_NOT_FOUND(HttpStatus.NOT_FOUND, "방에 없는 참가자입니다."),
+    ROOM_KICK_SELF(HttpStatus.BAD_REQUEST, "자기 자신은 강퇴할 수 없습니다."),
+    ROOM_BANNED(HttpStatus.FORBIDDEN, "강퇴된 방에는 다시 입장할 수 없습니다."),
     ROOM_NOT_ALL_READY(HttpStatus.CONFLICT, "모든 참가자가 준비되어야 게임을 시작할 수 있습니다."),
     NICKNAME_DUPLICATED(HttpStatus.CONFLICT, "이미 사용 중인 닉네임입니다."),
     ALREADY_JOINED(HttpStatus.CONFLICT, "이미 참가한 방입니다."),

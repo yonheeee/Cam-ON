@@ -3,6 +3,7 @@
 방 생성,새 방을 만들고 생성자가 방장이 됨,/api/rooms,,POST,사용자,방,미구현,프 -> 백,No,필요,API,미구현
 방 참가,코드/링크로 기존 방에 입장,/api/rooms/join,,POST,사용자,방,미구현,프 -> 백,No,필요,API,미구현
 방 나가기,현재 방에서 자발적으로 퇴장,/api/rooms/{roomId}/members/me,,DELETE,방 참가자,방,미구현,프 -> 백,No,필요,API,미구현
+참가자 강퇴,방장이 대기방에서 참가자를 강퇴. 강퇴된 참가자는 같은 방에 재입장 불가,/api/rooms/{roomId}/members/{participantId},,DELETE,방장,방,구현,프 -> 백,No,필요,API,미구현
 준비 상태 변경,현재 참가자의 준비 완료 상태를 변경,/api/rooms/{roomId}/members/me/ready,,PATCH,방 참가자,방,구현,프 -> 백,No,필요,API,미구현
 게임 시작,방장이 대기방에서 확정한 코스대로 진행 시작,/api/rooms/{roomId}/start,,POST,방장,방,미구현,프 -> 백,No,필요,API,미구현
 방 실시간 연결,방 상태 동기화·시그널링용 STOMP 연결 수립,/ws/rooms/{roomId},connect,,방 참가자,방,미구현,프->백->프,No,필요,WebSocket,미구현
