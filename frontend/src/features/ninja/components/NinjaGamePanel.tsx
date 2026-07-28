@@ -2,11 +2,12 @@ import { useLocalParticipant, useParticipants } from '@livekit/components-react'
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useGestureBoardStore } from '../../gesture/store/gestureBoardStore';
 import { useNinjaRound } from '../hooks/useNinjaRound';
+import { NinjaEffectOverlay } from './NinjaEffectOverlay';
 import './NinjaGamePanel.css';
 
 const ATTACK_TARGET_TIMER_SECONDS = 30;
 
-// 게임 시작(seed)은 이제 대기방(RoomLobby/VideoCallRoom)에서 트리거한다. 이 패널은 폴링으로
+// 게임 시작은 이제 대기방(LobbyScreen/VideoCallRoom)에서 트리거한다. 이 패널은 폴링으로
 // 진행 상태만 읽어서 게임이 실제로 열려 있을 때만 렌더링하고, 그 활성 여부를 onActiveChange로
 // 부모에 알려 부모가 대기방/게임 화면 전환과 손 인식 패널 on/off를 결정하게 한다.
 interface NinjaGamePanelProps {
@@ -166,6 +167,7 @@ export function NinjaGamePanel({ roomId, gameId, accessToken, onActiveChange }: 
               {/* 판이 끝난 인터미션이면(boutResult 존재) 이펙트 대신 그 판의 순위+획득 점수를 보여준다. */}
               {boutResult && boutResult.length > 0 ? (
                 <div className="ninja-panel__bout-result">
+                  {inEffectPlayback && requiredSkill && <NinjaEffectOverlay effect={requiredSkill.effect} />}
                   <p className="ninja-panel__bout-result-title">🥷 라운드 {round} 결과</p>
                   <ol>
                     {boutResult.map((entry) => (
@@ -185,18 +187,21 @@ export function NinjaGamePanel({ roomId, gameId, accessToken, onActiveChange }: 
               ) : (
                 <>
                   {inEffectPlayback && requiredSkill && (
-                    <p className="ninja-panel__intermission-title">
-                      {lastAttack ? (
-                        <>
-                          {displayName(lastAttack.attackerToken)} → {displayName(lastAttack.targetToken)}
-                          {' · '}
-                          {requiredSkill.skillName} ({lastAttack.damage} 데미지)
-                          {lastAttack.targetEliminated && ' · 탈락!'}
-                        </>
-                      ) : (
-                        '교환 종료'
-                      )}
-                    </p>
+                    <>
+                      <NinjaEffectOverlay effect={requiredSkill.effect} />
+                      <p className="ninja-panel__intermission-title">
+                        {lastAttack ? (
+                          <>
+                            {displayName(lastAttack.attackerToken)} → {displayName(lastAttack.targetToken)}
+                            {' · '}
+                            {requiredSkill.skillName} ({lastAttack.damage} 데미지)
+                            {lastAttack.targetEliminated && ' · 탈락!'}
+                          </>
+                        ) : (
+                          '교환 종료'
+                        )}
+                      </p>
+                    </>
                   )}
                   {inCountdown && (
                     <div className="ninja-panel__countdown">

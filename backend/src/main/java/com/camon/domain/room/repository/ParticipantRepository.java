@@ -33,6 +33,12 @@ public interface ParticipantRepository {
 
     LeaveRoomResult leave(UUID roomId, UUID participantId);
 
+    /**
+     * 방장이 대기방에서 참가자를 강퇴한다. 검증(방장 여부/WAITING/대상 존재)과 제거·재입장
+     * 차단(banned) 등록까지 원자적으로 수행한다.
+     */
+    KickParticipantResult kick(UUID roomId, UUID requesterId, UUID targetId);
+
     LeaveRoomResult leaveIfHeartbeatExpired(
         UUID roomId,
         UUID participantId

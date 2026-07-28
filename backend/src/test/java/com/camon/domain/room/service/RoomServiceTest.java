@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -17,7 +18,9 @@ import com.camon.domain.room.dto.CreateRoomResponse;
 import com.camon.domain.room.dto.JoinRoomRequest;
 import com.camon.domain.room.dto.JoinRoomResponse;
 import com.camon.domain.room.dto.UpdateReadyRequest;
+import com.camon.domain.room.event.ParticipantLeftEvent;
 import com.camon.domain.room.repository.JoinParticipantResult;
+import com.camon.domain.room.repository.KickParticipantResult;
 import com.camon.domain.room.repository.ParticipantRepository;
 import com.camon.domain.room.repository.LeaveRoomResult;
 import com.camon.domain.room.repository.LeaveRoomStatus;
@@ -38,6 +41,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.context.ApplicationEventPublisher;
 
 class RoomServiceTest {
 
@@ -50,6 +54,7 @@ class RoomServiceTest {
     private RoomInviteLinkGenerator inviteLinkGenerator;
     private RoomEventPublisher roomEventPublisher;
     private LiveKitTokenService liveKitTokenService;
+    private ApplicationEventPublisher applicationEventPublisher;
     private RoomService roomService;
 
     @BeforeEach
@@ -61,6 +66,7 @@ class RoomServiceTest {
         inviteLinkGenerator = mock(RoomInviteLinkGenerator.class);
         roomEventPublisher = mock(RoomEventPublisher.class);
         liveKitTokenService = mock(LiveKitTokenService.class);
+        applicationEventPublisher = mock(ApplicationEventPublisher.class);
         roomService = new RoomService(
             roomRepository,
             participantRepository,
@@ -69,7 +75,8 @@ class RoomServiceTest {
             inviteLinkGenerator,
             roomEventPublisher,
             liveKitTokenService,
-            Clock.fixed(NOW, ZoneOffset.UTC)
+            Clock.fixed(NOW, ZoneOffset.UTC),
+            applicationEventPublisher
         );
     }
 
@@ -105,7 +112,8 @@ class RoomServiceTest {
         assertThat(savedRoom.status()).isEqualTo(RoomStatus.WAITING);
         assertThat(savedHost.participantId()).isEqualTo(participantId);
         assertThat(savedHost.nickname()).isEqualTo("플레이어1");
-        assertThat(savedHost.ready()).isFalse();
+        // 방장은 "게임 시작" 버튼을 쓰므로 생성 시점부터 준비 완료(ready=true)로 둔다 — RoomService 참조.
+        assertThat(savedHost.ready()).isTrue();
         assertThat(savedHost.connectionStatus()).isEqualTo(ConnectionStatus.CONNECTED);
         assertThat(response.room().roomCode()).isEqualTo("AB23CD");
         assertThat(response.room().participants()).singleElement()
@@ -324,6 +332,38 @@ class RoomServiceTest {
             hostId,
             newHostId
         );
+        verify(roomEventPublisher).publishHostChanged(roomId, hostId, newHostId);
+        verify(applicationEventPublisher).publishEvent(
+            new ParticipantLeftEvent(roomId, hostId, "LEFT")
+        );
+    }
+
+    @Test
+    void doesNotPublishHostChangedWhenLeaverIsNotHost() {
+        UUID roomId = UUID.randomUUID();
+        UUID hostId = UUID.randomUUID();
+        UUID memberId = UUID.randomUUID();
+        when(participantRepository.leave(roomId, memberId)).thenReturn(
+            new LeaveRoomResult(
+                    LeaveRoomStatus.SUCCESS,
+                    memberId,
+                    hostId,
+                    hostId,
+                    false
+            )
+        );
+
+        roomService.leaveRoom(roomId, memberId);
+
+        verify(roomEventPublisher).publishMemberLeft(roomId, memberId, null);
+        verify(roomEventPublisher, never()).publishHostChanged(
+            any(UUID.class),
+            any(UUID.class),
+            any(UUID.class)
+        );
+        verify(applicationEventPublisher).publishEvent(
+            new ParticipantLeftEvent(roomId, memberId, "LEFT")
+        );
     }
 
     @Test
@@ -393,5 +433,74 @@ class RoomServiceTest {
             assertThat(exception.errorCode())
                 .isEqualTo(ErrorCode.ROOM_ALREADY_STARTED)
         );
+    }
+
+    @Test
+    void kicksParticipantAndPublishesKickedLeftEvent() {
+        UUID roomId = UUID.randomUUID();
+        UUID hostId = UUID.randomUUID();
+        UUID targetId = UUID.randomUUID();
+        when(participantRepository.kick(roomId, hostId, targetId))
+            .thenReturn(KickParticipantResult.SUCCESS);
+
+        roomService.kick(roomId, hostId, targetId);
+
+        verify(roomEventPublisher).publishMemberLeft(
+            roomId,
+            targetId,
+            null,
+            "KICKED"
+        );
+        verify(applicationEventPublisher).publishEvent(
+            new ParticipantLeftEvent(roomId, targetId, "KICKED")
+        );
+    }
+
+    @Test
+    void rejectsKickByNonHost() {
+        UUID roomId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        UUID targetId = UUID.randomUUID();
+        when(participantRepository.kick(roomId, requesterId, targetId))
+            .thenReturn(KickParticipantResult.NOT_HOST);
+
+        assertThatThrownBy(() -> roomService.kick(roomId, requesterId, targetId))
+            .isInstanceOfSatisfying(BusinessException.class, exception ->
+                assertThat(exception.errorCode()).isEqualTo(ErrorCode.ROOM_NOT_HOST)
+            );
+        verify(roomEventPublisher, never()).publishMemberLeft(
+            any(UUID.class),
+            any(UUID.class),
+            any(),
+            any(String.class)
+        );
+    }
+
+    @Test
+    void rejectsHostKickingThemselves() {
+        UUID roomId = UUID.randomUUID();
+        UUID hostId = UUID.randomUUID();
+        when(participantRepository.kick(roomId, hostId, hostId))
+            .thenReturn(KickParticipantResult.SELF_KICK);
+
+        assertThatThrownBy(() -> roomService.kick(roomId, hostId, hostId))
+            .isInstanceOfSatisfying(BusinessException.class, exception ->
+                assertThat(exception.errorCode()).isEqualTo(ErrorCode.ROOM_KICK_SELF)
+            );
+    }
+
+    @Test
+    void rejectsKickOfUnknownParticipant() {
+        UUID roomId = UUID.randomUUID();
+        UUID hostId = UUID.randomUUID();
+        UUID targetId = UUID.randomUUID();
+        when(participantRepository.kick(roomId, hostId, targetId))
+            .thenReturn(KickParticipantResult.PARTICIPANT_NOT_FOUND);
+
+        assertThatThrownBy(() -> roomService.kick(roomId, hostId, targetId))
+            .isInstanceOfSatisfying(BusinessException.class, exception ->
+                assertThat(exception.errorCode())
+                    .isEqualTo(ErrorCode.ROOM_PARTICIPANT_NOT_FOUND)
+            );
     }
 }

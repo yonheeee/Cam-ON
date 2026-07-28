@@ -3,6 +3,7 @@ package com.camon.domain.room.repository.redis;
 import com.camon.domain.room.domain.ConnectionStatus;
 import com.camon.domain.room.domain.Participant;
 import com.camon.domain.room.repository.JoinParticipantResult;
+import com.camon.domain.room.repository.KickParticipantResult;
 import com.camon.domain.room.repository.LeaveRoomResult;
 import com.camon.domain.room.repository.LeaveRoomStatus;
 import com.camon.domain.room.repository.ParticipantRepository;
@@ -34,6 +35,7 @@ public class RedisParticipantRepository implements ParticipantRepository {
     private static final long ROOM_ALREADY_STARTED = 3L;
     private static final long NICKNAME_DUPLICATED = 4L;
     private static final long ALREADY_JOINED = 5L;
+    private static final long BANNED = 6L;
 
     private static final DefaultRedisScript<Long> TRY_ADD_SCRIPT =
         new DefaultRedisScript<>("""
@@ -48,6 +50,9 @@ public class RedisParticipantRepository implements ParticipantRepository {
             end
             if redis.call('EXISTS', KEYS[5]) == 1 then
                 return 5
+            end
+            if redis.call('SISMEMBER', KEYS[6], ARGV[1]) == 1 then
+                return 6
             end
             local maxPlayers = tonumber(redis.call('HGET', KEYS[1], 'max_players'))
             if not maxPlayers or redis.call('SCARD', KEYS[2]) >= maxPlayers then
@@ -137,6 +142,39 @@ public class RedisParticipantRepository implements ParticipantRepository {
             return 1
             """, Long.class);
 
+    // 검증부터 제거·banned 등록까지 한 번에 — 조회와 제거 사이에 방장 위임/퇴장이 끼어들 수 없다.
+    // 방장은 강퇴 대상이 될 수 없으므로(요청자=방장, 자기 자신 금지) 위임·방 삭제 분기가 없다.
+    private static final DefaultRedisScript<String> KICK_SCRIPT =
+        new DefaultRedisScript<>("""
+            if redis.call('EXISTS', KEYS[1]) == 0 then
+                return 'ROOM_NOT_FOUND'
+            end
+            if redis.call('HGET', KEYS[1], 'status') ~= 'WAITING' then
+                return 'ROOM_ALREADY_STARTED'
+            end
+            if redis.call('HGET', KEYS[1], 'host_participant_id') ~= ARGV[2] then
+                return 'NOT_HOST'
+            end
+            if ARGV[1] == ARGV[2] then
+                return 'SELF_KICK'
+            end
+            if redis.call('SISMEMBER', KEYS[2], ARGV[1]) == 0 then
+                return 'PARTICIPANT_NOT_FOUND'
+            end
+
+            local nickname = redis.call('HGET', KEYS[3], 'nickname')
+            if nickname then
+                redis.call('SREM', KEYS[4], nickname)
+            end
+            redis.call('SREM', KEYS[2], ARGV[1])
+            redis.call('DEL', KEYS[3], KEYS[5])
+            if redis.call('GET', KEYS[6]) == ARGV[3] then
+                redis.call('DEL', KEYS[6])
+            end
+            redis.call('SADD', KEYS[7], ARGV[1])
+            return 'SUCCESS'
+            """, String.class);
+
     private static final DefaultRedisScript<String> LEAVE_SCRIPT =
         new DefaultRedisScript<>("""
             if redis.call('EXISTS', KEYS[1]) == 0 then
@@ -163,7 +201,7 @@ public class RedisParticipantRepository implements ParticipantRepository {
 
             local remaining = redis.call('SMEMBERS', KEYS[2])
             if #remaining == 0 then
-                redis.call('DEL', KEYS[1], KEYS[2], KEYS[4])
+                redis.call('DEL', KEYS[1], KEYS[2], KEYS[4], KEYS[7])
                 if roomCode then
                     redis.call('DEL', ARGV[5] .. roomCode)
                 end
@@ -218,7 +256,7 @@ public class RedisParticipantRepository implements ParticipantRepository {
             end
 
             if not newHost then
-                redis.call('DEL', KEYS[1], KEYS[2], KEYS[4])
+                redis.call('DEL', KEYS[1], KEYS[2], KEYS[4], KEYS[7])
                 if roomCode then
                     redis.call('DEL', ARGV[5] .. roomCode)
                 end
@@ -244,7 +282,8 @@ public class RedisParticipantRepository implements ParticipantRepository {
                 RedisRoomKeys.participants(roomId),
                 RedisRoomKeys.participant(roomId, participant.participantId()),
                 RedisRoomKeys.nicknames(roomId),
-                RedisRoomKeys.participantRoom(participant.participantId())
+                RedisRoomKeys.participantRoom(participant.participantId()),
+                RedisRoomKeys.banned(roomId)
             ),
             participant.participantId().toString(),
             participant.nickname(),
@@ -348,6 +387,33 @@ public class RedisParticipantRepository implements ParticipantRepository {
     }
 
     @Override
+    public KickParticipantResult kick(
+        UUID roomId,
+        UUID requesterId,
+        UUID targetId
+    ) {
+        String result = redisTemplate.execute(
+            KICK_SCRIPT,
+            List.of(
+                RedisRoomKeys.room(roomId),
+                RedisRoomKeys.participants(roomId),
+                RedisRoomKeys.participant(roomId, targetId),
+                RedisRoomKeys.nicknames(roomId),
+                RedisRoomKeys.heartbeat(targetId),
+                RedisRoomKeys.participantRoom(targetId),
+                RedisRoomKeys.banned(roomId)
+            ),
+            targetId.toString(),
+            requesterId.toString(),
+            roomId.toString()
+        );
+        if (result == null) {
+            throw new IllegalStateException("Redis returned no kick result");
+        }
+        return KickParticipantResult.valueOf(result);
+    }
+
+    @Override
     public LeaveRoomResult leave(UUID roomId, UUID participantId) {
         return leave(roomId, participantId, false);
     }
@@ -373,7 +439,8 @@ public class RedisParticipantRepository implements ParticipantRepository {
                 RedisRoomKeys.participant(roomId, participantId),
                 RedisRoomKeys.nicknames(roomId),
                 RedisRoomKeys.heartbeat(participantId),
-                RedisRoomKeys.participantRoom(participantId)
+                RedisRoomKeys.participantRoom(participantId),
+                RedisRoomKeys.banned(roomId)
             ),
             participantId.toString(),
             RedisRoomKeys.participantPrefix(roomId),
@@ -440,6 +507,9 @@ public class RedisParticipantRepository implements ParticipantRepository {
         }
         if (result == ALREADY_JOINED) {
             return JoinParticipantResult.ALREADY_JOINED;
+        }
+        if (result == BANNED) {
+            return JoinParticipantResult.BANNED;
         }
         throw new IllegalStateException("Unknown Redis join result: " + result);
     }

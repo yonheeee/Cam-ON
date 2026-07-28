@@ -33,6 +33,13 @@ interface MemberReadyPayload {
   allReady: boolean;
 }
 
+// 재접속 유예(15초) 동안의 상태 변화. DISCONNECTED는 "나갔다"가 아니라 "끊겼고 아직 유예 중"이다 —
+// 유예가 끝나 실제로 퇴장하면 그때 member:left가 따로 온다.
+interface MemberConnectionPayload {
+  participantId: string;
+  connectionStatus: 'CONNECTED' | 'DISCONNECTED';
+}
+
 export function useRoomLobby(roomId: string, accessToken: string) {
   const [room, setRoom] = useState<RoomSnapshotResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -94,6 +101,17 @@ export function useRoomLobby(roomId: string, accessToken: string) {
               case 'host:changed': {
                 const data = event.data as HostChangedPayload;
                 return { ...prev, hostParticipantId: data.newHostParticipantId };
+              }
+              case 'member:connection-changed': {
+                const data = event.data as MemberConnectionPayload;
+                return {
+                  ...prev,
+                  participants: prev.participants.map((p) =>
+                    p.participantId === data.participantId
+                      ? { ...p, connectionStatus: data.connectionStatus }
+                      : p,
+                  ),
+                };
               }
               case 'member:ready-updated': {
                 const data = event.data as MemberReadyPayload;

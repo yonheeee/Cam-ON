@@ -86,7 +86,13 @@ public class StompAuthenticationInterceptor implements ChannelInterceptor {
             throw new AccessDeniedException("Participant does not belong to room");
         }
         accessor.setUser(authentication);
-        connectionService.connected(roomId, principal.participantId());
+        // 세션 id를 함께 넘겨 참가자별 살아있는 연결 수를 추적한다(마지막 하나가 끊길 때만
+        // 연결 끊김으로 처리하기 위해서 — 프론트가 참가자당 여러 연결을 연다).
+        connectionService.connected(
+            roomId,
+            principal.participantId(),
+            accessor.getSessionId()
+        );
     }
 
     private void authorizeDestination(StompHeaderAccessor accessor) {
