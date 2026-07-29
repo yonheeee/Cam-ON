@@ -19,5 +19,9 @@ public interface RoomRepository {
 
     void updateStatus(UUID roomId, RoomStatus status);
 
+    // 코스에서 몇 번째 게임을 진행 중인지 기록한다. 게임 도메인이 이 값으로
+    // room:{code}:session:{seq} 키를 조립하므로, 다음 게임으로 넘어갈 때 반드시 먼저 올려야 한다.
+    void updateCurrentSessionSeq(UUID roomId, int sessionSeq);
+
     void delete(UUID roomId);
 }

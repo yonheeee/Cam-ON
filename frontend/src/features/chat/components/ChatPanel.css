@@ -71,7 +71,7 @@
   padding: 0.35rem 0.6rem;
 }
 
-/* 게임 중 — 우측 하단 고정 다크 오버레이 (기존 스타일). 우측 상단 게임 초기화 버튼과 안 겹치게 하단. */
+/* 게임 중 — 우측 하단 고정 다크 오버레이 (기존 스타일). */
 .chat-panel--floating {
   position: fixed;
   right: 1rem;

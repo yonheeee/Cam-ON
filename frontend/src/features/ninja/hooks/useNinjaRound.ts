@@ -207,23 +207,6 @@ export function useNinjaRound(
     void submitTarget(others[0]);
   }, [participantId, round, exchange, currentAttackerToken, phase, alivePlayers, submitTarget]);
 
-  const [resetting, setResetting] = useState(false);
-  const resetGame = useCallback(async () => {
-    setResetting(true);
-    setError(null);
-    try {
-      await ninjaApi.reset(roomId, accessToken);
-      attackedKeyRef.current = null;
-      targetedKeyRef.current = null;
-      armedKeyRef.current = null;
-      setAttackAckKey(null);
-      await poll();
-    } catch (err) {
-      setError(err instanceof NinjaApiError ? err.message : '게임 초기화 실패');
-    } finally {
-      setResetting(false);
-    }
-  }, [poll, roomId, accessToken]);
 
   const isMyAttack = participantId !== null && currentAttackerToken === participantId;
   // 현재 교환에서 내 공격 제출이 서버에 수락됐는가(콤보 완성이 아니라 서버 200 기준).
@@ -307,8 +290,6 @@ export function useNinjaRound(
     gameEnded,
     error,
     submitTarget,
-    resetGame,
-    resetting,
     resetSequence: reset,
     // 서버 주도 인터미션
     phase,

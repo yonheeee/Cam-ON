@@ -7,7 +7,7 @@ import './NinjaGamePanel.css';
 
 const ATTACK_TARGET_TIMER_SECONDS = 30;
 
-// 게임 시작(seed)은 이제 대기방(RoomLobby/VideoCallRoom)에서 트리거한다. 이 패널은 폴링으로
+// 게임 시작은 이제 대기방(LobbyScreen/VideoCallRoom)에서 트리거한다. 이 패널은 폴링으로
 // 진행 상태만 읽어서 게임이 실제로 열려 있을 때만 렌더링하고, 그 활성 여부를 onActiveChange로
 // 부모에 알려 부모가 대기방/게임 화면 전환과 손 인식 패널 on/off를 결정하게 한다.
 interface NinjaGamePanelProps {
@@ -45,8 +45,6 @@ export function NinjaGamePanel({ roomId, gameId, accessToken, onActiveChange }: 
     gameEnded,
     error,
     submitTarget,
-    resetGame,
-    resetting,
     isIntermission,
     inEffectPlayback,
     inCountdown,
@@ -101,17 +99,8 @@ export function NinjaGamePanel({ roomId, gameId, accessToken, onActiveChange }: 
 
   return (
     <>
-      <button
-        className="ninja-reset-button"
-        disabled={resetting}
-        onClick={() => void resetGame()}
-        title="진행 중인 게임을 지우고 대기방으로 되돌립니다"
-      >
-        {resetting ? '초기화 중...' : '🔄 게임 초기화'}
-      </button>
-
     <div className="ninja-panel">
-      <h2>닌자 게임</h2>
+      <h2>손은 눈보다 빠르다</h2>
 
       {gameStarted && gameEnded && (
         <div className="ninja-panel__ranking">

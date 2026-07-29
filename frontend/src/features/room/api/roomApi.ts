@@ -37,6 +37,7 @@ export interface UpdateReadyResult {
 
 export interface StartGameResult {
   gameId: number;
+  sessionSeq: number;
   totalRounds: number;
 }
 
@@ -95,18 +96,31 @@ export const roomApi = {
     }
   },
 
+  // 방장의 참가자 강퇴. 서버가 방장 여부/대기방 상태를 검증하고, 성공 시
+  // member:left(reason=KICKED)를 브로드캐스트한다(강퇴된 참가자는 재입장 불가).
+  // leaveRoom과 같은 이유(204 No Content)로 request()를 쓰지 않는다.
+  kickMember: async (roomId: string, participantId: string, accessToken: string): Promise<void> => {
+    const response = await fetch(`${BASE_URL}/api/rooms/${roomId}/members/${participantId}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!response.ok) {
+      const body = await response.json().catch(() => null);
+      throw new RoomApiError(body?.message ?? `요청 실패 (HTTP ${response.status})`, body?.code);
+    }
+  },
+
   updateReady: (roomId: string, ready: boolean, accessToken: string) =>
     request<UpdateReadyResult>(`/api/rooms/${roomId}/members/me/ready`, accessToken, {
       method: 'PATCH',
       body: JSON.stringify({ ready }),
     }),
 
-  // 방장이 대기방에서 게임을 시작한다. 참가자 토큰은 서버가 방의 실제 참가자 목록에서 만들므로
-  // 클라이언트가 넘기지 않는다. 서버가 방장 여부·전원 준비를 검증하고 방을 PLAYING으로 전환한 뒤
-  // 세션을 열며 game:started를 브로드캐스트한다.
-  startGame: (roomId: string, gameId: number, totalRounds: number, accessToken: string) =>
+  // 방장이 대기방에서 확정한 코스대로 진행을 시작한다. 무엇을 몇 라운드 할지는 코스에 이미
+  // 들어 있고 참가자 목록도 서버가 직접 읽으므로 보낼 바디가 없다. 서버가 방장 여부·전원 준비·
+  // 코스 유효성을 검증하고 방을 PLAYING으로 전환한 뒤 첫 세션을 열며 game:started를 쏜다.
+  startGame: (roomId: string, accessToken: string) =>
     request<StartGameResult>(`/api/rooms/${roomId}/start`, accessToken, {
       method: 'POST',
-      body: JSON.stringify({ gameId, totalRounds }),
     }),
 };
