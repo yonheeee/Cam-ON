@@ -15,7 +15,21 @@ import './GesturePanel.css';
 // 화면에도 그대로 재사용해서 거울모드 표시와 스켈레톤 정렬을 CSS 트릭 없이 맞춘다).
 // 판정 결과는 로컬 화면에 표시하는 동시에 데이터 채널로 브로드캐스트해서
 // GestureBoard가 모든 참가자의 결과를 한 곳에 모아 보여줄 수 있게 한다.
-export function GesturePanel() {
+interface GesturePanelProps {
+  /**
+   * 'panel'(기본): 우하단 고정 미리보기 박스(반전 프레임 + 스켈레톤 + 판정 목록).
+   * 'overlay': 스켈레톤 캔버스만 렌더링해 호출부(내 캠 타일)에 얹는다. 인식/브로드캐스트
+   * 로직은 완전히 동일하다 — 미리보기 UI만 빠진다.
+   *
+   * 좌표계: 랜드마크는 반전(mirror)된 프레임에서 뽑히고, LiveKit도 로컬 카메라 비디오를
+   * rotateY(180deg)로 반전해 보여준다(.lk-participant-media-video[data-lk-local-participant]).
+   * 둘이 같은 반전 공간이라 스켈레톤을 그대로 겹치면 맞는다. 캔버스는 비디오의 natural 크기로
+   * 두고 CSS에서 object-fit: cover를 걸어 LiveKit의 크롭과 동일하게 잘린다.
+   */
+  variant?: 'panel' | 'overlay';
+}
+
+export function GesturePanel({ variant = 'panel' }: GesturePanelProps = {}) {
   const { cameraTrack, localParticipant } = useLocalParticipant();
   const { send } = useDataChannel(GESTURE_RESULT_TOPIC);
   const setEntry = useGestureBoardStore((state) => state.setEntry);
@@ -99,6 +113,17 @@ export function GesturePanel() {
       drawingUtils.drawLandmarks(hand.landmarks, { color: '#ffffff', radius: 3 });
     }
   }, [results, combo.label]);
+
+  // 오버레이 모드 — 프레임 소스용 <video>(숨김)와 스켈레톤 캔버스만. 반전 프레임 캔버스는
+  // 삽입하지 않는다(LiveKit이 이미 같은 카메라를 반전해 그리고 있어서 겹치면 두 겹이 된다).
+  if (variant === 'overlay') {
+    return (
+      <>
+        <video ref={videoRef} autoPlay playsInline muted style={{ display: 'none' }} />
+        <canvas ref={canvasRef} className="gesture-skeleton" aria-hidden />
+      </>
+    );
+  }
 
   return (
     <div className="gesture-panel">
