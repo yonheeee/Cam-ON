@@ -1,7 +1,10 @@
 package com.camon.domain.game.ninja.ws.payload;
 
 import com.camon.domain.game.ninja.domain.NinjaPhase;
+import com.camon.domain.game.ninja.dto.RoundResultEntry;
 import java.time.Instant;
+import java.util.List;
+import java.util.Map;
 
 // 공격 resolve 직후 전파. phase/effectUntil/nextRoundAt를 함께 실어, WS를 구독하는 클라이언트가
 // 폴링을 기다리지 않고 즉시 인터미션(이펙트→카운트다운)으로 전환할 수 있게 한다. 전환의 실제
@@ -23,6 +26,10 @@ public record AttackResolvedPayload(
     // 이 교환으로 판이 끝났는가(최후 1인 확정) — true면 다음은 다음 판/게임 종료, false면 같은 판의 다음 교환.
     boolean roundEnded,
     // 이 공격이 게임을 끝낸 결정타인가(마지막 판 종료).
-    boolean ending
+    boolean ending,
+    // roundEnded=true일 때만: 방금 끝난 판의 순위+획득 점수, 갱신된 누적 점수. 아니면 null.
+    // 폴링 없이 이벤트만 구독하는 클라이언트가 판 결과창을 띄울 수 있게 함께 싣는다.
+    List<RoundResultEntry> roundResult,
+    Map<String, Long> sessionTotals
 ) {
 }
