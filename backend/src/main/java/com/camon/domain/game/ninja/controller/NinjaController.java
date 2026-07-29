@@ -20,8 +20,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-// {gameId}는 room의 UUID(roomId)를 그대로 받는다 — 이 방에서 지금 진행 중인 세션은 서비스가
-// room.currentSessionSeq()로 알아서 찾는다(별도 세션 식별자 없음). 여기는 요청을 받아 서비스에
+// {gameId}는 games 카탈로그의 숫자 ID다 (roomId 아님 — URL에 방 정보가 없고, 요청자가 어느
+// 방에 있는지는 NinjaGameFacade가 participant→room 매핑으로 역추적한다). 진행 중인 세션은
+// room.currentSessionSeq()로 찾는다(별도 세션 식별자 없음). 여기는 요청을 받아 서비스에
 // 위임만 하고, Redis/WS 처리는 전부 NinjaGameService에 있다.
 @Slf4j
 @RestController
