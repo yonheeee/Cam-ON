@@ -6,3 +6,4 @@ deploy/.deployed-images
 deploy/secrets/
 *.pem
 *.ppk
+.env
