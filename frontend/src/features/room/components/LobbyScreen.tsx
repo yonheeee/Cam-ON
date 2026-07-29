@@ -413,26 +413,32 @@ export function LobbyScreen({
             </button>
             {/* 주 액션은 하나로 통일 — 방장: 게임 시작 / 참가자: 준비 토글 */}
             {isHost ? (
-              // 공통 요구사항: 전원 준비 완료여야 시작 가능 (방장 본인 제외 — 방장은 시작이 곧 준비)
-              <button
-                type="button"
-                className="pap-pixel-btn pap-pixel-btn--coral"
-                // 코스가 비면 시작할 게 없고(서버도 COURSE_EMPTY로 거부), 전원 준비 전에도
-                // 서버가 거부하므로(ROOM_NOT_ALL_READY) 둘 다 미리 막는다.
-                disabled={
-                  starting || !room || !course || course.items.length === 0 || !allOthersReady
-                }
-                title={
+              // 공통 요구사항: 전원 준비 완료여야 시작 가능 (방장 본인 제외 — 방장은 시작이 곧 준비).
+              // 왜 안 눌리는지는 네이티브 title이 아니라 CSS 말풍선으로 보여준다 — 비활성 버튼의
+              // title 툴팁은 뜨기까지 1초쯤 걸리고 눈에 잘 안 띄어서 "버튼이 고장났다"로 읽힌다.
+              <span
+                className="lobby-screen__start-wrap"
+                data-hint={
                   course && course.items.length === 0
-                    ? '먼저 게임 구성을 정해 주세요'
+                    ? '코스를 정해주세요!'
                     : allOthersReady
                       ? undefined
-                      : '모든 참가자가 준비를 완료해야 시작할 수 있어요'
+                      : '모든 참가자가 준비를 완료해야 해요!'
                 }
-                onClick={() => onStartGame()}
               >
-                {starting ? '시작 중...' : allOthersReady ? '게임 시작' : '준비 대기 중...'}
-              </button>
+                <button
+                  type="button"
+                  className="pap-pixel-btn pap-pixel-btn--coral"
+                  // 코스가 비면 시작할 게 없고(서버도 COURSE_EMPTY로 거부), 전원 준비 전에도
+                  // 서버가 거부하므로(ROOM_NOT_ALL_READY) 둘 다 미리 막는다.
+                  disabled={
+                    starting || !room || !course || course.items.length === 0 || !allOthersReady
+                  }
+                  onClick={() => onStartGame()}
+                >
+                  {starting ? '시작 중...' : allOthersReady ? '게임 시작' : '준비 대기 중...'}
+                </button>
+              </span>
             ) : (
               // 준비되면 눌린 채 고정된 라임 버튼으로 — 누르는 순간의 "철컥" UX.
               // (확정안은 준비 버튼 제거 예정 — 백엔드 ready 규칙 정리 전까지 임시)
