@@ -37,7 +37,7 @@
   원래 스키마에 있던 `users`/`rooms`/`room_participants`/`game_sessions`/`rounds`/`round_results`/
   `ai_judgement_logs` 7개 테이블은 전부 Redis로 대체되어 MySQL에서 빠졌다.
 - **Redis(방 생명주기 데이터, 방 종료 시 전부 삭제)**: `room:{code}` 방 상태, `room:{code}:course:{idx}`
-  대기방에서 미리 확정한 게임 순서/라운드 수, `room:{code}:participants` 입장 순서(ZSET, 방장 연쇄 위임에
+  대기방에서 미리 확정한 게임 순서, `room:{code}:participants` 입장 순서(ZSET, 방장 연쇄 위임에
   사용), `room:{code}:participant:{token}` 참가자 상태(닉네임/연결상태/준비여부), `...:session:{seq}`
   진행 중 게임, `...:round:{n}` 라운드, `...:results`/`...:totals`/`room:{code}:course:totals` 점수 누적,
   `session:{token}:alive`(TTL 15초 하트비트, 방장 위임/강제퇴장 트리거). 게임별 전용 키(닌자
@@ -66,7 +66,7 @@
 | --- | --- | --- | --- | --- | --- |
 | 물건 가져오기 | 제시어 물건을 시간 내 카메라 앞에 가져옴 | 손에 든 물체 | 가장 빨리 가져온 순서대로 1~4위, 시간초과 시 전원 0점 | 2~4명 | (참여자 수)~10 |
 | 닌자 | 라운드별 손동작(콤보) 제시 → 가장 빨리 완성한 사람이 공격권 획득 → 대상 지정 → 스킬 데미지로 HP 차감 | 손동작(손동작 조합 = 스킬) | 최후 1인 생존 시 종료, 늦게 탈락한 순서대로 순위 | 2~4명 | 3~10 |
-| 몸으로 말해요 | 표현자가 마이크 없이 행동으로 제시어 설명 → 다른 참가자가 채팅으로 정답 시도 | 없음(채팅 텍스트 매칭) | 정확한 채팅 제출자 정답 처리 | 3~4명 | 3~10 |
+| 몸으로 말해요 | 선택한 주제의 제시어를 표현자가 마이크 없이 행동으로 설명 → 다른 참가자가 채팅으로 정답 시도. 참가자 전원이 한 번씩 표현하면 게임 종료, 턴당 1분 | 없음(채팅 텍스트 매칭) | 정답 시 표현자·최초 정답자 각 1점, 모든 참가자의 표현 종료 후 점수·누적 점수와 순위 공개 | 3~4명 | 1 |
 
 세부 규칙(예외 처리, 코스 전체 누적 점수 계산 등)은 [hand-gesture-recognition-mediapipe/요구사항명세서.md](hand-gesture-recognition-mediapipe/요구사항명세서.md)가 정확한 원본이다(위치는 어색하지만 내용은 최신·정확함).
 
@@ -92,6 +92,37 @@
   U+FFFD(치환 문자)로 손상된 채 저장되어 있다. HTML의 표 구조(ID 체계: `COM01_ACC01`,
   `GAME01_FLOW01` 등)만 읽을 수 있고 내용은 복구 불가능하다. 같은 내용의 정확한 원본은 위
   "게임 3종 요약"/"공통 기능 요구사항" 섹션과 `요구사항명세서.md`, API 명세 CSV/MD를 대신 참고한다.
+
+---
+
+# Git 브랜치/머지 워크플로우
+
+**공유 브랜치(`main`, `develop`, `develop-backend`, `develop-frontend`)에는 절대 직접 push 하지
+않는다.** 모든 변경은 작업 브랜치(`feature/*`, `fix/*` 등)에서 커밋·push 한 뒤 **MR(Merge
+Request)로만** 반영한다. 팀원 전원과 AI 에이전트가 이 규칙을 따른다 — "develop에 올려줘",
+"머지해줘" 같은 요청도 **공유 브랜치 직접 push가 아니라 "작업 브랜치 push → MR"** 을 의미한다.
+
+## 브랜치 모델
+
+```
+feature|fix/backend/*   ──MR──▶ develop-backend
+feature|fix/frontend/*  ──MR──▶ develop-frontend
+        develop-backend + develop-frontend ──통합──▶ develop
+        develop ──(테스트 통과 후 MR)──▶ main ──▶ 자동 배포(EC2)
+```
+
+- FE와 BE가 한 몸으로 엮인 변경(예: 새 REST 엔드포인트 + 그걸 부르는 프론트)은 `develop`에서
+  작업 브랜치를 따서 `develop`으로 MR 한다 — 어느 한쪽 통합 브랜치엔 짝이 없어서 반쪽만
+  올라가거나 배포가 깨질 수 있다.
+- 작업 브랜치를 **어느 브랜치에서 분기했는지**가 곧 MR 대상이다. 엉뚱한 브랜치에서 따면 그
+  브랜치의 무관한 커밋들이 MR에 딸려 들어간다(분기 지점을 맞춰서 딸 것).
+
+## 배포 트리거 (직접 push가 특히 위험한 이유)
+
+- **`main`**: Jenkins가 EC2에 자동 배포. protected 브랜치라 직접 push가 막힐 수 있음(MR 필수).
+- **`develop-backend`**: push 즉시 GitLab CI(`.gitlab-ci.yml`)가 EC2에 자동 배포.
+- `develop` / `develop-frontend`: 현재 자동 배포는 없지만, 그래도 공유 브랜치이므로 MR로만
+  반영한다.
 
 ---
 

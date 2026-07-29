@@ -26,6 +26,14 @@ management:
       exposure:
         include: health,info
 
+# 배포 환경(deploy/docker-compose.prod.yml)은 SWAGGER_ENABLED=false로 꺼서 공개 API 문서를 차단한다
+# (SPRING_PROFILES_ACTIVE는 dev seed 컨트롤러 때문에 로컬/배포 모두 local이라 profile로는 구분 못 함).
+springdoc:
+  api-docs:
+    enabled: ${SWAGGER_ENABLED:true}
+  swagger-ui:
+    enabled: ${SWAGGER_ENABLED:true}
+
 livekit:
   url: ${LIVEKIT_URL:http://localhost:7880}
   api-key: ${LIVEKIT_API_KEY:devkey}

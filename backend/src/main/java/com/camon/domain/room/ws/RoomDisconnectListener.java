@@ -40,6 +40,10 @@ public class RoomDisconnectListener {
             || !(auth.getPrincipal() instanceof GuestPrincipal principal)) {
             return;
         }
-        connectionService.disconnected(value, principal.participantId());
+        connectionService.disconnected(
+            value,
+            principal.participantId(),
+            accessor.getSessionId()
+        );
     }
 }

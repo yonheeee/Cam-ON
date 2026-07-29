@@ -94,7 +94,7 @@ public class RedisRoomRepository implements RoomRepository {
                 redis.call('DEL', ARGV[3] .. roomCode)
             end
 
-            redis.call('DEL', KEYS[1], KEYS[2], KEYS[3])
+            redis.call('DEL', KEYS[1], KEYS[2], KEYS[3], KEYS[4])
             return 1
             """, Long.class);
 
@@ -202,7 +202,9 @@ public class RedisRoomRepository implements RoomRepository {
             List.of(
                 RedisRoomKeys.room(roomId),
                 RedisRoomKeys.participants(roomId),
-                RedisRoomKeys.nicknames(roomId)
+                RedisRoomKeys.nicknames(roomId),
+                // 강퇴 명단도 방 생명주기에 묶인다 — 방이 사라지면 같이 지운다.
+                RedisRoomKeys.banned(roomId)
             ),
             RedisRoomKeys.participantPrefix(roomId),
             "session:",

@@ -33,9 +33,19 @@ interface MemberReadyPayload {
   allReady: boolean;
 }
 
-export function useRoomLobby(roomId: string, accessToken: string) {
+// 재접속 유예(15초) 동안의 상태 변화. DISCONNECTED는 "나갔다"가 아니라 "끊겼고 아직 유예 중"이다 —
+// 유예가 끝나 실제로 퇴장하면 그때 member:left가 따로 온다.
+interface MemberConnectionPayload {
+  participantId: string;
+  connectionStatus: 'CONNECTED' | 'DISCONNECTED';
+}
+
+export function useRoomLobby(roomId: string, accessToken: string, participantId: string) {
   const [room, setRoom] = useState<RoomSnapshotResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // 내가 강퇴당했는지. member:left는 방 전체 브로드캐스트라, 내 id + KICKED 조합이
+  // "내가 쫓겨났다"는 유일한 신호다 — 별도 개인 채널로 알려주지 않는다.
+  const [kicked, setKicked] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -64,6 +74,13 @@ export function useRoomLobby(roomId: string, accessToken: string) {
       onConnect: () => {
         client.subscribe(`/topic/rooms/${roomId}`, (message) => {
           const event = JSON.parse(message.body) as RoomEvent<unknown>;
+          // setRoom 업데이터는 순수해야 하므로(StrictMode에서 두 번 실행) 여기서 감지한다.
+          if (event.event === 'member:left') {
+            const data = event.data as MemberLeftPayload;
+            if (data.participantId === participantId && data.reason === 'KICKED') {
+              setKicked(true);
+            }
+          }
           setRoom((prev) => {
             if (!prev) return prev;
             switch (event.event) {
@@ -95,6 +112,17 @@ export function useRoomLobby(roomId: string, accessToken: string) {
                 const data = event.data as HostChangedPayload;
                 return { ...prev, hostParticipantId: data.newHostParticipantId };
               }
+              case 'member:connection-changed': {
+                const data = event.data as MemberConnectionPayload;
+                return {
+                  ...prev,
+                  participants: prev.participants.map((p) =>
+                    p.participantId === data.participantId
+                      ? { ...p, connectionStatus: data.connectionStatus }
+                      : p,
+                  ),
+                };
+              }
               case 'member:ready-updated': {
                 const data = event.data as MemberReadyPayload;
                 return {
@@ -116,7 +144,7 @@ export function useRoomLobby(roomId: string, accessToken: string) {
     return () => {
       void client.deactivate();
     };
-  }, [roomId, accessToken]);
+  }, [roomId, accessToken, participantId]);
 
   // 준비 상태는 STOMP 브로드캐스트(member:ready-updated)로도 돌아오지만, 그것만 의존하면
   // 이벤트가 늦거나 유실될 때 버튼이 "죽은 것처럼" 보인다 — API 응답을 즉시 로컬에 반영한다.
@@ -138,5 +166,5 @@ export function useRoomLobby(roomId: string, accessToken: string) {
     [roomId, accessToken],
   );
 
-  return { room, error, toggleReady };
+  return { room, error, toggleReady, kicked };
 }

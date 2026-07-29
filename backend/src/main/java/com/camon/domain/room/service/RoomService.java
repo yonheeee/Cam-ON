@@ -13,8 +13,10 @@ import com.camon.domain.room.dto.ParticipantResponse;
 import com.camon.domain.room.dto.RoomSnapshotResponse;
 import com.camon.domain.room.dto.UpdateReadyRequest;
 import com.camon.domain.room.dto.UpdateReadyResponse;
+import com.camon.domain.room.event.ParticipantLeftEvent;
 import com.camon.domain.room.repository.RoomRepository;
 import com.camon.domain.room.repository.JoinParticipantResult;
+import com.camon.domain.room.repository.KickParticipantResult;
 import com.camon.domain.room.repository.ParticipantRepository;
 import com.camon.domain.room.repository.LeaveRoomResult;
 import com.camon.domain.room.repository.LeaveRoomStatus;
@@ -29,6 +31,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -44,6 +47,7 @@ public class RoomService {
     private final RoomEventPublisher roomEventPublisher;
     private final LiveKitTokenService liveKitTokenService;
     private final Clock clock;
+    private final ApplicationEventPublisher applicationEventPublisher;
 
     public RoomService(
         RoomRepository roomRepository,
@@ -53,7 +57,8 @@ public class RoomService {
         RoomInviteLinkGenerator inviteLinkGenerator,
         RoomEventPublisher roomEventPublisher,
         LiveKitTokenService liveKitTokenService,
-        Clock jwtClock
+        Clock jwtClock,
+        ApplicationEventPublisher applicationEventPublisher
     ) {
         this.roomRepository = roomRepository;
         this.participantRepository = participantRepository;
@@ -63,6 +68,7 @@ public class RoomService {
         this.roomEventPublisher = roomEventPublisher;
         this.liveKitTokenService = liveKitTokenService;
         this.clock = jwtClock;
+        this.applicationEventPublisher = applicationEventPublisher;
     }
 
     public CreateRoomResponse createRoom(
@@ -90,7 +96,9 @@ public class RoomService {
             Participant host = new Participant(
                 participantId,
                 guestSession.nickname(),
-                false,
+                // 방장은 준비 토글 대신 "게임 시작" 버튼을 쓰므로 생성 시점부터 준비 완료로 둔다
+                // (UI에도 방장이 "준비됨"으로 표시되고, 게임 시작의 전원-ready 검사도 특별취급 불필요).
+                true,
                 ConnectionStatus.CONNECTED,
                 createdAt
             );
@@ -170,6 +178,42 @@ public class RoomService {
             roomId,
             participantId,
             newHostParticipantId
+        );
+        // 위임 사실을 member:left의 부가 필드로만 흘리면, 그 이벤트 하나를 놓친 클라이언트는
+        // (재접속 중이었거나 스냅샷 로딩 전이었으면) 떠난 사람을 계속 방장으로 들고 있게 된다.
+        // 방장 교체는 그 자체로 독립된 사건이라 별도 이벤트로도 전파한다.
+        if (result.hostChanged()) {
+            roomEventPublisher.publishHostChanged(
+                roomId,
+                result.previousHostParticipantId(),
+                result.newHostParticipantId()
+            );
+        }
+        applicationEventPublisher.publishEvent(
+            new ParticipantLeftEvent(
+                roomId,
+                participantId,
+                "LEFT"
+            )
+        );
+    }
+
+    public void kick(UUID roomId, UUID requesterId, UUID targetId) {
+        KickParticipantResult result = participantRepository.kick(
+            roomId,
+            requesterId,
+            targetId
+        );
+        if (result != KickParticipantResult.SUCCESS) {
+            throw new BusinessException(toErrorCode(result));
+        }
+
+        // 강퇴도 퇴장의 한 형태 — 이유만 다르게 실어 같은 채널(member:left)로 전파한다.
+        // 강퇴당한 본인 클라이언트도 이 브로드캐스트에서 자기 id + KICKED를 보고 방을 떠난다.
+        // 방장은 대상이 될 수 없으므로(스크립트가 SELF_KICK/NOT_HOST로 거른다) 위임은 없다.
+        roomEventPublisher.publishMemberLeft(roomId, targetId, null, "KICKED");
+        applicationEventPublisher.publishEvent(
+            new ParticipantLeftEvent(roomId, targetId, "KICKED")
         );
     }
 
@@ -257,8 +301,22 @@ public class RoomService {
             case ROOM_ALREADY_STARTED -> ErrorCode.ROOM_ALREADY_STARTED;
             case NICKNAME_DUPLICATED -> ErrorCode.NICKNAME_DUPLICATED;
             case ALREADY_JOINED -> ErrorCode.ALREADY_JOINED;
+            case BANNED -> ErrorCode.ROOM_BANNED;
             case SUCCESS -> throw new IllegalArgumentException(
                 "Successful join has no error code"
+            );
+        };
+    }
+
+    private ErrorCode toErrorCode(KickParticipantResult result) {
+        return switch (result) {
+            case ROOM_NOT_FOUND -> ErrorCode.ROOM_NOT_FOUND;
+            case ROOM_ALREADY_STARTED -> ErrorCode.ROOM_ALREADY_STARTED;
+            case NOT_HOST -> ErrorCode.ROOM_NOT_HOST;
+            case SELF_KICK -> ErrorCode.ROOM_KICK_SELF;
+            case PARTICIPANT_NOT_FOUND -> ErrorCode.ROOM_PARTICIPANT_NOT_FOUND;
+            case SUCCESS -> throw new IllegalArgumentException(
+                "Successful kick has no error code"
             );
         };
     }
