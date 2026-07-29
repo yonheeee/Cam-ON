@@ -82,7 +82,7 @@ export function NinjaBattleScreen({
     inCountdown,
     countdownSeconds,
     lastAttack,
-    boutResult,
+    roundResult,
   } = useNinjaRound(roomId, gameId, accessToken, myId, comboEntry?.comboLabel ?? null, comboEntry?.confidence ?? 0);
 
   const tracks = useTracks([{ source: Track.Source.Camera, withPlaceholder: true }], {
@@ -269,11 +269,11 @@ export function NinjaBattleScreen({
 
             {isIntermission ? (
               <div className="ninja-board__body ninja-board__body--intermission">
-                {boutResult && boutResult.length > 0 ? (
+                {roundResult && roundResult.length > 0 ? (
                   <>
                     <p className="ninja-board__label">ROUND {round} 결과</p>
                     <ol className="ninja-result">
-                      {boutResult.map((entry) => (
+                      {roundResult.map((entry) => (
                         <li key={entry.token} className={entry.token === myId ? 'ninja-result--me' : ''}>
                           <span className="ninja-result__rank pap-pixel-title">{entry.rank}</span>
                           <span className="ninja-result__name">{nicknameOf(entry.token)}</span>

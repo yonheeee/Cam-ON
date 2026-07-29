@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router';
-import { LiveKitRoom } from '@livekit/components-react';
-import { VideoPresets, type RoomOptions } from 'livekit-client';
+import { useNavigate, useSearchParams } from 'react-router';
+import { LiveKitRoom, useConnectionState } from '@livekit/components-react';
+import { ConnectionState, VideoPresets, type RoomOptions } from 'livekit-client';
 import { CharadesMicrophoneController } from '../../charades/components/CharadesMicrophoneController';
 import { CharadesGamePanel } from '../../charades/components/CharadesGamePanel';
 import { NinjaBattleScreen } from '../../ninja/components/NinjaBattleScreen';
@@ -14,6 +14,8 @@ import { useRoomChat } from '../../chat/hooks/useRoomChat';
 import { PixelConfirmModal } from '../../system/components/PixelConfirmModal';
 import { useRoomHeartbeat } from '../../room/hooks/useRoomHeartbeat';
 import { clearRoom } from '../../room/lib/roomStorage';
+import { FetchObjectGame } from '../../fetch/components/FetchObjectGame';
+import { useFetchGame } from '../../fetch/hooks/useFetchGame';
 import { roomApi, RoomApiError, type ParticipantResponse } from '../../room/api/roomApi';
 import '@livekit/components-styles';
 import './VideoCallRoom.css';
@@ -159,6 +161,27 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
     }
   }, [activeSession]);
 
+  // 물건 가져오기 게임 상태 — 아직 LiveKit 데이터 채널 mock이다(fetch 백엔드/코스와 미연동).
+  // ⚠ 코스가 FETCH_OBJECT 세트에 도달해도 이 화면이 자동으로 뜨지 않는다. 지금은 /dev/fetch
+  //   진입로(?autostart=fetch)로만 시작하며, 백엔드 fetch 도메인과 연동해 코스 흐름(session의
+  //   gameName === 'FETCH_OBJECT')으로 전환하는 것이 후속 작업이다.
+  const fetchGame = useFetchGame();
+  const fetchActive = fetchGame.state.phase !== 'idle';
+
+  // [개발 전용] /dev/fetch로 들어오면(?autostart=fetch) LiveKit 연결 완료 시 게임을 자동 시작 —
+  // 랜딩부터 클릭해 들어오는 번거로움 없이 게임 화면을 바로 확인하기 위함.
+  const [searchParams] = useSearchParams();
+  const connectionState = useConnectionState();
+  const autoStartedRef = useRef(false);
+  useEffect(() => {
+    if (autoStartedRef.current) return;
+    if (searchParams.get('autostart') !== 'fetch') return;
+    if (connectionState !== ConnectionState.Connected) return;
+    autoStartedRef.current = true;
+    // ?target=휴대폰 이 붙어 있으면 제시어 고정 (물건 없는 개발 환경용), 없으면 랜덤
+    void fetchGame.startGame(undefined, searchParams.get('target') ?? undefined);
+  }, [searchParams, connectionState, fetchGame.startGame]);
+
   // game:started를 놓친 클라이언트 복구: 방이 PLAYING이면 코스의 current_session_seq가 가리키는
   // 칸이 곧 지금 진행 중인 게임이다. (예전엔 진행 중 gameId를 알 방법이 없어 닌자로 고정했다.)
   useEffect(() => {
@@ -189,7 +212,7 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
   }, [roomId, accessToken]);
 
   // 방장이 누르면 서버가 방장 여부·전원 준비·코스 유효성을 검증하고 코스의 첫 게임을 연다.
-  // 무엇을 몇 라운드 할지는 코스에 이미 확정돼 있어 클라이언트가 보낼 것이 없다.
+  // 무엇을 할지는 코스(세트 큐)에 이미 확정돼 있어 클라이언트가 보낼 것이 없다.
   const startGame = useCallback(async () => {
     setStarting(true);
     setStartError(null);
@@ -214,7 +237,7 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
         participantId={participantId}
         onPresenterChange={setIsCharadesPresenter}
       />
-      {!inGame && !finished && (
+      {!inGame && !finished && !fetchActive && (
         <LobbyScreen
           roomId={roomId}
           accessToken={accessToken}
@@ -228,6 +251,18 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
         />
       )}
 
+      {/* [개발 전용] /dev/fetch 진입로로 시작한 물건 가져오기 mock 화면 — 코스 흐름과 무관 */}
+      {fetchActive && (
+        <FetchObjectGame
+          state={fetchGame.state}
+          myNickname={fetchGame.myNickname}
+          onReportSuccess={fetchGame.reportSuccess}
+          onEndRound={fetchGame.endRound}
+          onNextRound={() => void fetchGame.nextRound()}
+          onExit={fetchGame.exitGame}
+          onLeave={onLeave}
+        />
+      )}
       {/* 몸으로 말해요는 자체 전체화면(.charades-screen)에 캠 타일·정답 채팅까지 다 그리므로
           VideoConference 그리드/손동작 패널을 띄우지 않는다. 표현자 마이크 음소거는 위
           CharadesMicrophoneController가 계속 담당한다. */}
