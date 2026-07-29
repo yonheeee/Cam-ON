@@ -121,9 +121,8 @@ feature|fix/frontend/*  ──MR──▶ develop-frontend
 ## 배포 트리거 (직접 push가 특히 위험한 이유)
 
 - **`main`**: Jenkins가 EC2에 자동 배포. protected 브랜치라 직접 push가 막힐 수 있음(MR 필수).
-- **`develop-backend`**: push 즉시 GitLab CI(`.gitlab-ci.yml`)가 EC2에 자동 배포.
-- `develop` / `develop-frontend`: 현재 자동 배포는 없지만, 그래도 공유 브랜치이므로 MR로만
-  반영한다.
+- `develop` / `develop-backend` / `develop-frontend`: 자동 배포 없이 통합·검증에만 사용한다.
+  공유 브랜치이므로 변경은 MR로만 반영한다.
 
 ---
 
