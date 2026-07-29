@@ -1,0 +1,662 @@
+/* 몸으로 말해요 — Pixel Arcade Plaza × TV 퀴즈쇼 스테이지
+   어두운 스튜디오 배경 위에 픽셀 아케이드 UI, 출제자 캠에 스포트라이트. */
+
+.charades-screen {
+  /* 무대 조명(전구/글로우) 공용 톤 */
+  --bulb: #ffe08a;
+  --stage-gold: #ffd15a;
+
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 28px 16px;
+  box-sizing: border-box;
+  /* 픽셀 퀴즈쇼 무대 배경 — 비네트로 가장자리를 눌러 중앙 무대에 시선을 모은다.
+     아래(연단·바닥) 기준 고정, 확대 시 블러 방지. */
+  background:
+    radial-gradient(ellipse 78% 60% at 50% 40%, transparent 55%, rgb(9 4 18 / 0.62) 100%),
+    #1a0e24 url('/assets/charades-bg-quizshow-v3.png') center bottom / cover no-repeat;
+  image-rendering: pixelated;
+  overflow: hidden;
+  color: var(--pap-plaza-cream);
+  text-align: left;
+}
+
+/* ---- 상단 바: 로고(좌) + 라운드 배너(우) ---- */
+.charades-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.charades-topbar__logo {
+  height: 26px;
+  width: auto;
+  image-rendering: pixelated;
+}
+
+/* 라운드 배너 — 점등된 골드 사인(마퀴 전광판 톤) */
+.charades-header__badge {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: linear-gradient(180deg, #35195e, #1c0f34);
+  border: 2px solid rgb(255 209 90 / 0.65);
+  border-radius: 999px;
+  box-shadow:
+    0 0 22px rgb(255 209 90 / 0.3),
+    inset 0 1px 0 rgb(255 255 255 / 0.14),
+    0 6px 16px rgb(0 0 0 / 0.5);
+  padding: 9px 26px;
+  font-family: var(--pap-font-pixel);
+  font-size: 15px;
+}
+
+/* 라운드 숫자 — 전구처럼 빛나는 골드 */
+.charades-header__round {
+  color: var(--stage-gold);
+  letter-spacing: 0.1em;
+  text-shadow: 0 0 12px rgb(255 209 90 / 0.7);
+}
+
+/* 제한시간 바 + 남은 시간 숫자를 한 줄에 나란히 (바가 남은 폭을 채우고 숫자가 오른쪽 끝) */
+/* width:100% 필수 — 표현자 쪽 부모(.charades-prompt-card__word-wrap)가 align-items:center라
+   stretch가 안 걸리고, 그러면 안의 바(flex:1)가 0폭으로 찌그러진다. */
+.charades-timebar-row {
+  width: 100%;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.charades-timebar__clock {
+  flex: none;
+  font-family: var(--pap-font-pixel);
+  font-size: 14px;
+  letter-spacing: 0.06em;
+  color: var(--pap-ink);
+  opacity: 0.75;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 제한시간 바 — 남은 시간에 비례해 폭이 0까지 줄어든다 */
+.charades-timebar {
+  flex: 1;
+  min-width: 0;
+  height: 14px;
+  background: rgb(43 24 51 / 0.15);
+  border: 2px solid var(--pap-ink);
+  border-radius: 999px;
+  overflow: hidden;
+  box-shadow: inset 0 2px 4px rgb(0 0 0 / 0.25);
+}
+
+/* 1초 간격 tick 사이를 linear transition으로 이어 붙여 끊김 없이 줄어들게 한다 */
+.charades-timebar__fill {
+  height: 100%;
+  background: linear-gradient(90deg, #ff5f6d 0%, #ffb03a 60%, #ffe08a 100%);
+  border-radius: 999px;
+  box-shadow: 0 0 14px rgb(255 176 58 / 0.65);
+  transition: width 1s linear;
+}
+
+/* ---- 제시어/입력 통합 카드 (표현자=제시어, 맞추는 사람=입력창). 안에 제한시간 바 포함 ---- */
+.charades-prompt-card {
+  align-self: center; /* 컬럼이 이제 캠 폭에 딱 맞으므로 center = 캠 위 정중앙 */
+  width: min(680px, 100%);
+  box-sizing: border-box;
+  background: var(--pap-white);
+  border: 2px solid var(--pap-ink);
+  border-radius: 24px;
+  box-shadow: 0 16px 32px rgb(43 24 51 / 0.22);
+  padding: 20px 24px 22px;
+  color: var(--pap-ink);
+  transition: box-shadow 0.3s;
+}
+
+.charades-prompt-card--correct {
+  box-shadow:
+    0 0 0 4px rgb(184 255 79 / 0.4),
+    0 16px 32px rgb(43 24 51 / 0.22);
+  animation: charades-correct-flash 0.5s ease-out;
+}
+
+.charades-prompt-card--alert {
+  box-shadow:
+    0 0 0 4px rgb(240 100 120 / 0.4),
+    0 16px 32px rgb(43 24 51 / 0.22);
+}
+
+/* 표현자: 제시어 */
+.charades-prompt-card__word-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.charades-prompt-card__label {
+  font-family: var(--pap-font-pixel);
+  font-size: 13px;
+  letter-spacing: 0.16em;
+  color: #c0392b;
+}
+
+.charades-prompt-card__word {
+  margin: 0;
+  font-family: var(--pap-font-pixel);
+  font-size: 34px;
+  line-height: 1.1;
+  color: var(--pap-festival-coral);
+  text-align: center;
+  text-shadow: 2px 2px 0 rgb(43 24 51 / 0.16);
+}
+
+/* 맞추는 사람: 입력 폼 — 왼쪽 열(입력창+제한시간 바)과 오른쪽 열(제출 버튼+남은 시간 숫자)로 나눠서
+   제한시간 바 폭이 입력창 폭과 정확히 같아지게 한다(버튼 아래는 안 지나감). */
+.charades-prompt-card__form {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.charades-prompt-card__input-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.charades-prompt-card__submit-col {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.charades-prompt-card__input.pap-input {
+  width: 100%;
+  box-sizing: border-box;
+  font-size: 17px;
+  padding: 10px 12px;
+}
+
+.charades-prompt-card__input.pap-input::placeholder {
+  color: var(--pap-ink);
+  opacity: 0.35;
+}
+
+.charades-prompt-card__submit.pap-pixel-btn {
+  font-size: 16px;
+  padding: 10px 22px;
+  background: var(--pap-arcade-orange);
+  color: var(--pap-white);
+}
+
+.charades-prompt-card__submit.pap-pixel-btn:disabled {
+  background: #b8b2bd;
+  color: var(--pap-white);
+}
+
+/* 결과 알림 (정답/시간초과/무효) */
+.charades-prompt-card__note {
+  margin: 10px 0 0;
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--pap-font-pixel);
+  font-size: 14px;
+  padding: 8px 14px;
+  border: 2px solid currentColor;
+  border-radius: var(--pap-radius);
+}
+
+.charades-prompt-card__note--warn {
+  color: var(--pap-festival-coral);
+  background: rgb(240 100 120 / 0.12);
+}
+
+@keyframes charades-correct-flash {
+  0% { filter: brightness(1.4); }
+  100% { filter: brightness(1); }
+}
+
+/* ---- 예고 오버레이 ---- */
+.charades-preview-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(ellipse at center, rgb(30 14 48 / 0.82), rgb(12 5 24 / 0.94));
+}
+
+.charades-preview-overlay__title {
+  font-family: var(--pap-font-pixel);
+  font-size: 32px;
+  text-align: center;
+  padding: 32px 56px;
+  background: linear-gradient(180deg, #fff8e3, #ffe4a0);
+  color: var(--pap-ink);
+  border: 3px solid var(--pap-ink);
+  border-radius: 18px;
+  box-shadow:
+    0 0 48px rgb(255 209 90 / 0.55),
+    8px 10px 0 0 rgb(43 24 51 / 0.5);
+  animation: charades-pop 180ms ease-out;
+}
+
+@keyframes charades-pop {
+  from { transform: scale(0.92); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+/* ---- 정답 공개 배너: 화면 중앙, 다크 카드 + 라임 네온 테두리 ---- */
+.charades-correct-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(ellipse at center, rgb(30 14 48 / 0.82), rgb(12 5 24 / 0.94));
+}
+
+.charades-correct-card {
+  width: min(420px, 88vw);
+  box-sizing: border-box;
+  padding: 32px 32px 26px;
+  text-align: center;
+  background: var(--pap-white);
+  border: 2px solid var(--pap-ink);
+  border-radius: 24px;
+  box-shadow: 0 20px 40px rgb(43 24 51 / 0.28);
+  animation: charades-pop 180ms ease-out;
+}
+
+.charades-correct-card__title {
+  margin: 0;
+  font-family: var(--pap-font-pixel);
+  font-size: 20px;
+  letter-spacing: 0.14em;
+  color: var(--pap-ink);
+}
+
+.charades-correct-card__word {
+  margin: 10px 0 0;
+  font-family: var(--pap-font-pixel);
+  font-size: 32px;
+  line-height: 1.2;
+  color: var(--pap-arcade-orange);
+}
+
+.charades-correct-card__divider {
+  height: 1px;
+  margin: 18px 0;
+  background: rgb(43 24 51 / 0.14);
+}
+
+.charades-correct-card__names {
+  margin: 0;
+  font-family: var(--pap-font-pixel);
+  font-size: 16px;
+  color: var(--pap-ink);
+}
+
+.charades-correct-card__footer {
+  margin: 18px 0 0;
+  font-family: var(--pap-font-pixel);
+  font-size: 12px;
+  color: rgb(43 24 51 / 0.5);
+}
+
+/* ---- 메인 레이아웃: 좌 스테이지 컬럼(황금비 ~62%) + 우 사이드바(~38%) ---- */
+.charades-main {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  gap: 16px;
+}
+
+/* 좌측 컬럼 — 제시어/입력 카드(중앙 상단) + 메인 캠(중앙). 사이드바가 고정폭이라 나머지를 채운다 */
+.charades-stage-col {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+/* 메인 캠 — 16:9 */
+.charades-stage {
+  position: relative;
+  flex: 1;
+  align-self: stretch; /* 컨테이너 쿼리(cqw/cqh)용 전체 폭 확보 */
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  /* 아래 정렬 = 사이드바 마지막 캠 하단과 높이를 맞춘다. 가로는 예전처럼 중앙. */
+  align-items: flex-end;
+  justify-content: center;
+  container-type: size;
+}
+
+/* 출제자 스테이지 = 마퀴 전구 프레임.
+   박스는 골드 테두리의 프레임, ::before가 전구 링, 안쪽 __screen이 중앙을 덮어
+   프레임 위 전구만 노출된다. 크기(16:9)와 배치는 이전과 동일. */
+.charades-stage__box {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  /* 스테이지 안에 들어가는 가장 큰 16:9 박스 (컨테이너 쿼리로 폭/높이 중 작은 쪽에 맞춤) */
+  width: min(100cqw, calc(100cqh * 16 / 9));
+  border-radius: 20px;
+  background: linear-gradient(180deg, #301656, #170a2b);
+  border: 2px solid rgb(255 209 90 / 0.6);
+  box-shadow:
+    0 0 34px rgb(255 209 90 / 0.28),
+    0 16px 44px rgb(0 0 0 / 0.6);
+  animation: charades-stage-glow 3.6s ease-in-out infinite;
+}
+
+@keyframes charades-stage-glow {
+  0%, 100% { box-shadow: 0 0 30px rgb(255 209 90 / 0.24), 0 16px 44px rgb(0 0 0 / 0.6); }
+  50% { box-shadow: 0 0 52px rgb(255 209 90 / 0.4), 0 16px 44px rgb(0 0 0 / 0.6); }
+}
+
+/* 전구 링 — 프레임 안쪽 둘레를 따라 정적으로 박힌 전구 */
+/* 4변을 각자 독립적으로 타일링 — 기존엔 2D 격자 하나를 5~12px 띠에서 잘라 보여줘서
+   위/아래·좌/우 정렬이 안 맞아 캠 화면 경계에 반토막으로 잘려 보였다. 변마다 자기 축으로만
+   반복시키고 중심을 띠(5~12px) 정중앙(--bulb-offset)에 고정해 항상 완전한 원으로 박히게 한다. */
+.charades-stage__box::before {
+  content: '';
+  position: absolute;
+  inset: 5px;
+  z-index: 0;
+  border-radius: 15px;
+  pointer-events: none;
+  --bulb-pitch: 48px;
+  --bulb-offset: 3.5px;
+  background:
+    radial-gradient(circle at 50% var(--bulb-offset), var(--bulb) 0 2.2px, rgb(255 224 138 / 0.18) 3px 4.4px, transparent 5px)
+      0 0 / var(--bulb-pitch) 100% repeat-x,
+    radial-gradient(circle at 50% calc(100% - var(--bulb-offset)), var(--bulb) 0 2.2px, rgb(255 224 138 / 0.18) 3px 4.4px, transparent 5px)
+      0 0 / var(--bulb-pitch) 100% repeat-x,
+    radial-gradient(circle at var(--bulb-offset) 50%, var(--bulb) 0 2.2px, rgb(255 224 138 / 0.18) 3px 4.4px, transparent 5px)
+      0 0 / 100% var(--bulb-pitch) repeat-y,
+    radial-gradient(circle at calc(100% - var(--bulb-offset)) 50%, var(--bulb) 0 2.2px, rgb(255 224 138 / 0.18) 3px 4.4px, transparent 5px)
+      0 0 / 100% var(--bulb-pitch) repeat-y;
+}
+
+/* 중앙 스크린 — 프레임 두께(12px)만큼 안쪽으로, 실제 영상이 여기 담긴다 */
+.charades-stage__screen {
+  position: absolute;
+  inset: 12px;
+  z-index: 1;
+  border-radius: 9px;
+  overflow: hidden;
+  background: #0d0618;
+}
+
+.charades-stage__screen video {
+  object-fit: cover;
+  width: 100%;
+  height: 100%;
+}
+
+.charades-stage__screen .lk-participant-tile {
+  position: absolute;
+  inset: 0;
+}
+
+.charades-stage__screen .lk-participant-metadata,
+.charades-sidebar__cam .lk-participant-metadata {
+  display: none;
+}
+
+.charades-stage__avatar {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--pap-font-pixel);
+  font-size: 64px;
+  color: var(--stage-gold);
+  opacity: 0.3;
+}
+
+/* 캠 이름 오버레이 — 캠 화면 위 좌상단 칩(사이드바/스테이지 공용).
+   플레이어색(--seat)이 있으면 그 색, 없으면(스테이지) 골드. */
+.charades-cam-name {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 3;
+  margin: 0;
+  padding: 3px 11px;
+  border-radius: 999px;
+  font-family: var(--pap-font-pixel);
+  font-size: 12px;
+  color: var(--pap-ink);
+  background: var(--seat, var(--stage-gold));
+  border: 2px solid var(--pap-ink);
+  box-shadow:
+    2px 2px 0 0 rgb(43 24 51 / 0.4),
+    0 0 12px color-mix(in srgb, var(--seat, var(--stage-gold)) 45%, transparent);
+}
+
+/* 메인 캠은 전구 프레임(12px)이 있어 그만큼 안쪽으로, 글자도 조금 크게 */
+.charades-cam-name--stage {
+  top: 18px;
+  left: 18px;
+  font-size: 14px;
+  padding: 5px 14px;
+}
+
+/* 출제자 표시 — 예전 ON AIR 자리(우상단). 골드 배지 */
+.charades-stage__role {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgb(23 10 43 / 0.92);
+  border: 2px solid var(--stage-gold);
+  padding: 5px 14px;
+  border-radius: 999px;
+  box-shadow: 0 0 14px rgb(255 209 90 / 0.45);
+  font-family: var(--pap-font-pixel);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: var(--stage-gold);
+}
+
+/* ---- 사이드바 ---- */
+/* 참여자 캠은 항상 16:9 고정. 세로 중앙 정렬이라 인원이 적으면 위아래 여백이 남는다.
+   맞추는 사람 수(2 or 3)에 따라 폭/여백을 달리해 3인·4인 화면을 각각 다르게 만든다(아래 --n2/--n3).
+   --bubble-space = 말풍선(.charades-sidebar__bubble: 꼭지+여백+본체 ≈ 50px)이 들어갈 자리. 말풍선이
+   캠 "위"에 뜨므로 캠 사이 gap이자 동시에 첫 캠 위 padding으로 쓴다 — 안 그러면 맨 위 참가자가 답을
+   낼 때 말풍선이 사이드바 밖으로 삐져나온다. 말풍선 높이를 바꾸면 이 값도 같이 볼 것.
+   justify-content:flex-end = 마지막 캠 하단을 메인 캠 하단에 맞춘다.
+   align-items:flex-end + translateX(--edge-shift) = 캠 오른쪽 끝에서 화면 오른쪽 끝까지의 여백을
+   "메인 캠 왼쪽 여백"과 같게 만든다. 그 여백은 메인 캠이 16:9로 가운데 정렬돼 생기는 값이라 창
+   크기마다 달라서 CSS만으론 못 구한다 — 패널이 실측해 --edge-shift(= 왼쪽 여백 - 화면 padding)로
+   내려준다. transform이라 레이아웃엔 영향이 없다(=측정값이 다시 흔들리지 않는다). */
+.charades-sidebar {
+  --bubble-space: 48px;
+  --n: 3;
+  flex: 0 0 300px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: flex-end;
+  gap: var(--bubble-space);
+  padding-top: var(--bubble-space);
+  transform: translateX(calc(-1 * var(--edge-shift, 0px)));
+  min-height: 0;
+  /* 캠 폭을 세로 여유에 맞춰 줄이므로(아래 __card) 넘칠 일이 없다 — 스크롤 대신 visible로 둬서
+     말풍선 꼭지/그림자가 잘리지 않게 한다. */
+  overflow: visible;
+  container-type: size;
+}
+
+/* 3인 게임(맞추는 사람 2명): 캠이 넉넉하니 폭을 키워 크게 보여준다 */
+.charades-sidebar--n2 {
+  flex-basis: 340px;
+  --bubble-space: 52px;
+  --n: 2;
+}
+
+/* 4인 게임(맞추는 사람 3명): 3칸이 세로로 들어가야 하니 기본 폭·간격 */
+.charades-sidebar--n3 {
+  flex-basis: 300px;
+  --bubble-space: 48px;
+  --n: 3;
+}
+
+/* 캠 폭 = 사이드바 폭, 단 캠 n개 + 사이 gap이 사이드바 높이(100cqh = content box이므로 첫 캠
+   말풍선 몫 padding-top은 이미 빠져 있다)를 넘지 않는 선까지. 16:9라 높이가 폭에 종속돼서,
+   창이 낮으면 폭을 줄이는 것 말고는 스크롤바를 없앨 방법이 없다. 6px는 테두리/그림자 몫 여유. */
+.charades-sidebar__card {
+  --seat: var(--pap-player-1);
+  position: relative;
+  padding: 0;
+  flex: none;
+  width: min(
+    100%,
+    calc((100cqh - (var(--n) - 1) * var(--bubble-space) - var(--n) * 6px) / var(--n) * 16 / 9)
+  );
+}
+
+/* --seat(플레이어 색)은 인라인 style로 들어온다 — DOM 순서가 아니라 방 입장 순서 기준이라
+   모든 참가자 화면에서 같은 사람이 같은 색으로 보인다. (nth-child로 칠하면 표현자가 빠진 자리
+   때문에 클라이언트마다 색이 어긋난다.) */
+
+/* 최신 정답 말풍선 — 캠 바로 위, 캠 폭 기준 가로 중앙. 꼭지(::before/::after 삼각형)가 아래를 향해
+   자기 캠을 가리킨다. 캠 자체는 overflow:hidden이라 안에 두면 잘리므로 카드 레벨에서 absolute로 뗀다.
+   흐름에서 빠져 있어 캠 위치/사이드바 세로 배치는 안 밀린다(자리는 위 --bubble-space가 확보). */
+.charades-sidebar__bubble {
+  position: absolute;
+  left: 50%;
+  bottom: 100%;
+  margin-bottom: 9px;
+  transform: translateX(-50%);
+  z-index: 4;
+  width: fit-content;
+  max-width: calc(100% - 8px);
+  padding: 6px 10px;
+  background: var(--pap-white);
+  border: 2px solid var(--pap-ink);
+  border-radius: var(--pap-radius);
+  box-shadow:
+    2px 2px 0 0 rgb(43 24 51 / 0.45),
+    0 0 16px color-mix(in srgb, var(--seat) 55%, transparent);
+  font-family: var(--pap-font-pixel);
+  font-size: 13px;
+  color: var(--pap-ink);
+  animation: charades-bubble-pop 140ms ease-out;
+}
+
+/* 항상 한 줄 — 줄바꿈으로 높이가 늘면 --bubble-space를 넘긴다. 입력은 20자로 막아뒀지만(maxLength)
+   그보다 긴 메시지가 와도 캠 폭까지만 늘리고 나머진 …로 자른다. overflow는 이 span에만 걸 것 —
+   말풍선 본체에 걸면 바깥에 붙은 꼭지가 잘린다. */
+.charades-sidebar__bubble-text {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 꼭지 — 테두리색 삼각형(::before) 위에 흰 삼각형(::after)을 2px 겹쳐 얹어 테두리처럼 보이게 한다 */
+.charades-sidebar__bubble::before,
+.charades-sidebar__bubble::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-color: transparent;
+}
+
+.charades-sidebar__bubble::before {
+  top: 100%;
+  margin-left: -9px;
+  border-width: 9px 9px 0;
+  border-top-color: var(--pap-ink);
+}
+
+.charades-sidebar__bubble::after {
+  top: calc(100% - 2px);
+  margin-left: -7px;
+  border-width: 7px 7px 0;
+  border-top-color: var(--pap-white);
+}
+
+@keyframes charades-bubble-pop {
+  from { transform: translate(-50%, -4px); opacity: 0; }
+  to { transform: translate(-50%, 0); opacity: 1; }
+}
+
+.charades-sidebar__cam {
+  position: relative;
+  border: var(--pap-border-width) solid var(--pap-ink);
+  border-radius: 4px;
+  box-shadow: var(--pap-shadow-offset) var(--pap-shadow-offset) 0 0 rgb(43 24 51 / 0.45);
+  overflow: hidden;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  flex: none;
+  background: var(--pap-ink);
+}
+
+.charades-sidebar__cam .lk-participant-tile {
+  position: absolute;
+  inset: 0;
+}
+
+.charades-sidebar__cam video {
+  object-fit: cover;
+  width: 100%;
+  height: 100%;
+}
+
+.charades-sidebar__avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  margin: 12px auto;
+  border-radius: 50%;
+  background: var(--pap-ink);
+  color: var(--pap-plaza-cream);
+  font-family: var(--pap-font-pixel);
+  font-size: 20px;
+}
+
+.charades-error {
+  font-family: var(--pap-font-pixel);
+  color: var(--pap-festival-coral);
+  font-size: 13px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .charades-stage__box,
+  .charades-prompt-card--correct,
+  .charades-sidebar__bubble,
+  .charades-preview-overlay__title,
+  .charades-correct-card {
+    animation: none;
+  }
+}
