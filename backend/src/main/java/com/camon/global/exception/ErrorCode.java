@@ -33,6 +33,58 @@ public enum ErrorCode {
     NINJA_INVALID_TARGET(HttpStatus.BAD_REQUEST, "공격 대상으로 지정할 수 없는 참가자입니다."),
     NINJA_NOT_ENOUGH_PLAYERS(HttpStatus.BAD_REQUEST, "닌자 게임은 최소 2명 이상이어야 시작할 수 있습니다."),
     NINJA_TOO_MANY_PLAYERS(HttpStatus.BAD_REQUEST, "닌자 게임은 최대 4명까지만 참가할 수 있습니다."),
+    FETCH_OBJECT_SESSION_NOT_FOUND(
+        HttpStatus.NOT_FOUND,
+        "진행 중인 물건 가져오기 게임 세션이 없습니다."
+    ),
+    FETCH_OBJECT_ROUND_NOT_FOUND(
+        HttpStatus.NOT_FOUND,
+        "진행 중인 물건 가져오기 라운드를 찾을 수 없습니다."
+    ),
+    FETCH_OBJECT_STALE_ROUND(
+        HttpStatus.CONFLICT,
+        "이미 지난 물건 가져오기 라운드입니다."
+    ),
+    FETCH_OBJECT_ROUND_CLOSED(
+        HttpStatus.CONFLICT,
+        "물건 가져오기 제출이 마감되었습니다."
+    ),
+    FETCH_OBJECT_COUNTDOWN_ACTIVE(
+        HttpStatus.CONFLICT,
+        "카운트다운 중에는 제출할 수 없습니다."
+    ),
+    FETCH_OBJECT_ROUND_EXPIRED(
+        HttpStatus.CONFLICT,
+        "물건 가져오기 라운드 제한 시간이 지났습니다."
+    ),
+    FETCH_OBJECT_ALREADY_SUBMITTED(
+        HttpStatus.CONFLICT,
+        "이미 성공 제출을 완료했습니다."
+    ),
+    FETCH_OBJECT_PARTICIPANT_NOT_FOUND(
+        HttpStatus.FORBIDDEN,
+        "현재 물건 가져오기 게임 참가자가 아닙니다."
+    ),
+    FETCH_OBJECT_NOT_ENOUGH_PLAYERS(
+        HttpStatus.BAD_REQUEST,
+        "물건 가져오기는 최소 2명 이상이어야 시작할 수 있습니다."
+    ),
+    FETCH_OBJECT_TOO_MANY_PLAYERS(
+        HttpStatus.BAD_REQUEST,
+        "물건 가져오기는 최대 4명까지만 참가할 수 있습니다."
+    ),
+    FETCH_OBJECT_INVALID_ROUND_COUNT(
+        HttpStatus.BAD_REQUEST,
+        "물건 가져오기의 라운드 수는 참가자 수 이상, 10 이하이어야 합니다."
+    ),
+    FETCH_OBJECT_NOT_ENOUGH_MISSIONS(
+        HttpStatus.CONFLICT,
+        "물건 가져오기 진행에 필요한 제시어가 부족합니다."
+    ),
+    FETCH_OBJECT_MISSION_NOT_FOUND(
+        HttpStatus.NOT_FOUND,
+        "현재 물건 가져오기 라운드의 제시어를 찾을 수 없습니다."
+    ),
     CHARADES_SESSION_NOT_FOUND(HttpStatus.NOT_FOUND, "진행 중인 몸으로 말해요 게임 세션이 없습니다."),
     CHARADES_NOT_ENOUGH_PLAYERS(HttpStatus.BAD_REQUEST, "몸으로 말해요는 최소 3명 이상이어야 시작할 수 있습니다."),
     CHARADES_TOO_MANY_PLAYERS(HttpStatus.BAD_REQUEST, "몸으로 말해요는 최대 4명까지만 참가할 수 있습니다."),
