@@ -1,12 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
-import { LiveKitRoom, VideoConference, useConnectionState } from '@livekit/components-react';
+import { LiveKitRoom, useConnectionState } from '@livekit/components-react';
 import { ConnectionState, VideoPresets, type RoomOptions } from 'livekit-client';
 import { CharadesMicrophoneController } from '../../charades/components/CharadesMicrophoneController';
 import { CharadesGamePanel } from '../../charades/components/CharadesGamePanel';
-import { GesturePanel } from '../../gesture/components/GesturePanel';
-import { GestureBoard } from '../../gesture/components/GestureBoard';
-import { NinjaGamePanel } from '../../ninja/components/NinjaGamePanel';
+import { NinjaBattleScreen } from '../../ninja/components/NinjaBattleScreen';
 import { CourseResultScreen } from '../../course/components/CourseResultScreen';
 import { courseApi } from '../../course/api/courseApi';
 import { useCourseProgress, type GameStartedData } from '../../course/hooks/useCourseProgress';
@@ -131,7 +129,10 @@ interface RoomContentProps {
 function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomContentProps) {
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
-  const [isCharadesPresenter, setIsCharadesPresenter] = useState(false);
+  // 값은 더 이상 읽지 않는다 — 표현자 강조는 CharadesGamePanel이 자체 화면에서 직접 처리하고,
+  // 닌자도 전용 화면을 쓰게 되면서 이 플래그로 클래스를 갈아끼울 대상이 없어졌다.
+  // 콜백 프로퍼티는 CharadesMicrophoneController가 요구하므로 setter만 남긴다.
+  const [, setIsCharadesPresenter] = useState(false);
   // 게임 하나가 끝나고 다음 게임이 열리기 전까지의 구간. 패널이 자기 종료 화면을 접은 뒤
   // 빈 화면이 보이는 것을 막는다(서버가 이때 8초 인터미션을 준다).
   const [betweenGames, setBetweenGames] = useState(false);
@@ -275,25 +276,18 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
       )}
       {/* 카탈로그 조회가 실패해 이름을 모를 때도 게임 화면은 띄워야 하므로 닌자를 기본으로 둔다
           (지금 코스에 담을 수 있는 게임 중 캠 그리드를 쓰는 것은 닌자뿐이다). */}
+      {/* 닌자도 몸으로말해요처럼 자체 전체화면에 캠 타일까지 직접 그린다 — HP/점수/공격권/이펙트를
+          각 참가자 타일에 얹으려면 그리드 소유권이 게임 화면에 있어야 한다. 그래서 VideoConference와
+          손동작 디버그 박스(GesturePanel/GestureBoard)를 따로 띄우지 않는다(인식 루프를 소유한
+          GesturePanel은 NinjaBattleScreen 사이드바 안에서 마운트된다).
+          닌자 게임 중엔 채팅 창도 띄우지 않는다(손동작 게임이라 불필요). */}
       {inGame && session && activeGameName !== 'CHARADES' && (
-        <>
-          <VideoConference
-            className={
-              isCharadesPresenter
-                ? 'lk-video-conference video-call-room__charades-presenter'
-                : 'lk-video-conference'
-            }
-          />
-          <GesturePanel />
-          <GestureBoard />
-          {/* 닌자 게임 중엔 채팅 창을 띄우지 않는다(손동작 게임이라 불필요). */}
-          <NinjaGamePanel
-            roomId={roomId}
-            gameId={session.gameId}
-            accessToken={accessToken}
-            onActiveChange={(active) => setBetweenGames(!active)}
-          />
-        </>
+        <NinjaBattleScreen
+          roomId={roomId}
+          gameId={session.gameId}
+          accessToken={accessToken}
+          onActiveChange={(active) => setBetweenGames(!active)}
+        />
       )}
 
       {/* 게임과 게임 사이 — 서버가 다음 세션을 열 때까지의 빈 화면을 덮는다 */}
