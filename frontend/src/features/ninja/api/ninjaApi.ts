@@ -115,6 +115,60 @@ export interface NinjaStateResponse {
   roundResult: RoundResultEntry[] | null;
 }
 
+// ---- ninja:* STOMP 이벤트 payload (백엔드 ws/payload 레코드와 1:1) ----
+// 상태의 단일 소스: 입장/재연결 시 GET .../state로 스냅샷을 한 번 받고, 이후엔 아래 이벤트들로만
+// 증분 갱신한다(폴링 없음). 시각 필드는 ISO 문자열.
+
+export interface NinjaRoundStartedEvent {
+  round: number;
+  exchange: number;
+  deadlineAt: string;
+  // 판 시작 = 전원 부활/HP 리셋. 그 스냅샷을 함께 실어 준다.
+  alivePlayers: string[];
+  hp: Record<string, number>;
+}
+
+export interface NinjaAttackWonEvent {
+  round: number;
+  exchange: number;
+  attackerToken: string;
+  skillId: number | null;
+}
+
+export interface NinjaAttackResolvedEvent {
+  round: number;
+  exchange: number;
+  attackerToken: string;
+  targetToken: string;
+  skillId: number | null;
+  damage: number;
+  targetHpAfter: number;
+  targetEliminated: boolean;
+  phase: NinjaPhase;
+  effectUntil: string | null;
+  nextRoundAt: string | null;
+  roundEnded: boolean;
+  ending: boolean;
+  // roundEnded=true일 때만 채워진다.
+  roundResult: RoundResultEntry[] | null;
+  sessionTotals: Record<string, number> | null;
+}
+
+export interface NinjaRoundTimeoutEvent {
+  round: number;
+  exchange: number;
+  phase: NinjaPhase;
+  nextRoundAt: string | null;
+  // 이 타임아웃이 판을 끝냈을 때(교환 상한 도달)만 채워진다.
+  roundResult: RoundResultEntry[] | null;
+  sessionTotals: Record<string, number> | null;
+}
+
+export interface NinjaGameEndedEvent {
+  ranking: RankingEntry[];
+  sessionTotals: Record<string, number>;
+}
+
 export class NinjaApiError extends Error {
   code?: string;
 
