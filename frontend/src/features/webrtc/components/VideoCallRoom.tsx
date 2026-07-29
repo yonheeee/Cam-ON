@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
-import { LiveKitRoom, VideoConference } from '@livekit/components-react';
-import { VideoPresets, type RoomOptions } from 'livekit-client';
+import { LiveKitRoom, VideoConference, useConnectionState } from '@livekit/components-react';
+import { ConnectionState, VideoPresets, type RoomOptions } from 'livekit-client';
 import { CharadesMicrophoneController } from '../../charades/components/CharadesMicrophoneController';
 import { CharadesGamePanel } from '../../charades/components/CharadesGamePanel';
 import { GesturePanel } from '../../gesture/components/GesturePanel';
@@ -13,6 +13,8 @@ import { useRoomChat } from '../../chat/hooks/useRoomChat';
 import { PixelConfirmModal } from '../../system/components/PixelConfirmModal';
 import { useRoomHeartbeat } from '../../room/hooks/useRoomHeartbeat';
 import { clearRoom } from '../../room/lib/roomStorage';
+import { FetchObjectGame } from '../../fetch/components/FetchObjectGame';
+import { useFetchGame } from '../../fetch/hooks/useFetchGame';
 import { roomApi, RoomApiError } from '../../room/api/roomApi';
 import '@livekit/components-styles';
 import './VideoCallRoom.css';
@@ -126,16 +128,37 @@ interface RoomContentProps {
 // LiveKitRoom 컨텍스트 안에서 동작하는 부분 — 대기방(LobbyScreen) ↔ 게임 화면을 전환한다.
 // 채팅 상태는 여기(useRoomChat)가 소유해서 화면 전환으로 패널이 리마운트돼도 내역이 유지된다.
 function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomContentProps) {
-  // 대기방↔게임 화면 전환. 손 인식(GesturePanel/GestureBoard)은 게임 중에만 켠다.
+  // 대기방↔게임 화면 전환. 닌자 진입은 game:started 이벤트 기준이고,
+  // 손 인식(GesturePanel/GestureBoard)은 닌자 게임 중에만 켠다.
   const [gameActive, setGameActive] = useState(false);
-  const [seeding, setSeeding] = useState(false);
-  const [seedError, setSeedError] = useState<string | null>(null);
+  const [starting, setStarting] = useState(false);
+  const [startError, setStartError] = useState<string | null>(null);
   const [isCharadesPresenter, setIsCharadesPresenter] = useState(false);
   // 어떤 게임이 열렸는지 — game:started payload의 gameId가 유일한 출처다. 아래 복구 경로(방 status가
   // PLAYING인데 이벤트를 놓친 경우)에서는 알 수 없어 null로 남고, 그때는 기존대로 닌자 화면을 띄운다.
   // ponytail: 방 스냅샷에 진행 중 gameId가 없어서 그렇다 — 스냅샷에 gameId가 추가되면 여기서 복원할 것.
   const [activeGameId, setActiveGameId] = useState<number | null>(null);
   const { messages, sendMessage } = useRoomChat();
+
+  // 물건 가져오기 게임 상태 (LiveKit 데이터 채널 mock — Spring course/mission API 확정 전 임시).
+  // ⚠ 로비의 "게임 시작" 버튼은 정식 백엔드 플로우(닌자)를 부르고, 물건 가져오기는
+  //   /dev/fetch 진입로로만 시작한다 — 코스 도메인(게임 선택/순서)이 생기면 그쪽으로 통합.
+  const fetchGame = useFetchGame();
+  const fetchActive = fetchGame.state.phase !== 'idle';
+
+  // [개발 전용] /dev/fetch로 들어오면(?autostart=fetch) LiveKit 연결 완료 시 게임을 자동 시작 —
+  // 랜딩부터 클릭해 들어오는 번거로움 없이 게임 화면을 바로 확인하기 위함.
+  const [searchParams] = useSearchParams();
+  const connectionState = useConnectionState();
+  const autoStartedRef = useRef(false);
+  useEffect(() => {
+    if (autoStartedRef.current) return;
+    if (searchParams.get('autostart') !== 'fetch') return;
+    if (connectionState !== ConnectionState.Connected) return;
+    autoStartedRef.current = true;
+    // ?target=휴대폰 이 붙어 있으면 제시어 고정 (물건 없는 개발 환경용), 없으면 랜덤
+    void fetchGame.startGame(undefined, searchParams.get('target') ?? undefined);
+  }, [searchParams, connectionState, fetchGame.startGame]);
 
   // 게임 진입은 game:started 이벤트로 한다(폴링 아님) — 방에 연결된 모든 클라이언트가 브로드캐스트를
   // 동시에 받아 함께 게임 화면으로 전환된다. 폴링에 의존하던 이전 방식은 일부 참가자가 전환을
@@ -160,34 +183,31 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
     };
   }, [roomId, accessToken]);
 
-  // 게임 시작 트리거. 방장이 누르면 서버가 방장 여부·전원 준비를 검증하고 방을 PLAYING으로
+  // 게임 시작 트리거(정식). 방장이 누르면 서버가 방장 여부·전원 준비를 검증하고 방을 PLAYING으로
   // 전환한 뒤 세션을 연다. 참가자 토큰은 서버가 방의 실제 참가자 목록에서 만들므로 넘기지 않는다.
   // [개발 전용] 코스(게임 선택/순서) 도메인이 아직 없어서 어떤 게임을 시작할지 고를 방법이 없다.
   // /dev/charades로 들어오면 ?autostart=charades가 붙어 있어 닌자 대신 몸으로 말해요를 시작한다.
   // 코스 흐름이 생기면 이 분기와 /dev/* 라우트를 함께 지우고 코스가 정한 gameId를 넘기면 된다.
-  const [searchParams] = useSearchParams();
+  // (searchParams는 위 fetch autostart 훅에서 선언한 것을 재사용)
   const startCharades = searchParams.get('autostart') === 'charades';
 
-  const startGame = useCallback(
-    async () => {
-      setSeeding(true);
-      setSeedError(null);
-      try {
-        await roomApi.startGame(
-          roomId,
-          startCharades ? CHARADES_GAME_ID : NINJA_GAME_ID,
-          startCharades ? CHARADES_TOTAL_ROUNDS : DEFAULT_TOTAL_ROUNDS,
-          accessToken,
-        );
-        // 화면 전환은 서버가 브로드캐스트하는 game:started 이벤트로 이뤄진다(방장 본인 포함 전원).
-      } catch (err) {
-        setSeedError(err instanceof RoomApiError ? err.message : '게임 시작 실패');
-      } finally {
-        setSeeding(false);
-      }
-    },
-    [roomId, accessToken, startCharades],
-  );
+  const startGame = useCallback(async () => {
+    setStarting(true);
+    setStartError(null);
+    try {
+      await roomApi.startGame(
+        roomId,
+        startCharades ? CHARADES_GAME_ID : NINJA_GAME_ID,
+        startCharades ? CHARADES_TOTAL_ROUNDS : DEFAULT_TOTAL_ROUNDS,
+        accessToken,
+      );
+      // 화면 전환은 서버가 브로드캐스트하는 game:started 이벤트로 이뤄진다(방장 본인 포함 전원).
+    } catch (err) {
+      setStartError(err instanceof RoomApiError ? err.message : '게임 시작 실패');
+    } finally {
+      setStarting(false);
+    }
+  }, [roomId, accessToken, startCharades]);
 
   return (
     <>
@@ -197,17 +217,28 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
         participantId={participantId}
         onPresenterChange={setIsCharadesPresenter}
       />
-      {!gameActive && (
+      {!gameActive && !fetchActive && (
         <LobbyScreen
           roomId={roomId}
           accessToken={accessToken}
           participantId={participantId}
-          onStartGame={startGame}
-          starting={seeding}
-          startError={seedError}
+          onStartGame={() => void startGame()}
+          starting={starting}
+          startError={startError}
           onLeave={onLeave}
           chatMessages={messages}
           onSendChat={sendMessage}
+        />
+      )}
+      {fetchActive && (
+        <FetchObjectGame
+          state={fetchGame.state}
+          myNickname={fetchGame.myNickname}
+          onReportSuccess={fetchGame.reportSuccess}
+          onEndRound={fetchGame.endRound}
+          onNextRound={() => void fetchGame.nextRound()}
+          onExit={fetchGame.exitGame}
+          onLeave={onLeave}
         />
       )}
       {/* 몸으로 말해요는 자체 전체화면(.charades-screen)에 캠 타일·정답 채팅까지 다 그리므로
