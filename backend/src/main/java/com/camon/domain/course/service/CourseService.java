@@ -31,8 +31,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class CourseService {
 
-    // 코스 길이 상한. 대기방 UI가 아이콘 칩으로 한 줄에 담을 수 있는 개수에 맞춘 값이고,
-    // 게임 하나가 최대 10라운드까지 가므로 이보다 길면 한 방이 비현실적으로 길어진다.
+    // 코스 세트 수 상한 — "게임 다 합쳐서 최대 7세트" 명세값 (2026-07-29 확정).
+    // 대기방 UI가 아이콘 칩으로 한 줄에 담을 수 있는 개수이기도 하다.
     static final int MAX_COURSE_LENGTH = 7;
 
     private final RoomRepository roomRepository;
@@ -119,33 +119,25 @@ public class CourseService {
                     game.getName(), game.getMinPlayers(), game.getMaxPlayers(), playerCount);
                 throw new BusinessException(ErrorCode.COURSE_PLAYERS_NOT_ELIGIBLE);
             }
-            // min_rounds가 null인 게임(물건 가져오기)은 "참여자 수"가 최소 라운드다 —
-            // 인원이 정해지는 이 시점에야 검증할 수 있다.
-            if (game.getMinRounds() == null && item.roundCount() < playerCount) {
-                throw new BusinessException(ErrorCode.COURSE_INVALID_ROUND_COUNT);
-            }
         }
     }
 
     private CourseItem validateItem(int idx, CourseItemRequest request) {
         Game game = gameCatalogService.requireSelectableGame(request.gameId());
-        // 서버가 세션을 열 수 없는 게임(아직 구현 안 된 물건 가져오기)은 코스에 담지 못하게 여기서
-        // 막는다 — 담을 수 있게 두면 코스 중간에 도달했을 때 진행이 멈춘다.
+        // 서버가 세션을 열 수 없는 게임(GameSessionStarter 구현체가 없는 게임)은 코스에 담지
+        // 못하게 여기서 막는다 — 담을 수 있게 두면 코스 중간에 도달했을 때 진행이 멈춘다.
         if (!gameCatalogService.isSupported(game.getName())) {
             throw new BusinessException(ErrorCode.COURSE_GAME_NOT_SUPPORTED);
         }
-        validateRoundCount(game, request.roundCount());
         Long topicId = validateTopic(game, request.topicId());
-        return new CourseItem(idx, game.getGameId(), request.roundCount(), topicId);
+        return new CourseItem(idx, game.getGameId(), roundsPerSet(game), topicId);
     }
 
-    private static void validateRoundCount(Game game, int roundCount) {
-        // min_rounds가 null이면 하한이 "참여자 수"라 지금은 확정할 수 없다 → 상한만 본다.
-        int minRounds = game.getMinRounds() == null ? 1 : game.getMinRounds();
-        int maxRounds = game.getMaxRounds() == null ? Integer.MAX_VALUE : game.getMaxRounds();
-        if (roundCount < minRounds || roundCount > maxRounds) {
-            throw new BusinessException(ErrorCode.COURSE_INVALID_ROUND_COUNT);
-        }
+    // 코스 항목 하나 = 그 게임 1세트. 세트당 라운드 수는 게임별 고정값이고(닌자 1판 / 몸말
+    // 1라운드 / 물건 5라운드), games.min_rounds(=max_rounds)에 들어 있다 — 클라이언트가
+    // 보내는 값이 아니라 서버가 여기서 채운다.
+    private static int roundsPerSet(Game game) {
+        return game.getMinRounds() == null ? 1 : game.getMinRounds();
     }
 
     private Long validateTopic(Game game, Long topicId) {

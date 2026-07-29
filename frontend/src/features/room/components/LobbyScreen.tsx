@@ -358,7 +358,7 @@ export function LobbyScreen({
                 </button>
               </span>
             </div>
-            {/* 최대 7세트 — 이름 대신 아이콘 + 라운드 수 칩. 이름은 툴팁으로 */}
+            {/* 최대 7세트 — 칩 하나 = 게임 1세트. 아이콘만 보여주고 이름/주제는 툴팁으로 */}
             <ol className="lobby-screen__sets">
               {(course?.items ?? []).map((item) => (
                 <li
@@ -366,12 +366,9 @@ export function LobbyScreen({
                   className="lobby-screen__set"
                   title={`${String(item.idx).padStart(2, '0')} ${
                     GAME_LABELS[item.gameName] ?? item.gameName
-                  } · ${item.roundCount}라운드${item.topicName ? ` · ${item.topicName}` : ''}`}
+                  } 1세트${item.topicName ? ` · ${item.topicName}` : ''}`}
                 >
                   <span className="lobby-screen__set-icon">{GAME_ICONS[item.gameName]}</span>
-                  <span className="lobby-screen__set-rounds pap-pixel-title">
-                    {item.roundCount}R
-                  </span>
                 </li>
               ))}
             </ol>
