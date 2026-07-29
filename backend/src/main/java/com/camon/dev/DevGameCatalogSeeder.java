@@ -49,24 +49,23 @@ public class DevGameCatalogSeeder implements ApplicationRunner {
     @Override
     @Transactional
     public void run(ApplicationArguments args) {
-        // 라운드 범위는 2026-07-29 확정 명세를 따른다:
-        // 닌자 3~10 / 물건가져오기 (참여자 수)~10 / 몸으로말해요 1~3.
-        // 물건가져오기의 하한 "참여자 수"는 게임 시작 시점에야 알 수 있으므로 min_rounds=NULL로
-        // 표현하고 애플리케이션(CourseService)이 계산한다.
+        // 코스는 "세트" 단위다 (2026-07-29 확정): 코스 항목 하나 = 그 게임 1세트, 최대 7세트.
+        // 라운드 수는 고르는 값이 아니라 게임별 고정값이고, min_rounds = max_rounds = 세트당
+        // 라운드 수로 표현한다 — 닌자 1(최후 1인 한 판), 몸말 1(전원 1회 표현), 물건 5.
         seedGame(
             NINJA,
             "제시된 손동작 콤보를 가장 빨리 완성해 공격권을 얻고, 최후의 1인이 남을 때까지 겨룬다.",
-            2, 4, 3, 10
+            2, 4, 1, 1
         );
         Game fetchObject = seedGame(
             FETCH_OBJECT,
             "제시된 물건을 제한시간 안에 카메라 앞으로 가져온다. 빨리 가져온 순서대로 점수를 얻는다.",
-            2, 4, null, 10
+            2, 4, 5, 5
         );
         Game charades = seedGame(
             CHARADES,
             "고른 주제의 제시어를 말 없이 몸으로 설명하고, 나머지 참가자가 채팅으로 정답을 맞힌다.",
-            3, 4, 1, 3
+            3, 4, 1, 1
         );
 
         seedFetchObjectMissions(fetchObject);
@@ -148,6 +147,8 @@ public class DevGameCatalogSeeder implements ApplicationRunner {
     }
 
     private void seedCharadesTopics(Game charades) {
+        // 주제/제시어 원본은 CharadesMissionCatalog(CSV 리소스)다. 주제·제시어 단위로 멱등해서
+        // 카탈로그에 새 항목을 추가하면 기존 데이터가 있는 DB에도 누락분만 채워진다.
         CharadesMissionCatalog.TOPICS.forEach(topicSpec ->
             seedTopic(charades, topicSpec)
         );

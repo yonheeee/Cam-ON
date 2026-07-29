@@ -62,7 +62,7 @@ public class DevNinjaDataSeeder implements ApplicationRunner {
         seedSkill(gestures, effect, "뇌절", 20, "Horse", "snake");
         seedSkill(gestures, effect, "봉선화의 술", 30, "snake", "mouse", "cow");
         seedSkill(gestures, effect, "수룡탄의 술", 30, "sailor_moon", "cow", "rabbit");
-        seedSkill(gestures, effect, "냥냥펀치", 15, "girl_V", "cat");
+        seedSkill(gestures, effect, "냥냥펀치", 15, "rabbit", "cat");
         seedSkill(gestures, effect, "바람의 상처", 45, "spider", "Horse", "mouse", "sailor_moon");
         // 테스트용 — 콤보가 2개뿐이고 데미지가 INITIAL_HP(100)와 같아서 한 방에 탈락시킨다.
         // 닌자 판(round)은 "최후 1인"이 남아야 끝나는데, 아무도 탈락하지 않으면 교환 상한(50회 x 30초)에

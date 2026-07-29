@@ -95,6 +95,12 @@ export function LobbyScreen({
 
   const self = room?.participants.find((p) => p.participantId === participantId);
   const isHost = participantId === room?.hostParticipantId;
+  // 방장을 제외한 전원이 준비 완료인가 — 게임 시작 게이트 (혼자면 바로 시작 가능)
+  const allOthersReady =
+    !!room &&
+    room.participants
+      .filter((p) => p.participantId !== room.hostParticipantId)
+      .every((p) => p.ready);
   // 타일 map 안에서 isHost가 "이 타일 주인이 방장인가"로 섀도잉되므로, "내가 방장인가"는 별칭으로 들고 간다.
   const amHost = isHost;
   // 타일 테두리·표시에 쓸 참가자 정보 (LiveKit identity == participantId)
@@ -358,7 +364,7 @@ export function LobbyScreen({
                 </button>
               </span>
             </div>
-            {/* 최대 7세트 — 이름 대신 아이콘 + 라운드 수 칩. 이름은 툴팁으로 */}
+            {/* 최대 7세트 — 칩 하나 = 게임 1세트. 아이콘만 보여주고 이름/주제는 툴팁으로 */}
             <ol className="lobby-screen__sets">
               {(course?.items ?? []).map((item) => (
                 <li
@@ -366,12 +372,9 @@ export function LobbyScreen({
                   className="lobby-screen__set"
                   title={`${String(item.idx).padStart(2, '0')} ${
                     GAME_LABELS[item.gameName] ?? item.gameName
-                  } · ${item.roundCount}라운드${item.topicName ? ` · ${item.topicName}` : ''}`}
+                  } 1세트${item.topicName ? ` · ${item.topicName}` : ''}`}
                 >
                   <span className="lobby-screen__set-icon">{GAME_ICONS[item.gameName]}</span>
-                  <span className="lobby-screen__set-rounds pap-pixel-title">
-                    {item.roundCount}R
-                  </span>
                 </li>
               ))}
             </ol>
@@ -410,19 +413,25 @@ export function LobbyScreen({
             </button>
             {/* 주 액션은 하나로 통일 — 방장: 게임 시작 / 참가자: 준비 토글 */}
             {isHost ? (
+              // 공통 요구사항: 전원 준비 완료여야 시작 가능 (방장 본인 제외 — 방장은 시작이 곧 준비)
               <button
                 type="button"
                 className="pap-pixel-btn pap-pixel-btn--coral"
-                // 코스가 비면 시작할 게 없다 — 서버도 COURSE_EMPTY로 거부하므로 미리 막는다.
-                disabled={starting || !room || !course || course.items.length === 0}
+                // 코스가 비면 시작할 게 없고(서버도 COURSE_EMPTY로 거부), 전원 준비 전에도
+                // 서버가 거부하므로(ROOM_NOT_ALL_READY) 둘 다 미리 막는다.
+                disabled={
+                  starting || !room || !course || course.items.length === 0 || !allOthersReady
+                }
                 title={
                   course && course.items.length === 0
                     ? '먼저 게임 구성을 정해 주세요'
-                    : undefined
+                    : allOthersReady
+                      ? undefined
+                      : '모든 참가자가 준비를 완료해야 시작할 수 있어요'
                 }
                 onClick={() => onStartGame()}
               >
-                {starting ? '시작 중...' : '게임 시작'}
+                {starting ? '시작 중...' : allOthersReady ? '게임 시작' : '준비 대기 중...'}
               </button>
             ) : (
               // 준비되면 눌린 채 고정된 라임 버튼으로 — 누르는 순간의 "철컥" UX.
