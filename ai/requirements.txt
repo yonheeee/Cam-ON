@@ -12,3 +12,4 @@ pillow
 fastapi
 uvicorn[standard]
 python-multipart
+slowapi  # IP당 요청 빈도 제한 (공개 터널 서빙 대비)
