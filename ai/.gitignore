@@ -1,6 +1,0 @@
-__pycache__/
-*.pyc
-.venv/
-.env
-# 로컬 테스트용 샘플 이미지
-samples/
