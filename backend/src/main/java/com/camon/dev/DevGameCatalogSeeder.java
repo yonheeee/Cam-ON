@@ -7,22 +7,15 @@ import com.camon.domain.game.common.repository.GameRepository;
 import com.camon.domain.game.common.repository.MissionRepository;
 import com.camon.domain.game.common.repository.MissionTopicRepository;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
-// games / mission_topics / missions 시드 데이터. DevNinjaDataSeeder와 같은 이유로 존재한다 —
-// ddl-auto: none인데 마이그레이션 도구가 없어서, 기준 데이터를 앱 시작 시 코드로 채운다.
-//
-// 이 세 테이블은 코스 기능이 생기기 전까지 코드에서 조회된 적이 없어서(games는 리포지토리조차
-// 없었다) 어떤 환경에 무엇이 들어있는지 보장이 없었다. 코스 설정 화면이 GET /api/games로
-// 목록을 받아 오는 순간부터는 비어 있으면 "고를 게 하나도 없는" 화면이 되므로 여기서 보장한다.
-//
-// 멱등성: 이미 있는 데이터는 절대 건드리지 않는다(수동으로 넣어둔 운영 데이터를 덮어쓰면 안 된다).
-// - games는 name이 unique라 없는 것만 추가한다.
-// - 주제/제시어는 해당 게임에 주제가 하나도 없을 때만 통째로 넣는다.
+
 @Slf4j
 @Component
 public class DevGameCatalogSeeder implements ApplicationRunner {
@@ -32,8 +25,23 @@ public class DevGameCatalogSeeder implements ApplicationRunner {
     public static final String FETCH_OBJECT = "FETCH_OBJECT";
     public static final String CHARADES = "CHARADES";
 
+    static final String FETCH_OBJECT_MISSION_TYPE = "OBJECT";
     private static final String CHARADES_MISSION_TYPE = "CHARADES";
     private static final String DEFAULT_DIFFICULTY = "NORMAL";
+    static final List<String> FETCH_OBJECT_KEYWORDS = List.of(
+        "휴대폰",
+        "마우스",
+        "가위",
+        "숟가락",
+        "안경",
+        "칫솔",
+        "라면",
+        "헤어드라이어",
+        "우산",
+        "그릇",
+        "모자",
+        "가방"
+    );
 
     private final GameRepository gameRepository;
     private final MissionTopicRepository missionTopicRepository;
@@ -61,7 +69,7 @@ public class DevGameCatalogSeeder implements ApplicationRunner {
             "제시된 손동작 콤보를 가장 빨리 완성해 공격권을 얻고, 최후의 1인이 남을 때까지 겨룬다.",
             2, 4, 3, 10
         );
-        seedGame(
+        Game fetchObject = seedGame(
             FETCH_OBJECT,
             "제시된 물건을 제한시간 안에 카메라 앞으로 가져온다. 빨리 가져온 순서대로 점수를 얻는다.",
             2, 4, null, 10
@@ -72,6 +80,7 @@ public class DevGameCatalogSeeder implements ApplicationRunner {
             3, 4, 1, 3
         );
 
+        seedFetchObjectMissions(fetchObject);
         seedCharadesTopics(charades);
     }
 
@@ -97,6 +106,54 @@ public class DevGameCatalogSeeder implements ApplicationRunner {
                 .isActive(true)
                 .build());
         });
+    }
+
+    private void seedFetchObjectMissions(Game fetchObject) {
+        Set<String> existingKeywords = missionRepository
+            .findAllByGameGameIdAndMissionTypeAndIsActiveTrue(
+                fetchObject.getGameId(),
+                FETCH_OBJECT_MISSION_TYPE
+            )
+            .stream()
+            .map(Mission::getKeyword)
+            .collect(Collectors.toSet());
+
+        Set<String> unexpectedKeywords = existingKeywords.stream()
+            .filter(keyword -> !FETCH_OBJECT_KEYWORDS.contains(keyword))
+            .collect(Collectors.toSet());
+        if (!unexpectedKeywords.isEmpty()) {
+            // AI 서버 labels.py와 문자열 계약이 어긋난 데이터는 자동으로 수정/삭제하지 않는다.
+            // 라벨 변경은 양쪽 서버 담당자에게 먼저 공유한 뒤 함께 반영해야 한다.
+            log.warn(
+                "[Seed] missions : FETCH_OBJECT 계약 외 활성 키워드 발견 {} — 자동 변경하지 않음",
+                unexpectedKeywords
+            );
+        }
+
+        List<String> missingKeywords = FETCH_OBJECT_KEYWORDS.stream()
+            .filter(keyword -> !existingKeywords.contains(keyword))
+            .toList();
+        if (missingKeywords.isEmpty()) {
+            return;
+        }
+
+        log.info(
+            "[Seed] missions : FETCH_OBJECT 누락 제시어 {}개 추가 {}",
+            missingKeywords.size(),
+            missingKeywords
+        );
+        missingKeywords.forEach(keyword -> missionRepository.save(
+            Mission.builder()
+                .game(fetchObject)
+                .topic(null)
+                .missionType(FETCH_OBJECT_MISSION_TYPE)
+                .keyword(keyword)
+                // 영어 프롬프트는 AI 서버 labels.py가 관리하므로 백엔드에는 저장하지 않는다.
+                .targetLabel(null)
+                .difficulty(DEFAULT_DIFFICULTY)
+                .isActive(true)
+                .build()
+        ));
     }
 
     private void seedCharadesTopics(Game charades) {
