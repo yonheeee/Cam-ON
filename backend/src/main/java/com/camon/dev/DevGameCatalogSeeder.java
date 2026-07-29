@@ -6,9 +6,12 @@ import com.camon.domain.game.common.MissionTopic;
 import com.camon.domain.game.common.repository.GameRepository;
 import com.camon.domain.game.common.repository.MissionRepository;
 import com.camon.domain.game.common.repository.MissionTopicRepository;
+import com.camon.domain.game.charades.domain.CharadesMissionCatalog;
 import com.camon.domain.game.fetch.domain.FetchObjectMissionCatalog;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.ApplicationArguments;
@@ -145,53 +148,71 @@ public class DevGameCatalogSeeder implements ApplicationRunner {
     }
 
     private void seedCharadesTopics(Game charades) {
-        if (!missionTopicRepository
-            .findAllByGameGameIdAndIsActiveTrueOrderByNameAsc(charades.getGameId())
-            .isEmpty()) {
-            return; // 이미 주제가 있으면 손대지 않는다.
-        }
-        log.info("[Seed] mission_topics : CHARADES 주제 없음 → 기본 주제/제시어 추가");
-
-        // 제시어는 한 턴에 하나씩 소진되고 재사용되지 않는다(selectUnusedMission). 최대 인원 4명 x
-        // 최대 3라운드 = 12턴이 이론상 한 게임의 상한이지만, 라운드 상한을 다시 올리더라도
-        // 제시어 부족으로 게임이 끊기지 않도록 주제마다 40개(4명 x 10라운드 분량)를 채워 둔다.
-        seedTopic(charades, "동물", List.of(
-            "코끼리", "기린", "펭귄", "캥거루", "고양이", "강아지", "원숭이", "사자",
-            "토끼", "거북이", "뱀", "독수리", "상어", "고래", "다람쥐", "호랑이",
-            "곰", "여우", "늑대", "사슴", "낙타", "얼룩말", "하마", "코알라",
-            "판다", "개구리", "달팽이", "문어", "게", "나비", "벌", "거미",
-            "말", "돼지", "소", "양", "닭", "오리", "공룡", "박쥐"
-        ));
-        seedTopic(charades, "음식", List.of(
-            "피자", "치킨", "라면", "김밥", "떡볶이", "햄버거", "초밥", "삼겹살",
-            "짜장면", "탕수육", "비빔밥", "된장찌개", "김치찌개", "갈비탕", "냉면", "만두",
-            "붕어빵", "호떡", "팝콘", "아이스크림", "케이크", "도넛", "샌드위치", "파스타",
-            "스테이크", "카레", "수제비", "죽", "계란찜", "옥수수", "고구마", "감자탕",
-            "순대", "곱창", "회", "수박", "바나나", "포도", "딸기", "멜론"
-        ));
-        seedTopic(charades, "직업", List.of(
-            "의사", "간호사", "소방관", "경찰관", "교사", "요리사", "미용사", "가수",
-            "배우", "화가", "운동선수", "축구선수", "야구선수", "발레리나", "지휘자", "피아니스트",
-            "농부", "어부", "목수", "택배기사", "버스기사", "파일럿", "승무원", "군인",
-            "판사", "변호사", "기자", "아나운서", "개발자", "디자이너", "사진작가", "마술사",
-            "광부", "우주비행사", "수의사", "약사", "치과의사", "바리스타", "제빵사", "청소부"
-        ));
+        CharadesMissionCatalog.TOPICS.forEach(topicSpec ->
+            seedTopic(charades, topicSpec)
+        );
     }
 
-    private void seedTopic(Game game, String topicName, List<String> keywords) {
-        MissionTopic topic = missionTopicRepository.save(MissionTopic.builder()
-            .game(game)
-            .name(topicName)
-            .isActive(true)
-            .build());
-        keywords.forEach(keyword -> missionRepository.save(Mission.builder()
-            .game(game)
-            .topic(topic)
-            .missionType(CHARADES_MISSION_TYPE)
-            .keyword(keyword)
-            .difficulty(DEFAULT_DIFFICULTY)
-            .isActive(true)
-            .build()));
-        log.info("[Seed] mission_topics : '{}' 주제에 제시어 {}개 추가", topicName, keywords.size());
+    private void seedTopic(
+        Game game,
+        CharadesMissionCatalog.TopicSpec topicSpec
+    ) {
+        MissionTopic topic = missionTopicRepository
+            .findByGameGameIdAndName(game.getGameId(), topicSpec.name())
+            .orElseGet(() -> {
+                log.info(
+                    "[Seed] mission_topics : CHARADES '{}' 주제 추가",
+                    topicSpec.name()
+                );
+                return missionTopicRepository.save(
+                    MissionTopic.builder()
+                        .game(game)
+                        .name(topicSpec.name())
+                        .isActive(true)
+                        .build()
+                );
+            });
+        if (!topic.getIsActive()) {
+            log.warn(
+                "[Seed] mission_topics : CHARADES '{}' 주제가 비활성 상태 — 자동 변경하지 않음",
+                topicSpec.name()
+            );
+            return;
+        }
+
+        Map<String, Mission> existingByKeyword = missionRepository
+            .findAllByGameGameIdAndTopicTopicIdAndMissionType(
+                game.getGameId(),
+                topic.getTopicId(),
+                CHARADES_MISSION_TYPE
+            )
+            .stream()
+            .collect(Collectors.toMap(
+                Mission::getKeyword,
+                Function.identity(),
+                (first, ignored) -> first
+            ));
+
+        List<CharadesMissionCatalog.MissionSpec> missing =
+            topicSpec.missions().stream()
+                .filter(spec -> !existingByKeyword.containsKey(spec.keyword()))
+                .toList();
+        missing.forEach(spec -> missionRepository.save(
+            Mission.builder()
+                .game(game)
+                .topic(topic)
+                .missionType(CHARADES_MISSION_TYPE)
+                .keyword(spec.keyword())
+                .difficulty(spec.difficulty())
+                .isActive(spec.active())
+                .build()
+        ));
+        if (!missing.isEmpty()) {
+            log.info(
+                "[Seed] missions : CHARADES '{}' 주제에 누락 제시어 {}개 추가",
+                topicSpec.name(),
+                missing.size()
+            );
+        }
     }
 }

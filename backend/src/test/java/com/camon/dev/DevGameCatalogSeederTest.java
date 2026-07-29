@@ -6,6 +6,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.lenient;
 
 import com.camon.domain.game.common.Game;
 import com.camon.domain.game.common.Mission;
@@ -13,6 +14,7 @@ import com.camon.domain.game.common.MissionTopic;
 import com.camon.domain.game.common.repository.GameRepository;
 import com.camon.domain.game.common.repository.MissionRepository;
 import com.camon.domain.game.common.repository.MissionTopicRepository;
+import com.camon.domain.game.charades.domain.CharadesMissionCatalog;
 import com.camon.domain.game.fetch.domain.FetchObjectMissionCatalog;
 import java.util.List;
 import java.util.Optional;
@@ -50,15 +52,35 @@ class DevGameCatalogSeederTest {
             .thenReturn(Optional.of(fetchObject));
         when(gameRepository.findByName(DevGameCatalogSeeder.CHARADES))
             .thenReturn(Optional.of(charades));
-        // 몸으로 말해요 시드는 이 테스트의 대상이 아니므로 기존 주제가 있는 상태로 둔다.
-        when(missionTopicRepository
-            .findAllByGameGameIdAndIsActiveTrueOrderByNameAsc(charades.getGameId()))
-            .thenReturn(List.of(MissionTopic.builder()
-                .topicId(1L)
+        // 물건 가져오기 시더 테스트에 몸으로 말해요 저장 건수가 섞이지 않도록,
+        // CSV 카탈로그 전체가 이미 저장된 상태로 준비한다.
+        long topicId = 1L;
+        for (CharadesMissionCatalog.TopicSpec topicSpec
+            : CharadesMissionCatalog.TOPICS) {
+            MissionTopic topic = MissionTopic.builder()
+                .topicId(topicId++)
                 .game(charades)
-                .name("동물")
+                .name(topicSpec.name())
                 .isActive(true)
-                .build()));
+                .build();
+            lenient().when(missionTopicRepository.findByGameGameIdAndName(
+                charades.getGameId(),
+                topicSpec.name()
+            )).thenReturn(Optional.of(topic));
+            lenient().when(missionRepository
+                .findAllByGameGameIdAndTopicTopicIdAndMissionType(
+                    charades.getGameId(),
+                    topic.getTopicId(),
+                    DevGameCatalogSeeder.CHARADES
+                ))
+                .thenReturn(topicSpec.missions().stream()
+                    .map(spec -> charadesMission(
+                        charades,
+                        topic,
+                        spec
+                    ))
+                    .toList());
+        }
 
         seeder = new DevGameCatalogSeeder(
             gameRepository,
@@ -137,6 +159,62 @@ class DevGameCatalogSeederTest {
         verify(missionRepository, never()).save(any());
     }
 
+    @Test
+    void seedsMissingCharadesTopicAndItsMissions() throws Exception {
+        when(missionRepository
+            .findAllByGameGameIdAndMissionTypeAndIsActiveTrue(
+                fetchObject.getGameId(),
+                FetchObjectMissionCatalog.MISSION_TYPE
+            ))
+            .thenReturn(FetchObjectMissionCatalog.KEYWORDS.stream()
+                .map(this::fetchMission)
+                .toList());
+
+        Game charades = game(3L, DevGameCatalogSeeder.CHARADES);
+        CharadesMissionCatalog.TopicSpec instruments =
+            CharadesMissionCatalog.TOPICS.stream()
+                .filter(topic -> topic.name().equals("악기"))
+                .findFirst()
+                .orElseThrow();
+        MissionTopic savedTopic = MissionTopic.builder()
+            .topicId(99L)
+            .game(charades)
+            .name(instruments.name())
+            .isActive(true)
+            .build();
+        when(missionTopicRepository.findByGameGameIdAndName(
+            charades.getGameId(),
+            instruments.name()
+        )).thenReturn(Optional.empty());
+        when(missionTopicRepository.save(any(MissionTopic.class)))
+            .thenReturn(savedTopic);
+        when(missionRepository
+            .findAllByGameGameIdAndTopicTopicIdAndMissionType(
+                charades.getGameId(),
+                savedTopic.getTopicId(),
+                DevGameCatalogSeeder.CHARADES
+            ))
+            .thenReturn(List.of());
+
+        seeder.run(null);
+
+        ArgumentCaptor<MissionTopic> topicCaptor =
+            ArgumentCaptor.forClass(MissionTopic.class);
+        verify(missionTopicRepository).save(topicCaptor.capture());
+        assertThat(topicCaptor.getValue().getName())
+            .isEqualTo(instruments.name());
+
+        ArgumentCaptor<Mission> missionCaptor =
+            ArgumentCaptor.forClass(Mission.class);
+        verify(missionRepository, times(instruments.missions().size()))
+            .save(missionCaptor.capture());
+        assertThat(missionCaptor.getAllValues())
+            .extracting(Mission::getKeyword)
+            .containsExactlyElementsOf(instruments.missions().stream()
+                .map(CharadesMissionCatalog.MissionSpec::keyword)
+                .toList());
+    }
+
     private Mission fetchMission(String keyword) {
         return Mission.builder()
             .game(fetchObject)
@@ -144,6 +222,21 @@ class DevGameCatalogSeederTest {
             .keyword(keyword)
             .difficulty("NORMAL")
             .isActive(true)
+            .build();
+    }
+
+    private static Mission charadesMission(
+        Game game,
+        MissionTopic topic,
+        CharadesMissionCatalog.MissionSpec spec
+    ) {
+        return Mission.builder()
+            .game(game)
+            .topic(topic)
+            .missionType(DevGameCatalogSeeder.CHARADES)
+            .keyword(spec.keyword())
+            .difficulty(spec.difficulty())
+            .isActive(spec.active())
             .build();
     }
 

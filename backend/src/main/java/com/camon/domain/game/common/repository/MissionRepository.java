@@ -18,6 +18,12 @@ public interface MissionRepository extends JpaRepository<Mission, Long> {
         String missionType
     );
 
+    List<Mission> findAllByGameGameIdAndTopicTopicIdAndMissionType(
+        Long gameId,
+        Long topicId,
+        String missionType
+    );
+
     List<Mission> findAllByTopicTopicIdAndMissionTypeAndIsActiveTrue(
         Long topicId,
         String missionType
