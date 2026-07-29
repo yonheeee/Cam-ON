@@ -52,23 +52,24 @@ public class DevGameCatalogSeeder implements ApplicationRunner {
     @Override
     @Transactional
     public void run(ApplicationArguments args) {
-        // 라운드 범위는 요구사항명세서(닌자 3~10 / 물건가져오기 참여자수~10 / 몸으로말해요 항상 1)와
-        // 다르다 — 코스에서 라운드 수를 자유롭게 정하기로 방향이 바뀌어 하한을 전부 1로 통일했다.
-        // 명세서/AGENTS.md/ERD 쪽 갱신은 아직 보류 상태다.
+        // 라운드 범위는 2026-07-29 확정 명세를 따른다:
+        // 닌자 3~10 / 물건가져오기 (참여자 수)~10 / 몸으로말해요 1~3.
+        // 물건가져오기의 하한 "참여자 수"는 게임 시작 시점에야 알 수 있으므로 min_rounds=NULL로
+        // 표현하고 애플리케이션(CourseService)이 계산한다.
         seedGame(
             NINJA,
             "제시된 손동작 콤보를 가장 빨리 완성해 공격권을 얻고, 최후의 1인이 남을 때까지 겨룬다.",
-            2, 4, 1, 10
+            2, 4, 3, 10
         );
         seedGame(
             FETCH_OBJECT,
             "제시된 물건을 제한시간 안에 카메라 앞으로 가져온다. 빨리 가져온 순서대로 점수를 얻는다.",
-            2, 4, 1, 3
+            2, 4, null, 10
         );
         Game charades = seedGame(
             CHARADES,
             "고른 주제의 제시어를 말 없이 몸으로 설명하고, 나머지 참가자가 채팅으로 정답을 맞힌다.",
-            3, 4, 1, 10
+            3, 4, 1, 3
         );
 
         seedCharadesTopics(charades);
@@ -107,8 +108,8 @@ public class DevGameCatalogSeeder implements ApplicationRunner {
         log.info("[Seed] mission_topics : CHARADES 주제 없음 → 기본 주제/제시어 추가");
 
         // 제시어는 한 턴에 하나씩 소진되고 재사용되지 않는다(selectUnusedMission). 최대 인원 4명 x
-        // 최대 10라운드 = 40턴이 이론상 한 게임의 상한이므로, 주제마다 40개를 채워 라운드 수를
-        // 최대로 올려도 제시어 부족으로 게임이 끊기지 않게 한다.
+        // 최대 3라운드 = 12턴이 이론상 한 게임의 상한이지만, 라운드 상한을 다시 올리더라도
+        // 제시어 부족으로 게임이 끊기지 않도록 주제마다 40개(4명 x 10라운드 분량)를 채워 둔다.
         seedTopic(charades, "동물", List.of(
             "코끼리", "기린", "펭귄", "캥거루", "고양이", "강아지", "원숭이", "사자",
             "토끼", "거북이", "뱀", "독수리", "상어", "고래", "다람쥐", "호랑이",

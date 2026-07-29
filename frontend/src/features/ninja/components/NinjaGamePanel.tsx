@@ -100,7 +100,7 @@ export function NinjaGamePanel({ roomId, gameId, accessToken, onActiveChange }: 
   return (
     <>
     <div className="ninja-panel">
-      <h2>닌자 게임</h2>
+      <h2>손은 눈보다 빠르다</h2>
 
       {gameStarted && gameEnded && (
         <div className="ninja-panel__ranking">

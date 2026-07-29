@@ -91,11 +91,11 @@ export const courseApi = {
     }),
 };
 
-// 게임 이름 → 화면 표시용 한글명. 서버의 description과 별개로 UI에서 짧게 쓰는 이름이다.
+// 게임 이름 → 화면 표시용 한글명. 서버의 description과 별개로 UI에서 쓰는 정식 게임 타이틀이다.
 export const GAME_LABELS: Record<GameName, string> = {
-  NINJA: '손동작 따라하기',
-  FETCH_OBJECT: '물건 가져오기',
-  CHARADES: '몸으로 말해요',
+  NINJA: '손은 눈보다 빠르다',
+  FETCH_OBJECT: '엄마! 내 물건 어딨어?',
+  CHARADES: '말하지 않아도 알아요',
 };
 
 // 라운드 하나가 무슨 단위인지 — 게임마다 뜻이 달라서 코스 편집 화면에 같이 보여준다.
