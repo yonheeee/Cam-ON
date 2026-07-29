@@ -1,0 +1,712 @@
+/* 닌자 전투 화면 — Pixel Arcade Plaza 테마의 야간(닌자) 변형.
+   골격(fixed 전체화면 / 헤더 / 스테이지+사이드바 / 2열 캠 그리드)은 LobbyScreen.css의 검증된
+   수치를 그대로 따랐다. 대기방은 크림색 낮 배경, 이 화면은 픽셀 야경 배경으로 톤만 바꾼다. */
+.ninja-screen {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 20px;
+  box-sizing: border-box;
+  background: #1b1230 url('/assets/ninja-background.png') center bottom / cover no-repeat;
+  font-family: var(--pap-font-body);
+  color: var(--pap-white);
+  z-index: 40;
+  text-align: left; /* #root의 text-align: center 상속 차단 */
+}
+
+/* 배경 위에 UI를 얹으면 픽셀 야경의 밝은 달·창문 때문에 글자가 묻힌다 — 잉크 베일을 한 겹 깐다 */
+.ninja-screen::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgb(27 18 48 / 0.72) 0%, rgb(27 18 48 / 0.55) 45%, rgb(27 18 48 / 0.8) 100%);
+  pointer-events: none;
+}
+
+.ninja-screen > * {
+  position: relative; /* 베일 위로 */
+}
+
+/* ---- 헤더 ---- */
+.ninja-screen__topbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.ninja-screen__logo {
+  height: 34px;
+  width: auto;
+}
+
+.ninja-screen__title-area {
+  flex: 1;
+  min-width: 0;
+}
+
+.ninja-screen__title {
+  margin: 0;
+  font-size: 18px;
+  color: var(--pap-play-yellow);
+  text-shadow: 0 2px 0 rgb(0 0 0 / 0.5);
+}
+
+.ninja-screen__round {
+  margin: 2px 0 0;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  color: rgb(255 253 245 / 0.75);
+}
+
+.ninja-screen__round strong {
+  font-size: 15px;
+  color: var(--pap-white);
+}
+
+/* 교환 번호는 라운드와 다른 위계 — 점 구분자 대신 작은 칩으로 */
+.ninja-screen__exchange {
+  margin-left: 8px;
+  padding: 2px 7px;
+  font-size: 11px;
+  letter-spacing: 0;
+  background: rgb(255 253 245 / 0.14);
+  border-radius: 4px;
+}
+
+/* 남은 시간 — 큰 픽셀 숫자. 5초 이하에서 코랄로 경고 */
+.ninja-timer {
+  display: flex;
+  align-items: baseline;
+  gap: 3px;
+  padding: 6px 14px;
+  background: rgb(27 18 48 / 0.75);
+  border: 3px solid var(--pap-white);
+  border-radius: var(--pap-radius);
+}
+
+.ninja-timer__num {
+  font-size: 30px;
+  line-height: 1;
+  color: var(--pap-white);
+}
+
+.ninja-timer__unit {
+  font-size: 12px;
+  color: rgb(255 253 245 / 0.7);
+}
+
+.ninja-timer--urgent {
+  border-color: var(--pap-festival-coral);
+  animation: ninja-pulse 500ms steps(2, end) infinite;
+}
+
+.ninja-timer--urgent .ninja-timer__num {
+  color: var(--pap-festival-coral);
+}
+
+@keyframes ninja-pulse {
+  50% { opacity: 0.55; }
+}
+
+/* ---- 본문 ---- */
+.ninja-screen__body {
+  flex: 1;
+  display: flex;
+  gap: 16px;
+  min-height: 0;
+}
+
+.ninja-screen__stage {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 행 높이를 1fr로 채우면 2인전에서 타일이 444x624(세로 0.71)가 되어 캠이 심하게 잘린다.
+   캠 비율을 고정하고(아래) 행은 내용 높이만 쓰게 한 뒤, 남는 세로 공간은 align-content로 나눈다. */
+.ninja-grid {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  grid-auto-rows: min-content;
+  align-content: center;
+  gap: 16px;
+  min-height: 0;
+}
+
+/* 3인: 세 번째를 아랫줄 중앙에 (대기방과 동일 규칙) */
+.ninja-grid--3 > :nth-child(3) {
+  grid-column: 1 / -1;
+  justify-self: center;
+  width: calc(50% - 8px);
+}
+
+/* ---- 캠 타일 ---- */
+.ninja-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border: 4px solid var(--pap-ink);
+  border-radius: 10px;
+  overflow: hidden;
+  background: #120c22;
+  box-shadow: 5px 5px 0 0 rgb(0 0 0 / 0.35);
+}
+
+.ninja-tile--p1 { border-color: var(--pap-player-1); }
+.ninja-tile--p2 { border-color: var(--pap-player-2); }
+.ninja-tile--p3 { border-color: var(--pap-player-3); }
+.ninja-tile--p4 { border-color: var(--pap-player-4); }
+
+/* 공격권 보유자 — 테두리는 플레이어 색을 유지하고 노란 글로우만 덧댄다 */
+.ninja-tile--attacker {
+  box-shadow: 0 0 0 3px var(--pap-play-yellow), 5px 5px 0 0 rgb(0 0 0 / 0.35);
+}
+
+/* 캠 영역은 비율로 높이를 정한다 — 1행(2인)이면 4:3, 2행(3~4인)이면 16:9로 낮춰서
+   두 행 + 이름바 + HP바가 스테이지 높이 안에 들어오게 한다. */
+.ninja-tile__cam {
+  position: relative;
+  flex: none;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ninja-grid--3 .ninja-tile__cam,
+.ninja-grid--4 .ninja-tile__cam {
+  aspect-ratio: 16 / 9;
+}
+
+.ninja-tile__cam .lk-participant-tile {
+  width: 100%;
+  height: 100%;
+}
+
+.ninja-tile__cam .lk-participant-metadata {
+  display: none; /* LiveKit 기본 이름표 대신 아래 이름 바를 쓴다 */
+}
+
+.ninja-tile__avatar {
+  font-size: 40px;
+  color: rgb(255 253 245 / 0.35);
+}
+
+/* 이펙트 오버레이를 타일 안에 가둔다 — Pixel*Effect는 .ninja-effect-overlay를 쓰고
+   NinjaGamePanel.css에서 position: fixed / 100vw로 전체화면에 깔리게 돼 있는데, 여기서는
+   맞은 사람 타일에서만 재생하므로 absolute로 덮어쓴다. (컴포넌트는 resizeTo: host라 알아서 맞춰 그린다) */
+.ninja-tile__cam .ninja-effect-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 3;
+}
+
+.ninja-tile__badge {
+  position: absolute;
+  top: 8px;
+  z-index: 4;
+  font-family: var(--pap-font-pixel);
+  font-size: 12px;
+  color: var(--pap-ink);
+  border: 2px solid var(--pap-ink);
+  border-radius: 5px;
+  padding: 3px 7px;
+}
+
+.ninja-tile__badge--me {
+  left: 8px;
+  background: var(--pap-play-yellow);
+  transform: rotate(-3deg);
+}
+
+.ninja-tile__badge--attack {
+  right: 8px;
+  background: var(--pap-festival-coral);
+  color: var(--pap-white);
+  transform: rotate(3deg);
+}
+
+/* 지금 잡힌 손동작 — 예전 GestureBoard(좌하단 UUID 목록)를 대체한다 */
+.ninja-tile__combo {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  z-index: 4;
+  font-family: var(--pap-font-pixel);
+  font-size: 11px;
+  color: var(--pap-ink);
+  background: var(--pap-success-lime);
+  border: 2px solid var(--pap-ink);
+  border-radius: 5px;
+  padding: 2px 6px;
+}
+
+.ninja-tile--dead .ninja-tile__cam .lk-participant-tile {
+  filter: grayscale(1) brightness(0.4);
+}
+
+.ninja-tile__dead {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgb(27 18 48 / 0.6);
+  pointer-events: none;
+}
+
+.ninja-tile__dead span {
+  font-size: 26px;
+  color: var(--pap-festival-coral);
+  text-shadow: 0 3px 0 rgb(0 0 0 / 0.6);
+}
+
+/* 대상 지정 — 타일 전체가 버튼이 된다(작은 버튼을 찾아 누를 여유가 없는 게임이라) */
+.ninja-tile__pick {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: rgb(240 100 120 / 0.28);
+  cursor: pointer;
+}
+
+.ninja-tile__pick span {
+  font-size: 24px;
+  color: var(--pap-white);
+  background: var(--pap-festival-coral);
+  border: 3px solid var(--pap-ink);
+  border-radius: var(--pap-radius);
+  padding: 8px 18px;
+  box-shadow: 4px 4px 0 0 var(--pap-ink);
+}
+
+.ninja-tile__pick:hover {
+  background: rgb(240 100 120 / 0.45);
+}
+
+.ninja-tile__bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: rgb(27 18 48 / 0.92);
+  border-top: 3px solid var(--pap-ink);
+}
+
+.ninja-tile__name {
+  font-weight: 800;
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ninja-tile__score {
+  margin-left: auto;
+  font-size: 13px;
+  color: var(--pap-play-yellow);
+  flex-shrink: 0;
+}
+
+/* ---- HP 바 ---- */
+.ninja-hp {
+  position: relative;
+  height: 18px;
+  background: #2b1833;
+  border-top: 2px solid var(--pap-ink);
+}
+
+.ninja-hp__fill {
+  height: 100%;
+  background: var(--pap-success-lime);
+  /* 픽셀 톤 유지를 위해 부드러운 이징 대신 계단식 전환 */
+  transition: width 220ms steps(6, end);
+}
+
+.ninja-hp__fill--low {
+  background: var(--pap-festival-coral);
+}
+
+.ninja-hp__num {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: var(--pap-white);
+  text-shadow: 0 1px 0 rgb(0 0 0 / 0.7);
+}
+
+/* ---- 사이드바 ---- */
+.ninja-screen__sidebar {
+  width: 320px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.ninja-card {
+  padding: 12px 14px;
+  background: rgb(27 18 48 / 0.88);
+  border: 3px solid var(--pap-white);
+  border-radius: var(--pap-radius);
+  box-shadow: 4px 4px 0 0 rgb(0 0 0 / 0.4);
+  flex-shrink: 0;
+}
+
+.ninja-card__label {
+  margin: 0 0 8px;
+  font-family: var(--pap-font-pixel);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: rgb(255 253 245 / 0.6);
+}
+
+.ninja-card--skill {
+  border-color: var(--pap-play-yellow);
+}
+
+.ninja-card__skill-name {
+  margin: 0 0 10px;
+  font-size: 22px;
+  color: var(--pap-play-yellow);
+}
+
+/* ---- 콤보 단계 ---- */
+.ninja-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ninja-step {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 9px;
+  background: rgb(255 253 245 / 0.07);
+  border: 2px solid rgb(255 253 245 / 0.22);
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.ninja-step__no {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  font-size: 10px;
+  color: var(--pap-ink);
+  background: rgb(255 253 245 / 0.5);
+  border-radius: 4px;
+}
+
+.ninja-step__kr {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+/* 통과한 단계 — 라임 + 체크 */
+.ninja-step--done {
+  border-color: var(--pap-success-lime);
+  background: rgb(184 255 79 / 0.14);
+}
+
+.ninja-step--done .ninja-step__no {
+  background: var(--pap-success-lime);
+}
+
+.ninja-step--done::after {
+  content: '✓';
+  margin-left: auto;
+  color: var(--pap-success-lime);
+  font-weight: 800;
+}
+
+/* 현재 단계 — 노란 테두리 + 0.7초 유지 진행바가 칸 바닥을 채운다 */
+.ninja-step--active {
+  border-color: var(--pap-play-yellow);
+  background: rgb(255 217 102 / 0.16);
+}
+
+.ninja-step--active .ninja-step__no {
+  background: var(--pap-play-yellow);
+}
+
+.ninja-step__hold {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 4px;
+  background: rgb(0 0 0 / 0.35);
+}
+
+.ninja-step__hold-fill {
+  display: block;
+  height: 100%;
+  background: var(--pap-play-yellow);
+}
+
+.ninja-card__flash {
+  margin: 10px 0 0;
+  font-family: var(--pap-font-pixel);
+  font-size: 13px;
+  color: var(--pap-play-yellow);
+}
+
+.ninja-card__flash--win {
+  color: var(--pap-success-lime);
+}
+
+.ninja-card__flash--lost {
+  color: rgb(255 253 245 / 0.55);
+}
+
+/* ---- 대상 지정 ---- */
+.ninja-card--pick {
+  border-color: var(--pap-festival-coral);
+}
+
+.ninja-card__pick-timer {
+  display: block;
+  height: 8px;
+  background: rgb(0 0 0 / 0.4);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.ninja-card__pick-timer > span {
+  display: block;
+  height: 100%;
+  background: var(--pap-festival-coral);
+  transition: width 900ms linear;
+}
+
+.ninja-card__hint {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: rgb(255 253 245 / 0.7);
+}
+
+/* ---- 다음 예고 ---- */
+.ninja-card--next {
+  border-color: rgb(255 253 245 / 0.3);
+  border-style: dashed;
+}
+
+.ninja-card__next-name {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.ninja-card__next-combo {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: rgb(255 253 245 / 0.65);
+}
+
+/* ---- 인터미션 ---- */
+.ninja-card--intermission {
+  border-color: var(--pap-arcade-teal);
+  text-align: center;
+}
+
+.ninja-card__hit {
+  margin: 0;
+  font-size: 14px;
+}
+
+.ninja-card__hit strong {
+  color: var(--pap-festival-coral);
+  font-size: 17px;
+}
+
+.ninja-card__ko {
+  margin-left: 6px;
+  font-family: var(--pap-font-pixel);
+  font-size: 12px;
+  color: var(--pap-festival-coral);
+}
+
+.ninja-card__countdown {
+  margin: 8px 0 0;
+  font-size: 34px;
+  line-height: 1;
+  color: var(--pap-arcade-teal);
+}
+
+.ninja-result {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ninja-result li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  background: rgb(255 253 245 / 0.07);
+  border-radius: 5px;
+  text-align: left;
+}
+
+.ninja-result--me {
+  background: rgb(255 217 102 / 0.18) !important;
+}
+
+.ninja-result__rank {
+  width: 18px;
+  font-size: 13px;
+  color: var(--pap-play-yellow);
+}
+
+.ninja-result__name {
+  font-size: 13px;
+}
+
+.ninja-result__pt {
+  margin-left: auto;
+  font-size: 13px;
+  color: var(--pap-success-lime);
+}
+
+/* ---- 손동작 인식 패널 ----
+   GesturePanel.css는 position: fixed 우하단 디버그 박스로 떠 있다. 사이드바 카드로 편입하기 위해
+   위치만 여기서 무력화한다(그 파일은 /effects-preview 등 다른 화면에서도 쓰여서 건드리지 않는다). */
+.ninja-screen .gesture-panel {
+  position: static;
+  width: auto;
+  flex-shrink: 0;
+  background: rgb(27 18 48 / 0.88);
+  border: 3px solid var(--pap-white);
+  border-radius: var(--pap-radius);
+  box-shadow: 4px 4px 0 0 rgb(0 0 0 / 0.4);
+}
+
+.ninja-screen .gesture-panel h2 {
+  font-family: var(--pap-font-pixel);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: rgb(255 253 245 / 0.6);
+  font-weight: 400;
+}
+
+/* ---- 최종 순위 ---- */
+.ninja-final {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgb(27 18 48 / 0.82);
+}
+
+.ninja-final__card {
+  width: min(420px, calc(100vw - 40px));
+  padding: 26px 28px;
+  background: rgb(27 18 48 / 0.95);
+  border: 4px solid var(--pap-play-yellow);
+  border-radius: 10px;
+  box-shadow: 6px 6px 0 0 rgb(0 0 0 / 0.5);
+}
+
+.ninja-final__title {
+  margin: 0 0 16px;
+  font-size: 24px;
+  color: var(--pap-play-yellow);
+  text-align: center;
+}
+
+.ninja-final__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ninja-final__list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  background: rgb(255 253 245 / 0.08);
+  border-radius: 6px;
+}
+
+.ninja-final--me {
+  background: rgb(255 217 102 / 0.2) !important;
+}
+
+.ninja-final__rank {
+  width: 24px;
+  font-size: 18px;
+  color: var(--pap-play-yellow);
+}
+
+.ninja-final__name {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.ninja-final__pt {
+  margin-left: auto;
+  font-size: 15px;
+  color: var(--pap-success-lime);
+}
+
+.ninja-screen__error {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  margin: 0;
+  padding: 6px 14px;
+  font-size: 12px;
+  color: var(--pap-white);
+  background: rgb(240 100 120 / 0.9);
+  border-radius: var(--pap-radius);
+}
+
+/* 좁은 화면 — 사이드바를 아래로 (대기방과 동일 브레이크포인트) */
+@media (max-width: 900px) {
+  .ninja-screen__body {
+    flex-direction: column;
+    overflow-y: auto;
+  }
+
+  .ninja-screen__sidebar {
+    width: 100%;
+  }
+}
