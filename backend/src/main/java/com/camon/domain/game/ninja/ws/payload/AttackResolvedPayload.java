@@ -21,7 +21,7 @@ public record AttackResolvedPayload(
     Instant effectUntil,
     Instant nextRoundAt,
     // 이 교환으로 판이 끝났는가(최후 1인 확정) — true면 다음은 다음 판/게임 종료, false면 같은 판의 다음 교환.
-    boolean boutEnded,
+    boolean roundEnded,
     // 이 공격이 게임을 끝낸 결정타인가(마지막 판 종료).
     boolean ending
 ) {

@@ -8,7 +8,7 @@ import com.camon.domain.game.ninja.domain.NinjaPhase;
 import com.camon.domain.game.ninja.domain.Skill;
 import com.camon.domain.game.ninja.dto.AttackRequest;
 import com.camon.domain.game.ninja.dto.AttackResponse;
-import com.camon.domain.game.ninja.dto.BoutResultEntry;
+import com.camon.domain.game.ninja.dto.RoundResultEntry;
 import com.camon.domain.game.ninja.dto.LastAttackResponse;
 import com.camon.domain.game.ninja.dto.NextSkillPreview;
 import com.camon.domain.game.ninja.dto.NinjaStateResponse;
@@ -70,7 +70,7 @@ public class NinjaGameService {
     private static final Duration EFFECT_DURATION = Duration.ofSeconds(5);
     private static final Duration COUNTDOWN_DURATION = Duration.ofSeconds(3);
     // 판이 무한히 안 끝나는 것(모두가 계속 타임아웃 등)을 막는 방어적 상한 — 도달하면 현재 HP 순으로 판을 마감한다.
-    private static final int MAX_EXCHANGES_PER_BOUT = 50;
+    private static final int MAX_EXCHANGES_PER_ROUND = 50;
 
     private final RoomRepository roomRepository;
     private final SkillRepository skillRepository;
@@ -138,7 +138,7 @@ public class NinjaGameService {
         log.info("[Service] startSession : 참가자 {}명 저장, 스킬 {}개 셔플 완료", participantTokens.size(), skillIds.size());
 
         gameEventPublisher.publishStarted(room.roomId(), gameId, seq, totalRounds);
-        startBout(room, seq, 1);
+        startRound(room, seq, 1);
     }
 
     // 라운드를 새로 열지 않고 "게임이 시작 안 된 상태"로만 되돌린다 — 프론트의 "게임 초기화" 버튼용.
@@ -216,8 +216,8 @@ public class NinjaGameService {
                 ? buildLastAttack(roomCode, seq, round, exchange)
                 : null;
         // 판 종료 인터미션이면 방금 끝난 판의 순위+획득 점수를 노출한다(공통 GameResult에 이미 저장된 값을 읽음).
-        List<BoutResultEntry> boutResult = (phase == NinjaPhase.INTERMISSION && round != null)
-            ? buildBoutResult(room, seq, round)
+        List<RoundResultEntry> roundResult = (phase == NinjaPhase.INTERMISSION && round != null)
+            ? buildRoundResult(room, seq, round)
             : null;
 
         return new NinjaStateResponse(
@@ -233,13 +233,13 @@ public class NinjaGameService {
             nextRoundAt,
             lastAttack,
             sessionTotals(room, seq),
-            boutResult
+            roundResult
         );
     }
 
     // 방금 끝난 판의 결과 = 그 판의 round results(참가자→획득 점수). 점수 내림차순이 곧 그 판의 순위다.
     // 판이 아직 점수화되지 않았으면(교환 사이/일반 진행) 빈 결과 → null 반환.
-    private List<BoutResultEntry> buildBoutResult(Room room, int seq, int round) {
+    private List<RoundResultEntry> buildRoundResult(Room room, int seq, int round) {
         Map<UUID, Long> results = gameScoreService.getRoundResults(room.roomId(), seq, round);
         if (results.isEmpty()) {
             return null;
@@ -249,7 +249,7 @@ public class NinjaGameService {
                 .thenComparing(e -> e.getKey().toString()))
             .toList();
         return IntStream.range(0, sorted.size())
-            .mapToObj(i -> new BoutResultEntry(sorted.get(i).getKey().toString(), i + 1, sorted.get(i).getValue()))
+            .mapToObj(i -> new RoundResultEntry(sorted.get(i).getKey().toString(), i + 1, sorted.get(i).getValue()))
             .toList();
     }
 
@@ -349,13 +349,13 @@ public class NinjaGameService {
         ninjaRedis.recordAttackResolution(roomCode, seq, round, exchange, damage, hpAfterClamped, eliminated);
 
         int aliveCount = ninjaRedis.getAlivePlayers(roomCode, seq, round).size();
-        boolean boutEnded = aliveCount <= 1 || exchange >= MAX_EXCHANGES_PER_BOUT;
-        log.info("[Service] target : round={} ex={} attacker={} target={} skill={}({}) dmg={} hpAfter={} elim={} 생존={} boutEnded={}",
+        boolean roundEnded = aliveCount <= 1 || exchange >= MAX_EXCHANGES_PER_ROUND;
+        log.info("[Service] target : round={} ex={} attacker={} target={} skill={}({}) dmg={} hpAfter={} elim={} 생존={} roundEnded={}",
             round, exchange, participantToken, targetToken, skill.getName(), skill.getId(),
-            damage, hpAfterClamped, eliminated, aliveCount, boutEnded);
+            damage, hpAfterClamped, eliminated, aliveCount, roundEnded);
 
         boolean ending = false;
-        if (boutEnded) {
+        if (roundEnded) {
             // 판 종료: 이 판의 탈락 순서로 점수를 부여하고, 마지막 판이면 게임을 끝낸다.
             saveBoutScore(room, seq, round);
             ending = isLastRound(roomCode, seq, round);
@@ -369,23 +369,23 @@ public class NinjaGameService {
         ninjaRedis.enterIntermission(roomCode, seq, effectUntil, nextRoundAt);
         eventPublisher.publish(room.roomId(), "ninja:attack-resolved",
             new AttackResolvedPayload(round, exchange, participantToken, targetToken, skill.getId(), damage,
-                hpAfterClamped, eliminated, NinjaPhase.INTERMISSION, effectUntil, nextRoundAt, boutEnded, ending));
+                hpAfterClamped, eliminated, NinjaPhase.INTERMISSION, effectUntil, nextRoundAt, roundEnded, ending));
 
         // 인터미션 종료 시점에 다음 진행을 서버가 연다(전원 동일 타이밍 → 선입력 방지).
-        Runnable next = resolveNext(room, seq, round, exchange, boutEnded, ending);
+        Runnable next = resolveNext(room, seq, round, exchange, roundEnded, ending);
         scheduleIntermissionTask(room, seq, ending ? effectUntil : nextRoundAt, next);
 
         return new TargetResponse(round, exchange, participantToken, targetToken, skill.getId(), damage,
-            hpAfterClamped, eliminated, boutEnded, ending);
+            hpAfterClamped, eliminated, roundEnded, ending);
     }
 
     // 인터미션 이후 무엇을 할지: 게임 종료 / 다음 판 시작 / 같은 판의 다음 교환.
-    private Runnable resolveNext(Room room, int seq, int round, int exchange, boolean boutEnded, boolean ending) {
+    private Runnable resolveNext(Room room, int seq, int round, int exchange, boolean roundEnded, boolean ending) {
         if (ending) {
             return () -> finishGame(room, seq);
         }
-        if (boutEnded) {
-            return () -> startBout(room, seq, round + 1);
+        if (roundEnded) {
+            return () -> startRound(room, seq, round + 1);
         }
         return () -> startExchange(room, seq, round, exchange + 1);
     }
@@ -402,7 +402,7 @@ public class NinjaGameService {
     }
 
     // 판 시작: 전원 풀피로 되살리고(HP/생존/탈락순 리셋) 첫 교환을 연다.
-    private void startBout(Room room, int seq, int round) {
+    private void startRound(Room room, int seq, int round) {
         String roomCode = room.roomCode();
         Set<String> participants = ninjaRedis.getParticipants(roomCode, seq);
         if (participants == null || participants.size() < MIN_PLAYERS) {
@@ -410,9 +410,9 @@ public class NinjaGameService {
             finishGame(room, seq);
             return;
         }
-        ninjaRedis.startBout(roomCode, seq, round, participants, INITIAL_HP);
+        ninjaRedis.startRound(roomCode, seq, round, participants, INITIAL_HP);
         ninjaRedis.setCurrentRound(roomCode, seq, round);
-        log.info("[Service] startBout : round={}/{} 시작 (전원 {}명 풀피 리셋)",
+        log.info("[Service] startRound : round={}/{} 시작 (전원 {}명 풀피 리셋)",
             round, ninjaRedis.getTotalRounds(roomCode, seq), participants.size());
         startExchange(room, seq, round, 1);
     }
@@ -449,9 +449,9 @@ public class NinjaGameService {
         log.info("[Service] handleTimeout : round={} ex={} 제한시간 내 아무도 콤보 완성 못함 — 공격 없이 교환 종료", round, exchange);
 
         // 타임아웃은 탈락이 없어 생존자 수가 그대로다. 상한에 도달했으면 판을 강제 마감, 아니면 다음 교환.
-        boolean boutEnded = exchange >= MAX_EXCHANGES_PER_BOUT;
+        boolean roundEnded = exchange >= MAX_EXCHANGES_PER_ROUND;
         boolean ending = false;
-        if (boutEnded) {
+        if (roundEnded) {
             saveBoutScore(room, seq, round);
             ending = isLastRound(roomCode, seq, round);
         }
@@ -466,11 +466,11 @@ public class NinjaGameService {
         ninjaRedis.enterIntermission(roomCode, seq, null, nextRoundAt);
         eventPublisher.publish(room.roomId(), "ninja:round-timeout",
             new RoundTimeoutPayload(round, exchange, NinjaPhase.INTERMISSION, nextRoundAt));
-        Runnable next = resolveNext(room, seq, round, exchange, boutEnded, false);
+        Runnable next = resolveNext(room, seq, round, exchange, roundEnded, false);
         scheduleIntermissionTask(room, seq, nextRoundAt, next);
     }
 
-    // 이 판(bout)의 결과를 순위로 환산해 점수를 저장한다 — 생존자는 HP 내림차순, 그다음 이 판의 탈락자를
+    // 이 판(round)의 결과를 순위로 환산해 점수를 저장한다 — 생존자는 HP 내림차순, 그다음 이 판의 탈락자를
     // 늦게 탈락한 순서로 이어붙인다. 최후 1인으로 끝난 정상 판이면 [생존자, 마지막탈락, ..., 첫탈락] 형태.
     private void saveBoutScore(Room room, int seq, int round) {
         List<UUID> participantIdsByRank = buildBoutRanking(room, seq, round).stream()
@@ -478,7 +478,7 @@ public class NinjaGameService {
             .toList();
         SaveRoundResult result = gameScoreService.saveRoundRanking(room.roomId(), seq, round, participantIdsByRank);
         if (result != SaveRoundResult.SUCCESS && result != SaveRoundResult.ALREADY_SAVED) {
-            throw new IllegalStateException("Failed to save ninja bout score: " + result);
+            throw new IllegalStateException("Failed to save ninja round score: " + result);
         }
     }
 
