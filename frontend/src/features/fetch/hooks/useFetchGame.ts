@@ -148,7 +148,17 @@ export function useFetchGame() {
   const pickTarget = useCallback(async () => {
     if (fixedTargetRef.current) return fixedTargetRef.current;
     if (labelPoolRef.current.length === 0) {
-      labelPoolRef.current = await aiApi.labels();
+      try {
+        labelPoolRef.current = await aiApi.labels();
+      } catch {
+        // 공개 서빙 모드에선 AI 서버의 /dev/labels가 게이트(404)라 폴백 풀을 쓴다.
+        // ⚠ AI ai/app/labels.py의 MISSION_POOL 키와 문자열이 정확히 일치해야 함(판정 매칭 기준).
+        //   제시어 주체가 Spring 미션 API로 넘어가면 이 폴백과 aiApi.labels() 모두 제거.
+        labelPoolRef.current = [
+          '휴대폰', '마우스', '가위', '숟가락', '안경', '칫솔',
+          '라면', '헤어드라이어', '우산', '그릇', '모자', '가방',
+        ];
+      }
     }
     const remaining = labelPoolRef.current.filter((label) => !usedTargetsRef.current.has(label));
     // 풀이 바닥나면(라운드 > 풀 크기) 그때만 전체에서 다시 뽑는다
