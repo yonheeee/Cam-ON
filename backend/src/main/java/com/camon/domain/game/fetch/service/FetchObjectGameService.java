@@ -3,14 +3,20 @@ package com.camon.domain.game.fetch.service;
 import com.camon.domain.game.common.Mission;
 import com.camon.domain.game.common.event.GameSessionFinishedEvent;
 import com.camon.domain.game.common.repository.MissionRepository;
+import com.camon.domain.game.common.repository.SaveRoundResult;
 import com.camon.domain.game.common.service.GameScoreService;
 import com.camon.domain.game.common.ws.GameEventPublisher;
 import com.camon.domain.game.fetch.domain.FetchObjectMissionCatalog;
+import com.camon.domain.game.fetch.dto.FetchSubmissionRequest;
+import com.camon.domain.game.fetch.dto.FetchSubmissionResponse;
 import com.camon.domain.game.fetch.repository.FetchObjectRedisRepository;
+import com.camon.domain.game.fetch.repository.FetchSubmissionClaimResult;
+import com.camon.domain.game.fetch.repository.FetchSubmissionStatus;
 import com.camon.domain.game.fetch.ws.FetchObjectEventPublisher;
 import com.camon.domain.game.fetch.ws.payload.FetchGameEndedPayload;
 import com.camon.domain.game.fetch.ws.payload.FetchRoundEndedPayload;
 import com.camon.domain.game.fetch.ws.payload.FetchRoundStartedPayload;
+import com.camon.domain.game.fetch.ws.payload.FetchRoundSuccessPayload;
 import com.camon.domain.game.fetch.ws.payload.FetchScoreEntry;
 import com.camon.domain.room.domain.ConnectionStatus;
 import com.camon.domain.room.domain.Participant;
@@ -122,6 +128,57 @@ public class FetchObjectGameService {
         startRound(room, sessionSeq, 1, totalRounds);
     }
 
+    public FetchSubmissionResponse submit(
+        Room room,
+        UUID participantId,
+        FetchSubmissionRequest request
+    ) {
+        int sessionSeq = room.currentSessionSeq();
+        FetchSubmissionClaimResult result = fetchRedis.claimSubmission(
+            room.roomCode(),
+            sessionSeq,
+            request.round(),
+            participantId,
+            clock.instant()
+        );
+        validateSubmission(result.status());
+
+        long score = fetchRedis.scoreForRank(result.rank());
+        fetchEventPublisher.publish(
+            room.roomId(),
+            "round:success",
+            new FetchRoundSuccessPayload(
+                participantId,
+                result.rank(),
+                score
+            )
+        );
+        if (result.allParticipantsSubmitted()) {
+            Integer totalRounds = fetchRedis.getTotalRounds(
+                room.roomCode(),
+                sessionSeq
+            );
+            if (totalRounds == null) {
+                throw new BusinessException(
+                    ErrorCode.FETCH_OBJECT_SESSION_NOT_FOUND
+                );
+            }
+            completeRound(
+                room,
+                sessionSeq,
+                request.round(),
+                totalRounds,
+                Instant.ofEpochMilli(result.deadlineAt())
+            );
+        }
+        return new FetchSubmissionResponse(
+            request.round(),
+            participantId,
+            result.rank(),
+            score
+        );
+    }
+
     private void startRound(
         Room room,
         int sessionSeq,
@@ -191,6 +248,22 @@ public class FetchObjectGameService {
         Instant expectedDeadlineAt
     ) {
         pendingTimeouts.remove(timerKey(room.roomCode(), sessionSeq));
+        completeRound(
+            room,
+            sessionSeq,
+            round,
+            totalRounds,
+            expectedDeadlineAt
+        );
+    }
+
+    private void completeRound(
+        Room room,
+        int sessionSeq,
+        int round,
+        int totalRounds,
+        Instant expectedDeadlineAt
+    ) {
         Instant endedAt = clock.instant();
         if (!fetchRedis.closeRoundIfPlaying(
             room.roomCode(),
@@ -202,13 +275,32 @@ public class FetchObjectGameService {
             return;
         }
 
+        cancelPendingTimeout(room.roomCode(), sessionSeq);
+        Map<UUID, Long> roundScores = buildRoundScores(
+            room.roomCode(),
+            sessionSeq,
+            round
+        );
+        SaveRoundResult saveResult = gameScoreService.saveRoundScores(
+            room.roomId(),
+            sessionSeq,
+            round,
+            roundScores
+        );
+        if (saveResult != SaveRoundResult.SUCCESS
+            && saveResult != SaveRoundResult.ALREADY_SAVED) {
+            throw new IllegalStateException(
+                "Failed to save fetch round scores: " + saveResult
+            );
+        }
         fetchEventPublisher.publish(
             room.roomId(),
             "round:end",
             new FetchRoundEndedPayload(
                 round,
                 totalRounds,
-                endedAt.toEpochMilli()
+                endedAt.toEpochMilli(),
+                buildScoreEntries(roundScores)
             )
         );
         if (round >= totalRounds) {
@@ -216,6 +308,29 @@ public class FetchObjectGameService {
             return;
         }
         startRound(room, sessionSeq, round + 1, totalRounds);
+    }
+
+    private Map<UUID, Long> buildRoundScores(
+        String roomCode,
+        int sessionSeq,
+        int round
+    ) {
+        LinkedHashMap<UUID, Long> scores = new LinkedHashMap<>();
+        fetchRedis.getParticipants(roomCode, sessionSeq).stream()
+            .sorted()
+            .forEach(participantId -> scores.put(participantId, 0L));
+        List<UUID> submissionOrder = fetchRedis.getSubmissionOrder(
+            roomCode,
+            sessionSeq,
+            round
+        );
+        for (int index = 0; index < submissionOrder.size(); index++) {
+            scores.put(
+                submissionOrder.get(index),
+                fetchRedis.scoreForRank(index + 1)
+            );
+        }
+        return Map.copyOf(scores);
     }
 
     private void finishGame(Room room, int sessionSeq) {
@@ -243,11 +358,19 @@ public class FetchObjectGameService {
             room.roomId(),
             sessionSeq
         );
-        List<Map.Entry<UUID, Long>> sorted = participants.stream()
-            .map(participantId -> Map.entry(
-                participantId,
-                totals.getOrDefault(participantId, 0L)
-            ))
+        Map<UUID, Long> participantTotals = participants.stream()
+            .collect(Collectors.toMap(
+                participantId -> participantId,
+                participantId -> totals.getOrDefault(participantId, 0L)
+            ));
+        return buildScoreEntries(participantTotals);
+    }
+
+    private List<FetchScoreEntry> buildScoreEntries(
+        Map<UUID, Long> scoreByParticipant
+    ) {
+        List<Map.Entry<UUID, Long>> sorted = scoreByParticipant.entrySet()
+            .stream()
             .sorted(
                 Comparator.<Map.Entry<UUID, Long>>comparingLong(
                     Map.Entry::getValue
@@ -270,6 +393,28 @@ public class FetchObjectGameService {
             previousRank = rank;
         }
         return List.copyOf(scores);
+    }
+
+    private static void validateSubmission(FetchSubmissionStatus status) {
+        ErrorCode errorCode = switch (status) {
+            case SUCCESS -> null;
+            case SESSION_NOT_FOUND ->
+                ErrorCode.FETCH_OBJECT_SESSION_NOT_FOUND;
+            case ROUND_NOT_FOUND ->
+                ErrorCode.FETCH_OBJECT_ROUND_NOT_FOUND;
+            case STALE_ROUND -> ErrorCode.FETCH_OBJECT_STALE_ROUND;
+            case ROUND_CLOSED -> ErrorCode.FETCH_OBJECT_ROUND_CLOSED;
+            case COUNTDOWN_ACTIVE ->
+                ErrorCode.FETCH_OBJECT_COUNTDOWN_ACTIVE;
+            case ROUND_EXPIRED -> ErrorCode.FETCH_OBJECT_ROUND_EXPIRED;
+            case PARTICIPANT_NOT_FOUND ->
+                ErrorCode.FETCH_OBJECT_PARTICIPANT_NOT_FOUND;
+            case ALREADY_SUBMITTED ->
+                ErrorCode.FETCH_OBJECT_ALREADY_SUBMITTED;
+        };
+        if (errorCode != null) {
+            throw new BusinessException(errorCode);
+        }
     }
 
     private List<Long> selectMissionOrder(Long gameId, int totalRounds) {

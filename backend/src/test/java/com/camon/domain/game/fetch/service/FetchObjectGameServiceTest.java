@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
@@ -15,13 +16,19 @@ import com.camon.domain.game.common.Game;
 import com.camon.domain.game.common.Mission;
 import com.camon.domain.game.common.event.GameSessionFinishedEvent;
 import com.camon.domain.game.common.repository.MissionRepository;
+import com.camon.domain.game.common.repository.SaveRoundResult;
 import com.camon.domain.game.common.service.GameScoreService;
 import com.camon.domain.game.common.ws.GameEventPublisher;
 import com.camon.domain.game.fetch.domain.FetchObjectMissionCatalog;
+import com.camon.domain.game.fetch.dto.FetchSubmissionRequest;
+import com.camon.domain.game.fetch.dto.FetchSubmissionResponse;
 import com.camon.domain.game.fetch.repository.FetchObjectRedisRepository;
+import com.camon.domain.game.fetch.repository.FetchSubmissionClaimResult;
+import com.camon.domain.game.fetch.repository.FetchSubmissionStatus;
 import com.camon.domain.game.fetch.ws.FetchObjectEventPublisher;
 import com.camon.domain.game.fetch.ws.payload.FetchGameEndedPayload;
 import com.camon.domain.game.fetch.ws.payload.FetchRoundStartedPayload;
+import com.camon.domain.game.fetch.ws.payload.FetchRoundSuccessPayload;
 import com.camon.domain.room.domain.ConnectionStatus;
 import com.camon.domain.room.domain.Participant;
 import com.camon.domain.room.domain.Room;
@@ -165,6 +172,17 @@ class FetchObjectGameServiceTest {
         );
         when(fetchRedis.getParticipants(ROOM_CODE, SESSION_SEQ))
             .thenReturn(participantIds);
+        when(fetchRedis.getSubmissionOrder(
+            eq(ROOM_CODE),
+            eq(SESSION_SEQ),
+            anyInt()
+        )).thenReturn(List.of());
+        when(gameScoreService.saveRoundScores(
+            eq(ROOM_ID),
+            eq(SESSION_SEQ),
+            anyInt(),
+            anyMap()
+        )).thenReturn(SaveRoundResult.SUCCESS);
         when(gameScoreService.getSessionTotals(ROOM_ID, SESSION_SEQ))
             .thenReturn(Map.of());
 
@@ -206,6 +224,108 @@ class FetchObjectGameServiceTest {
         assertThat(internalEventCaptor.getValue()).isEqualTo(
             new GameSessionFinishedEvent(ROOM_ID, SESSION_SEQ)
         );
+        verify(gameScoreService, times(2)).saveRoundScores(
+            eq(ROOM_ID),
+            eq(SESSION_SEQ),
+            anyInt(),
+            anyMap()
+        );
+    }
+
+    @Test
+    void acceptsSubmissionAndPublishesServerAssignedRank() {
+        UUID participantId = participants.get(0).participantId();
+        when(fetchRedis.claimSubmission(
+            ROOM_CODE,
+            SESSION_SEQ,
+            1,
+            participantId,
+            NOW
+        )).thenReturn(new FetchSubmissionClaimResult(
+            FetchSubmissionStatus.SUCCESS,
+            1,
+            1,
+            2,
+            NOW.plusSeconds(23).toEpochMilli()
+        ));
+        when(fetchRedis.scoreForRank(1)).thenReturn(5L);
+
+        FetchSubmissionResponse response = service.submit(
+            room,
+            participantId,
+            new FetchSubmissionRequest(1, 0.91, 0.87)
+        );
+
+        assertThat(response).isEqualTo(
+            new FetchSubmissionResponse(1, participantId, 1, 5L)
+        );
+        verify(fetchEventPublisher).publish(
+            ROOM_ID,
+            "round:success",
+            new FetchRoundSuccessPayload(participantId, 1, 5L)
+        );
+    }
+
+    @Test
+    void lastSubmissionEndsRoundAndPersistsRankingScores() {
+        UUID first = participants.get(0).participantId();
+        UUID second = participants.get(1).participantId();
+        when(fetchRedis.claimSubmission(
+            ROOM_CODE,
+            SESSION_SEQ,
+            1,
+            second,
+            NOW
+        )).thenReturn(new FetchSubmissionClaimResult(
+            FetchSubmissionStatus.SUCCESS,
+            2,
+            2,
+            2,
+            NOW.plusSeconds(23).toEpochMilli()
+        ));
+        when(fetchRedis.scoreForRank(1)).thenReturn(5L);
+        when(fetchRedis.scoreForRank(2)).thenReturn(4L);
+        when(fetchRedis.getTotalRounds(ROOM_CODE, SESSION_SEQ))
+            .thenReturn(1);
+        when(fetchRedis.closeRoundIfPlaying(
+            ROOM_CODE,
+            SESSION_SEQ,
+            1,
+            NOW.plusSeconds(23),
+            NOW
+        )).thenReturn(true);
+        when(fetchRedis.getParticipants(ROOM_CODE, SESSION_SEQ))
+            .thenReturn(Set.of(first, second));
+        when(fetchRedis.getSubmissionOrder(ROOM_CODE, SESSION_SEQ, 1))
+            .thenReturn(List.of(first, second));
+        when(gameScoreService.saveRoundScores(
+            eq(ROOM_ID),
+            eq(SESSION_SEQ),
+            eq(1),
+            anyMap()
+        )).thenReturn(SaveRoundResult.SUCCESS);
+        when(gameScoreService.getSessionTotals(ROOM_ID, SESSION_SEQ))
+            .thenReturn(Map.of(first, 5L, second, 4L));
+
+        service.submit(
+            room,
+            second,
+            new FetchSubmissionRequest(1, null, null)
+        );
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Map<UUID, Long>> scoresCaptor =
+            ArgumentCaptor.forClass(Map.class);
+        verify(gameScoreService).saveRoundScores(
+            eq(ROOM_ID),
+            eq(SESSION_SEQ),
+            eq(1),
+            scoresCaptor.capture()
+        );
+        assertThat(scoresCaptor.getValue())
+            .containsEntry(first, 5L)
+            .containsEntry(second, 4L);
+        verify(fetchRedis).markSessionEnded(ROOM_CODE, SESSION_SEQ);
     }
 
     private void stubPlayableSession(int totalRounds) {

@@ -19,6 +19,48 @@ public class FetchObjectRedisRepository {
     private static final String STATUS_FIELD = "fetch_status";
     private static final String PLAYING = "PLAYING";
     private static final String ENDED = "ENDED";
+    private static final List<Long> POINTS_BY_RANK =
+        List.of(5L, 4L, 3L, 2L);
+
+    private static final DefaultRedisScript<List> CLAIM_SUBMISSION_SCRIPT =
+        new DefaultRedisScript<>("""
+            if redis.call('HGET', KEYS[1], 'fetch_status') == false then
+                return {1, 0, 0, 0, 0}
+            end
+            local currentRound = redis.call(
+                'HGET', KEYS[1], 'fetch_current_round')
+            if currentRound ~= ARGV[1] then
+                return {3, 0, 0, 0, 0}
+            end
+            if redis.call('EXISTS', KEYS[2]) == 0 then
+                return {2, 0, 0, 0, 0}
+            end
+            if redis.call('HGET', KEYS[2], 'status') ~= 'PLAYING' then
+                return {4, 0, 0, 0, 0}
+            end
+            if redis.call('SISMEMBER', KEYS[3], ARGV[2]) == 0 then
+                return {7, 0, 0, 0, 0}
+            end
+            local now = tonumber(ARGV[3])
+            local opensAt = tonumber(redis.call(
+                'HGET', KEYS[2], 'submission_opens_at'))
+            local deadlineAt = tonumber(redis.call(
+                'HGET', KEYS[2], 'deadline_at'))
+            if now < opensAt then
+                return {5, 0, 0, 0, deadlineAt}
+            end
+            if now > deadlineAt then
+                return {6, 0, 0, 0, deadlineAt}
+            end
+            if redis.call('ZSCORE', KEYS[4], ARGV[2]) ~= false then
+                return {8, 0, 0, 0, deadlineAt}
+            end
+            local rank = redis.call('ZCARD', KEYS[4]) + 1
+            local arrivalOrder = now * 10 + rank
+            redis.call('ZADD', KEYS[4], arrivalOrder, ARGV[2])
+            local participantCount = redis.call('SCARD', KEYS[3])
+            return {0, rank, rank, participantCount, deadlineAt}
+            """, List.class);
 
     private static final DefaultRedisScript<Long> CLOSE_ROUND_SCRIPT =
         new DefaultRedisScript<>("""
@@ -51,6 +93,13 @@ public class FetchObjectRedisRepository {
         keys.add(FetchObjectRedisKeys.missionOrder(roomCode, sessionSeq));
         for (int round = 1; round <= MAX_ROUNDS; round++) {
             keys.add(FetchObjectRedisKeys.round(roomCode, sessionSeq, round));
+            keys.add(
+                FetchObjectRedisKeys.submissions(
+                    roomCode,
+                    sessionSeq,
+                    round
+                )
+            );
         }
         redis.delete(keys);
         redis.opsForHash().delete(
@@ -98,6 +147,22 @@ public class FetchObjectRedisRepository {
             round - 1L
         );
         return value == null ? null : Long.valueOf(value);
+    }
+
+    public Long getGameId(String roomCode, int sessionSeq) {
+        Object value = redis.opsForHash().get(
+            FetchObjectRedisKeys.session(roomCode, sessionSeq),
+            "game_id"
+        );
+        return value == null ? null : Long.valueOf(value.toString());
+    }
+
+    public Integer getTotalRounds(String roomCode, int sessionSeq) {
+        Object value = redis.opsForHash().get(
+            FetchObjectRedisKeys.session(roomCode, sessionSeq),
+            "total_rounds"
+        );
+        return value == null ? null : Integer.valueOf(value.toString());
     }
 
     public void openRound(
@@ -150,6 +215,67 @@ public class FetchObjectRedisRepository {
         return result != null && result == 1L;
     }
 
+    public FetchSubmissionClaimResult claimSubmission(
+        String roomCode,
+        int sessionSeq,
+        int round,
+        UUID participantId,
+        Instant receivedAt
+    ) {
+        List<?> result = redis.execute(
+            CLAIM_SUBMISSION_SCRIPT,
+            List.of(
+                FetchObjectRedisKeys.session(roomCode, sessionSeq),
+                FetchObjectRedisKeys.round(roomCode, sessionSeq, round),
+                FetchObjectRedisKeys.participants(roomCode, sessionSeq),
+                FetchObjectRedisKeys.submissions(
+                    roomCode,
+                    sessionSeq,
+                    round
+                )
+            ),
+            Integer.toString(round),
+            participantId.toString(),
+            Long.toString(receivedAt.toEpochMilli())
+        );
+        if (result == null || result.size() != 5) {
+            throw new IllegalStateException(
+                "Redis fetch submission script returned an invalid result"
+            );
+        }
+        int statusCode = numberAt(result, 0).intValue();
+        return new FetchSubmissionClaimResult(
+            statusFrom(statusCode),
+            numberAt(result, 1).intValue(),
+            numberAt(result, 2).intValue(),
+            numberAt(result, 3).intValue(),
+            numberAt(result, 4).longValue()
+        );
+    }
+
+    public List<UUID> getSubmissionOrder(
+        String roomCode,
+        int sessionSeq,
+        int round
+    ) {
+        Set<String> values = redis.opsForZSet().range(
+            FetchObjectRedisKeys.submissions(roomCode, sessionSeq, round),
+            0,
+            -1
+        );
+        if (values == null || values.isEmpty()) {
+            return List.of();
+        }
+        return values.stream().map(UUID::fromString).toList();
+    }
+
+    public long scoreForRank(int rank) {
+        if (rank < 1 || rank > POINTS_BY_RANK.size()) {
+            return 0L;
+        }
+        return POINTS_BY_RANK.get(rank - 1);
+    }
+
     public Set<UUID> getParticipants(String roomCode, int sessionSeq) {
         Set<String> values = redis.opsForSet().members(
             FetchObjectRedisKeys.participants(roomCode, sessionSeq)
@@ -171,5 +297,30 @@ public class FetchObjectRedisRepository {
             STATUS_FIELD,
             ENDED
         );
+    }
+
+    private static Number numberAt(List<?> values, int index) {
+        Object value = values.get(index);
+        if (value instanceof Number number) {
+            return number;
+        }
+        return Long.valueOf(value.toString());
+    }
+
+    private static FetchSubmissionStatus statusFrom(int code) {
+        return switch (code) {
+            case 0 -> FetchSubmissionStatus.SUCCESS;
+            case 1 -> FetchSubmissionStatus.SESSION_NOT_FOUND;
+            case 2 -> FetchSubmissionStatus.ROUND_NOT_FOUND;
+            case 3 -> FetchSubmissionStatus.STALE_ROUND;
+            case 4 -> FetchSubmissionStatus.ROUND_CLOSED;
+            case 5 -> FetchSubmissionStatus.COUNTDOWN_ACTIVE;
+            case 6 -> FetchSubmissionStatus.ROUND_EXPIRED;
+            case 7 -> FetchSubmissionStatus.PARTICIPANT_NOT_FOUND;
+            case 8 -> FetchSubmissionStatus.ALREADY_SUBMITTED;
+            default -> throw new IllegalStateException(
+                "Unknown fetch submission status: " + code
+            );
+        };
     }
 }

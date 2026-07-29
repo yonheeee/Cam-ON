@@ -20,4 +20,12 @@ final class FetchObjectRedisKeys {
     static String round(String roomCode, int sessionSeq, int round) {
         return session(roomCode, sessionSeq) + ":fetch:round:" + round;
     }
+
+    static String submissions(
+        String roomCode,
+        int sessionSeq,
+        int round
+    ) {
+        return round(roomCode, sessionSeq, round) + ":submissions";
+    }
 }

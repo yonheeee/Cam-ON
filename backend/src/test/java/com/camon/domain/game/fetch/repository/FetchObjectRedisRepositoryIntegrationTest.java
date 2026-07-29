@@ -99,4 +99,73 @@ class FetchObjectRedisRepositoryIntegrationTest {
             startedAt.plusSeconds(24)
         )).isFalse();
     }
+
+    @Test
+    void claimsSubmissionsAtomicallyInRedisArrivalOrder() {
+        String roomCode = "CD34EF";
+        int sessionSeq = 2;
+        UUID first = UUID.randomUUID();
+        UUID second = UUID.randomUUID();
+        Instant startedAt = Instant.parse("2026-07-29T00:00:00Z");
+        Instant receivedAt = startedAt.plusSeconds(3);
+
+        repository.initialize(
+            roomCode,
+            sessionSeq,
+            2L,
+            2,
+            List.of(first, second),
+            List.of(10L, 11L)
+        );
+        repository.openRound(
+            roomCode,
+            sessionSeq,
+            1,
+            10L,
+            "마우스",
+            startedAt,
+            receivedAt,
+            startedAt.plusSeconds(23)
+        );
+
+        FetchSubmissionClaimResult firstResult =
+            repository.claimSubmission(
+                roomCode,
+                sessionSeq,
+                1,
+                first,
+                receivedAt
+            );
+        FetchSubmissionClaimResult secondResult =
+            repository.claimSubmission(
+                roomCode,
+                sessionSeq,
+                1,
+                second,
+                receivedAt
+            );
+        FetchSubmissionClaimResult duplicateResult =
+            repository.claimSubmission(
+                roomCode,
+                sessionSeq,
+                1,
+                first,
+                receivedAt
+            );
+
+        assertThat(firstResult.status())
+            .isEqualTo(FetchSubmissionStatus.SUCCESS);
+        assertThat(firstResult.rank()).isEqualTo(1);
+        assertThat(secondResult.status())
+            .isEqualTo(FetchSubmissionStatus.SUCCESS);
+        assertThat(secondResult.rank()).isEqualTo(2);
+        assertThat(secondResult.allParticipantsSubmitted()).isTrue();
+        assertThat(duplicateResult.status())
+            .isEqualTo(FetchSubmissionStatus.ALREADY_SUBMITTED);
+        assertThat(repository.getSubmissionOrder(roomCode, sessionSeq, 1))
+            .containsExactly(first, second);
+        assertThat(repository.getGameId(roomCode, sessionSeq)).isEqualTo(2L);
+        assertThat(repository.getTotalRounds(roomCode, sessionSeq))
+            .isEqualTo(2);
+    }
 }
