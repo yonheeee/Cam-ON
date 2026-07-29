@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ninjaApi,
   NinjaApiError,
-  type BoutResultEntry,
+  type RoundResultEntry,
   type LastAttack,
   type NinjaPhase,
   type RankingEntry,
@@ -30,7 +30,7 @@ export function useNinjaRound(
   comboConfidence: number,
 ) {
   const [round, setRound] = useState<number | null>(null);
-  // round=판(bout), exchange=판 안의 교환. 판이 이어지는 동안 exchange가 늘고, 판이 바뀌면 1로 리셋된다.
+  // round=판(round), exchange=판 안의 교환. 판이 이어지는 동안 exchange가 늘고, 판이 바뀌면 1로 리셋된다.
   const [exchange, setExchange] = useState<number | null>(null);
   const [totalRounds, setTotalRounds] = useState<number | null>(null);
   const [alivePlayers, setAlivePlayers] = useState<string[]>([]);
@@ -50,7 +50,7 @@ export function useNinjaRound(
   // "공격 성공" 표시를 판단한다 — 콤보를 완성해도 남이 먼저 선점했으면 여기엔 안 들어온다.
   const [attackAckKey, setAttackAckKey] = useState<string | null>(null);
   // 방금 끝난 판의 순위+획득 점수(판 종료 인터미션 동안만 채워짐).
-  const [boutResult, setBoutResult] = useState<BoutResultEntry[] | null>(null);
+  const [roundResult, setRoundResult] = useState<RoundResultEntry[] | null>(null);
 
   // requiredSkill이 실제로 바뀔 때만(=라운드 전환) 새 배열이 되도록 메모.
   // 그냥 매 렌더 .map()을 새로 만들면 참조가 매번 달라져서, useSequenceProgress의
@@ -98,7 +98,7 @@ export function useNinjaRound(
       setNextRoundAt(state.nextRoundAt ? Date.parse(state.nextRoundAt) : null);
       setLastAttack(state.lastAttack);
       setSessionTotals(state.sessionTotals ?? {});
-      setBoutResult(state.boutResult ?? null);
+      setRoundResult(state.roundResult ?? null);
     } catch {
       // 세션이 아직 없으면 404 — 조용히 무시하고 다음 폴링을 기다린다.
     }
@@ -298,6 +298,6 @@ export function useNinjaRound(
     inCountdown,
     countdownSeconds,
     lastAttack,
-    boutResult,
+    roundResult,
   };
 }

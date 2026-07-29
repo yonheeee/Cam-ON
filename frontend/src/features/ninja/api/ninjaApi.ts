@@ -62,7 +62,7 @@ export interface TargetResponse {
   targetHpAfter: number;
   targetEliminated: boolean;
   // 이 교환으로 판이 끝났는가(최후 1인).
-  boutEnded: boolean;
+  roundEnded: boolean;
   // 이 공격이 게임 전체를 끝냈는가(마지막 판 종료).
   gameEnded: boolean;
 }
@@ -72,8 +72,8 @@ export interface RankingEntry {
   rank: number;
 }
 
-// 방금 끝난 판(bout)의 순위 한 줄 — 그 판의 등수와 그 판으로 얻은 점수.
-export interface BoutResultEntry {
+// 방금 끝난 판(round)의 순위 한 줄 — 그 판의 등수와 그 판으로 얻은 점수.
+export interface RoundResultEntry {
   token: string;
   rank: number;
   points: number;
@@ -112,7 +112,7 @@ export interface NinjaStateResponse {
   // 판을 가로질러 누적된 참가자별 점수(최종 발표 합산용).
   sessionTotals: Record<string, number>;
   // 방금 끝난 판의 순위+획득 점수. 판 종료 인터미션 동안에만 채워지고, 그 외엔 null.
-  boutResult: BoutResultEntry[] | null;
+  roundResult: RoundResultEntry[] | null;
 }
 
 export class NinjaApiError extends Error {

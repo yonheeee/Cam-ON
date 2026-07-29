@@ -203,7 +203,7 @@ class NinjaGameServiceTest {
     }
 
     @Test
-    void attack_throws_whenParticipantNotAliveInThisBout() {
+    void attack_throws_whenParticipantNotAliveInThisRound() {
         when(ninjaRedis.getCurrentRound(roomCode, seq)).thenReturn(round);
         when(ninjaRedis.getCurrentExchange(roomCode, seq)).thenReturn(exchange);
         when(ninjaRedis.isAlive(roomCode, seq, round, attacker)).thenReturn(false);
@@ -247,7 +247,7 @@ class NinjaGameServiceTest {
 
         assertThat(response.targetHpAfter()).isEqualTo(80);
         assertThat(response.targetEliminated()).isFalse();
-        assertThat(response.boutEnded()).isFalse();
+        assertThat(response.roundEnded()).isFalse();
         assertThat(response.gameEnded()).isFalse();
 
         verify(ninjaRedis, never()).eliminate(any(), anyInt(), anyInt(), any(), any());
@@ -259,11 +259,11 @@ class NinjaGameServiceTest {
         // 다음 교환이 같은 판(round)에서 exchange+1로 열린다.
         verify(ninjaRedis).openExchange(eq(roomCode), eq(seq), eq(round), eq(exchange + 1), eq(10L), any(Instant.class));
         verify(ninjaRedis).setCurrentExchange(roomCode, seq, exchange + 1);
-        verify(ninjaRedis, never()).startBout(any(), anyInt(), anyInt(), any(), anyInt());
+        verify(ninjaRedis, never()).startRound(any(), anyInt(), anyInt(), any(), anyInt());
     }
 
     @Test
-    void target_endsBoutAndStartsNextBout_whenOneSurvivorRemains_notLastRound() {
+    void target_endsRoundAndStartsNextRound_whenOneSurvivorRemains_notLastRound() {
         stubTargetCommon();
         when(ninjaRedis.decrementHp(roomCode, seq, round, target, 20)).thenReturn(-5L);
         // 대상 탈락 → 판에 1명만 생존 → 판 종료.
@@ -278,7 +278,7 @@ class NinjaGameServiceTest {
         TargetResponse response = service.target(roomId, round, attacker, new TargetRequest(target));
 
         assertThat(response.targetEliminated()).isTrue();
-        assertThat(response.boutEnded()).isTrue();
+        assertThat(response.roundEnded()).isTrue();
         assertThat(response.gameEnded()).isFalse();
 
         verify(ninjaRedis).eliminate(eq(roomCode), eq(seq), eq(round), eq(target), any(Instant.class));
@@ -287,13 +287,13 @@ class NinjaGameServiceTest {
 
         captureScheduledTask().run();
         // 다음 판(round+1)이 열린다 — 전원 리셋 후 첫 교환.
-        verify(ninjaRedis).startBout(eq(roomCode), eq(seq), eq(round + 1), any(), eq(100));
+        verify(ninjaRedis).startRound(eq(roomCode), eq(seq), eq(round + 1), any(), eq(100));
         verify(ninjaRedis).setCurrentRound(roomCode, seq, round + 1);
         verify(ninjaRedis).openExchange(eq(roomCode), eq(seq), eq(round + 1), eq(1), eq(20L), any(Instant.class));
     }
 
     @Test
-    void target_endsGame_whenLastRoundBoutEnds() {
+    void target_endsGame_whenLastRoundEnds() {
         int lastRound = 3;
         when(ninjaRedis.getCurrentRound(roomCode, seq)).thenReturn(lastRound);
         when(ninjaRedis.getCurrentExchange(roomCode, seq)).thenReturn(exchange);
@@ -315,10 +315,10 @@ class NinjaGameServiceTest {
 
         TargetResponse response = service.target(roomId, lastRound, attacker, new TargetRequest(target));
 
-        assertThat(response.boutEnded()).isTrue();
+        assertThat(response.roundEnded()).isTrue();
         assertThat(response.gameEnded()).isTrue();
         verify(gameScoreService).saveRoundRanking(roomId, seq, lastRound, List.of(p1, p2, p3));
-        verify(ninjaRedis, never()).startBout(any(), anyInt(), anyInt(), any(), anyInt());
+        verify(ninjaRedis, never()).startRound(any(), anyInt(), anyInt(), any(), anyInt());
 
         captureScheduledTask().run(); // 이펙트 종료 시점의 마무리 태스크
         ArgumentCaptor<Object> payloadCaptor = ArgumentCaptor.forClass(Object.class);
@@ -370,7 +370,7 @@ class NinjaGameServiceTest {
     // ---- startSession ----
 
     @Test
-    void startSession_clearsThenShufflesAndStartsFirstBout() {
+    void startSession_clearsThenShufflesAndStartsFirstRound() {
         Set<String> tokens = Set.of(attacker, target, third);
         when(skillRepository.findAllIds()).thenReturn(List.of(10L, 20L, 30L));
         when(ninjaRedis.getParticipants(roomCode, seq)).thenReturn(tokens);
@@ -386,7 +386,7 @@ class NinjaGameServiceTest {
         verify(ninjaRedis).setGameId(roomCode, seq, 3L);
         verify(ninjaRedis).saveParticipants(roomCode, seq, tokens);
         // 첫 판 시작: 전원 풀피 리셋 + 첫 교환 오픈.
-        verify(ninjaRedis).startBout(eq(roomCode), eq(seq), eq(1), any(), eq(100));
+        verify(ninjaRedis).startRound(eq(roomCode), eq(seq), eq(1), any(), eq(100));
         verify(ninjaRedis).setCurrentRound(roomCode, seq, 1);
         verify(ninjaRedis).openExchange(eq(roomCode), eq(seq), eq(1), eq(1), eq(10L), any(Instant.class));
         verify(gameEventPublisher).publishStarted(roomId, 3L, seq, 5);

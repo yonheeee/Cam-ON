@@ -337,7 +337,7 @@
 
 /* --- 판 종료 결과 창 (라운드별 순위 + 획득 점수) --- */
 
-.ninja-panel__bout-result {
+.ninja-panel__round-result {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -346,28 +346,28 @@
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.08);
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
-  animation: ninja-bout-result-in 0.3s ease-out;
+  animation: ninja-round-result-in 0.3s ease-out;
 }
 
-@keyframes ninja-bout-result-in {
+@keyframes ninja-round-result-in {
   from { transform: scale(0.9); opacity: 0; }
   to { transform: scale(1); opacity: 1; }
 }
 
-.ninja-panel__bout-result-title {
+.ninja-panel__round-result-title {
   font-size: 1.15rem;
   font-weight: 800;
   color: #ffd400;
 }
 
-.ninja-panel__bout-result ol {
+.ninja-panel__round-result ol {
   list-style: none;
   padding: 0;
   margin: 0;
   min-width: 12rem;
 }
 
-.ninja-panel__bout-result li {
+.ninja-panel__round-result li {
   display: flex;
   justify-content: space-between;
   gap: 1rem;
@@ -375,17 +375,17 @@
   border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-.ninja-panel__bout-result li:first-child {
+.ninja-panel__round-result li:first-child {
   border-top: none;
   font-weight: 700;
 }
 
-.ninja-panel__bout-result-points {
+.ninja-panel__round-result-points {
   color: #7ee081;
   font-weight: 700;
 }
 
-.ninja-panel__bout-result-next {
+.ninja-panel__round-result-next {
   margin-top: 0.4rem;
   font-size: 0.95rem;
   opacity: 0.85;
