@@ -42,10 +42,10 @@ export interface Course {
   currentSessionSeq: number;
 }
 
-/** 저장 요청용 — 서버는 리스트 순서를 그대로 진행 순서로 쓴다 */
+/** 저장 요청용 — 항목 하나 = 게임 1세트. 서버는 리스트 순서를 그대로 진행 순서로 쓴다.
+ *  라운드 수는 게임별 고정(닌자 1판 / 몸말 1라운드 / 물건 5라운드)이라 서버가 채운다. */
 export interface CourseItemInput {
   gameId: number;
-  roundCount: number;
   topicId: number | null;
 }
 
@@ -98,19 +98,9 @@ export const GAME_LABELS: Record<GameName, string> = {
   CHARADES: '말하지 않아도 알아요',
 };
 
-// 라운드 하나가 무슨 단위인지 — 게임마다 뜻이 달라서 코스 편집 화면에 같이 보여준다.
-export const ROUND_UNIT_HINTS: Record<GameName, string> = {
-  NINJA: '1라운드 = 최후의 1인이 남을 때까지',
-  FETCH_OBJECT: '1라운드 = 물건 하나',
-  CHARADES: '1라운드 = 전원이 한 번씩 출제',
+// 코스 한 칸(= 1세트)이 무슨 단위인지 — 게임마다 달라서 코스 편집 화면에 같이 보여준다.
+export const SET_UNIT_HINTS: Record<GameName, string> = {
+  NINJA: '1세트 = 최후의 1인이 남을 때까지 한 판',
+  FETCH_OBJECT: '1세트 = 물건 5개 (5라운드)',
+  CHARADES: '1세트 = 전원이 한 번씩 출제',
 };
-
-// 이 게임을 현재 인원으로 진행할 때의 최소 라운드 수.
-// minRounds가 null인 게임(물건 가져오기)은 "참여자 수"가 하한이다.
-export function minRoundsFor(game: CatalogGame, playerCount: number): number {
-  return game.minRounds ?? Math.max(1, playerCount);
-}
-
-export function maxRoundsFor(game: CatalogGame): number {
-  return game.maxRounds ?? 10;
-}

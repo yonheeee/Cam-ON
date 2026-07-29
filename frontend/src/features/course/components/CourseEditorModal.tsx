@@ -1,9 +1,7 @@
 import { useMemo, useState } from 'react';
 import {
   GAME_LABELS,
-  ROUND_UNIT_HINTS,
-  maxRoundsFor,
-  minRoundsFor,
+  SET_UNIT_HINTS,
   type CatalogGame,
   type CatalogTopic,
   type Course,
@@ -11,14 +9,14 @@ import {
 } from '../api/courseApi';
 import './CourseEditorModal.css';
 
-const MAX_COURSE_LENGTH = 7; // 백엔드 CourseService.MAX_COURSE_LENGTH와 같은 값
+const MAX_COURSE_LENGTH = 7; // 백엔드 CourseService.MAX_COURSE_LENGTH와 같은 값 — 최대 7세트
 
 interface CourseEditorModalProps {
   games: CatalogGame[];
   course: Course | null;
   /** 주제를 고르는 게임의 주제 목록 (useTopics가 gameId별로 모아 준다) */
   topicsByGameId: Record<number, CatalogTopic[]>;
-  /** 지금 방에 있는 사람 수 — 인원 조건/최소 라운드(물건 가져오기) 안내에 쓴다 */
+  /** 지금 방에 있는 사람 수 — 인원 조건 안내에 쓴다 */
   playerCount: number;
   saving: boolean;
   saveError: string | null;
@@ -26,16 +24,16 @@ interface CourseEditorModalProps {
   onClose: () => void;
 }
 
-// 편집 중인 코스 한 칸. 서버 저장 형식(CourseItemInput)과 같지만 편집 중에는 topicId가
-// 아직 안 정해질 수 있어 따로 둔다.
+// 편집 중인 코스 한 칸 = 게임 1세트. 서버 저장 형식(CourseItemInput)과 같지만 편집 중에는
+// topicId가 아직 안 정해질 수 있어 따로 둔다. 라운드 수는 게임별 고정이라 여기 없다.
 interface DraftItem {
   gameId: number;
-  roundCount: number;
   topicId: number | null;
 }
 
-// 방장이 게임 순서/라운드 수/주제를 정하는 팝업. 저장은 전체 교체(PUT)라 여기서 만든 배열이
-// 곧 진행 순서가 된다.
+// 방장이 세트 큐(게임 순서)와 주제를 정하는 팝업. 같은 게임을 여러 번 담으면 그만큼 여러
+// 세트를 하는 것이다 (예: 닌자 2세트 = [닌자, 닌자]). 저장은 전체 교체(PUT)라 여기서 만든
+// 배열이 곧 진행 순서가 된다.
 export function CourseEditorModal({
   games,
   course,
@@ -50,7 +48,6 @@ export function CourseEditorModal({
     () =>
       course?.items.map((item) => ({
         gameId: item.gameId,
-        roundCount: item.roundCount,
         topicId: item.topicId,
       })) ?? [],
   );
@@ -66,7 +63,7 @@ export function CourseEditorModal({
 
   const addItem = (game: CatalogGame) => {
     if (draft.length >= MAX_COURSE_LENGTH) {
-      setLocalError(`코스에는 게임을 최대 ${MAX_COURSE_LENGTH}개까지 담을 수 있어요.`);
+      setLocalError(`코스에는 게임을 다 합쳐 최대 ${MAX_COURSE_LENGTH}세트까지 담을 수 있어요.`);
       return;
     }
     setLocalError(null);
@@ -74,7 +71,6 @@ export function CourseEditorModal({
       ...prev,
       {
         gameId: game.gameId,
-        roundCount: minRoundsFor(game, playerCount),
         topicId: null,
       },
     ]);
@@ -95,27 +91,13 @@ export function CourseEditorModal({
     });
   };
 
-  const changeRounds = (index: number, delta: number) => {
-    setDraft((prev) =>
-      prev.map((item, i) => {
-        if (i !== index) return item;
-        const game = gamesById.get(item.gameId);
-        if (!game) return item;
-        const min = minRoundsFor(game, playerCount);
-        const max = maxRoundsFor(game);
-        const next = Math.min(max, Math.max(min, item.roundCount + delta));
-        return { ...item, roundCount: next };
-      }),
-    );
-  };
-
   const changeTopic = (index: number, topicId: number | null) => {
     setDraft((prev) => prev.map((item, i) => (i === index ? { ...item, topicId } : item)));
   };
 
   // 저장 전에 프론트에서 잡아낼 수 있는 문제를 먼저 보여준다(서버도 같은 것을 검증한다).
   const validationMessage = useMemo(() => {
-    if (draft.length === 0) return '게임을 최소 1개 담아야 해요.';
+    if (draft.length === 0) return '게임을 최소 1세트 담아야 해요.';
     for (const [index, item] of draft.entries()) {
       const game = gamesById.get(item.gameId);
       if (!game) return `${index + 1}번째 칸의 게임을 찾을 수 없어요.`;
@@ -124,9 +106,9 @@ export function CourseEditorModal({
       }
       const topics = topicsByGameId[game.gameId];
       const topic = topics?.find((candidate) => candidate.topicId === item.topicId);
-      // 제시어가 (인원 x 라운드)보다 적으면 게임이 중간에 끊긴다 — 서버도 거부한다.
-      if (topic && topic.missionCount < playerCount * item.roundCount) {
-        return `'${topic.name}' 주제의 제시어(${topic.missionCount}개)로는 ${playerCount}명 x ${item.roundCount}라운드를 채울 수 없어요.`;
+      // 몸말 1세트 = 전원이 한 번씩 출제 — 제시어가 인원수보다 적으면 세트가 중간에 끊긴다.
+      if (topic && topic.missionCount < playerCount) {
+        return `'${topic.name}' 주제의 제시어(${topic.missionCount}개)로는 ${playerCount}명이 한 번씩 출제할 수 없어요.`;
       }
     }
     return null;
@@ -140,7 +122,6 @@ export function CourseEditorModal({
     const ok = await onSave(
       draft.map((item) => ({
         gameId: item.gameId,
-        roundCount: item.roundCount,
         topicId: item.topicId,
       })),
     );
@@ -153,15 +134,14 @@ export function CourseEditorModal({
         <div className="course-editor__card pap-pixel-card">
           <h2 className="course-editor__title pap-pixel-title">게임 구성</h2>
           <p className="course-editor__hint">
-            위에서 아래 순서로 진행돼요. 지금 인원은 {playerCount}명이에요.
+            한 칸이 게임 1세트예요. 위에서 아래 순서로 진행되고, 같은 게임을 여러 번 담으면
+            그만큼 여러 세트를 해요. 지금 인원은 {playerCount}명이에요.
           </p>
 
           <ol className="course-editor__list">
             {draft.map((item, index) => {
               const game = gamesById.get(item.gameId);
               if (!game) return null;
-              const min = minRoundsFor(game, playerCount);
-              const max = maxRoundsFor(game);
               const topics = topicsByGameId[game.gameId] ?? [];
               const playersOk =
                 playerCount >= game.minPlayers && playerCount <= game.maxPlayers;
@@ -172,7 +152,7 @@ export function CourseEditorModal({
                   </span>
                   <span className="course-editor__game">
                     <strong>{GAME_LABELS[game.name]}</strong>
-                    <small>{ROUND_UNIT_HINTS[game.name]}</small>
+                    <small>{SET_UNIT_HINTS[game.name]}</small>
                     {!playersOk && (
                       <small className="course-editor__warn">
                         {game.minPlayers}~{game.maxPlayers}명이어야 진행돼요 (지금 {playerCount}명)
@@ -197,30 +177,6 @@ export function CourseEditorModal({
                       ))}
                     </select>
                   )}
-
-                  <span className="course-editor__rounds">
-                    <button
-                      type="button"
-                      className="pap-pixel-btn lobby-btn-sm"
-                      onClick={() => changeRounds(index, -1)}
-                      disabled={item.roundCount <= min}
-                      aria-label="라운드 줄이기"
-                    >
-                      −
-                    </button>
-                    <span className="course-editor__round-count pap-pixel-title">
-                      {item.roundCount}R
-                    </span>
-                    <button
-                      type="button"
-                      className="pap-pixel-btn lobby-btn-sm"
-                      onClick={() => changeRounds(index, 1)}
-                      disabled={item.roundCount >= max}
-                      aria-label="라운드 늘리기"
-                    >
-                      +
-                    </button>
-                  </span>
 
                   <span className="course-editor__row-actions">
                     <button

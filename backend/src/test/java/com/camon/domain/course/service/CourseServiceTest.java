@@ -78,7 +78,7 @@ class CourseServiceTest {
     @Test
     void savesCourseAndBroadcastsToEveryone() {
         givenRoom(RoomStatus.WAITING);
-        givenGame(NINJA_ID, "NINJA", 2, 4, 3, 10, false);
+        givenGame(NINJA_ID, "NINJA", 2, 4, 1, 1, false);
         when(courseRepository.replace(eq(roomId), eq(ROOM_CODE), any()))
             .thenReturn(CourseReplaceResult.SUCCESS);
         when(gameCatalogService.findName(NINJA_ID)).thenReturn("NINJA");
@@ -86,13 +86,13 @@ class CourseServiceTest {
         CourseResponse response = service.updateCourse(
             roomId,
             hostId,
-            new UpdateCourseRequest(List.of(new CourseItemRequest(NINJA_ID, 3, null)))
+            new UpdateCourseRequest(List.of(new CourseItemRequest(NINJA_ID, null)))
         );
 
         // 리스트 순서가 곧 진행 순서라 idx가 1부터 채워져야 한다.
         ArgumentCaptor<List<CourseItem>> captor = ArgumentCaptor.captor();
         verify(courseRepository).replace(eq(roomId), eq(ROOM_CODE), captor.capture());
-        assertThat(captor.getValue()).containsExactly(new CourseItem(1, NINJA_ID, 3, null));
+        assertThat(captor.getValue()).containsExactly(new CourseItem(1, NINJA_ID, 1, null));
         assertThat(response.items()).hasSize(1);
         assertThat(response.items().getFirst().gameName()).isEqualTo("NINJA");
         // 상태 변경 직후 같은 흐름에서 전파까지 끝나야 한다.
@@ -107,7 +107,7 @@ class CourseServiceTest {
             () -> service.updateCourse(
                 roomId,
                 UUID.randomUUID(),
-                new UpdateCourseRequest(List.of(new CourseItemRequest(NINJA_ID, 3, null)))
+                new UpdateCourseRequest(List.of(new CourseItemRequest(NINJA_ID, null)))
             ),
             ErrorCode.ROOM_NOT_HOST
         );
@@ -118,44 +118,49 @@ class CourseServiceTest {
     void rejectsGameThatServerCannotStart() {
         givenRoom(RoomStatus.WAITING);
         // games에 row는 있지만 세션을 여는 구현체가 없는 게임(물건 가져오기)
-        givenGame(3L, "FETCH_OBJECT", 2, 4, null, 10, false);
+        givenGame(3L, "FETCH_OBJECT", 2, 4, 5, 5, false);
         when(gameCatalogService.isSupported("FETCH_OBJECT")).thenReturn(false);
 
         assertBusinessError(
             () -> service.updateCourse(
                 roomId,
                 hostId,
-                new UpdateCourseRequest(List.of(new CourseItemRequest(3L, 3, null)))
+                new UpdateCourseRequest(List.of(new CourseItemRequest(3L, null)))
             ),
             ErrorCode.COURSE_GAME_NOT_SUPPORTED
         );
     }
 
     @Test
-    void rejectsRoundCountOutsideGameRange() {
+    void fillsRoundsPerSetFromCatalogNotFromClient() {
+        // 코스 항목 = 1세트. 라운드 수는 클라이언트가 못 정하고 카탈로그의 고정값(물건 5)이 들어간다.
         givenRoom(RoomStatus.WAITING);
-        givenGame(NINJA_ID, "NINJA", 2, 4, 3, 10, false);
+        givenGame(3L, "FETCH_OBJECT", 2, 4, 5, 5, false);
+        when(courseRepository.replace(eq(roomId), eq(ROOM_CODE), any()))
+            .thenReturn(CourseReplaceResult.SUCCESS);
+        when(gameCatalogService.findName(3L)).thenReturn("FETCH_OBJECT");
 
-        assertBusinessError(
-            () -> service.updateCourse(
-                roomId,
-                hostId,
-                new UpdateCourseRequest(List.of(new CourseItemRequest(NINJA_ID, 11, null)))
-            ),
-            ErrorCode.COURSE_INVALID_ROUND_COUNT
+        service.updateCourse(
+            roomId,
+            hostId,
+            new UpdateCourseRequest(List.of(new CourseItemRequest(3L, null)))
         );
+
+        ArgumentCaptor<List<CourseItem>> captor = ArgumentCaptor.captor();
+        verify(courseRepository).replace(eq(roomId), eq(ROOM_CODE), captor.capture());
+        assertThat(captor.getValue()).containsExactly(new CourseItem(1, 3L, 5, null));
     }
 
     @Test
     void requiresTopicForTopicBasedGame() {
         givenRoom(RoomStatus.WAITING);
-        givenGame(CHARADES_ID, "CHARADES", 3, 4, 1, 10, true);
+        givenGame(CHARADES_ID, "CHARADES", 3, 4, 1, 1, true);
 
         assertBusinessError(
             () -> service.updateCourse(
                 roomId,
                 hostId,
-                new UpdateCourseRequest(List.of(new CourseItemRequest(CHARADES_ID, 2, null)))
+                new UpdateCourseRequest(List.of(new CourseItemRequest(CHARADES_ID, null)))
             ),
             ErrorCode.COURSE_TOPIC_REQUIRED
         );
@@ -164,13 +169,13 @@ class CourseServiceTest {
     @Test
     void rejectsTopicOnGameThatDoesNotUseTopics() {
         givenRoom(RoomStatus.WAITING);
-        givenGame(NINJA_ID, "NINJA", 2, 4, 3, 10, false);
+        givenGame(NINJA_ID, "NINJA", 2, 4, 1, 1, false);
 
         assertBusinessError(
             () -> service.updateCourse(
                 roomId,
                 hostId,
-                new UpdateCourseRequest(List.of(new CourseItemRequest(NINJA_ID, 3, TOPIC_ID)))
+                new UpdateCourseRequest(List.of(new CourseItemRequest(NINJA_ID, TOPIC_ID)))
             ),
             ErrorCode.COURSE_TOPIC_NOT_ALLOWED
         );
@@ -181,7 +186,7 @@ class CourseServiceTest {
         givenRoom(RoomStatus.WAITING);
         List<CourseItemRequest> tooMany = java.util.Collections.nCopies(
             8,
-            new CourseItemRequest(NINJA_ID, 3, null)
+            new CourseItemRequest(NINJA_ID, null)
         );
 
         assertBusinessError(
@@ -193,7 +198,7 @@ class CourseServiceTest {
     @Test
     void rejectsEditAfterGameStarted() {
         givenRoom(RoomStatus.WAITING);
-        givenGame(NINJA_ID, "NINJA", 2, 4, 3, 10, false);
+        givenGame(NINJA_ID, "NINJA", 2, 4, 1, 1, false);
         // 서비스가 검사한 뒤 저장 사이에 게임이 시작된 경합 — Lua 가드가 잡아낸다.
         when(courseRepository.replace(eq(roomId), eq(ROOM_CODE), any()))
             .thenReturn(CourseReplaceResult.ROOM_NOT_WAITING);
@@ -202,7 +207,7 @@ class CourseServiceTest {
             () -> service.updateCourse(
                 roomId,
                 hostId,
-                new UpdateCourseRequest(List.of(new CourseItemRequest(NINJA_ID, 3, null)))
+                new UpdateCourseRequest(List.of(new CourseItemRequest(NINJA_ID, null)))
             ),
             ErrorCode.ROOM_ALREADY_STARTED
         );
@@ -221,7 +226,7 @@ class CourseServiceTest {
     @Test
     void rejectsStartWhenPlayerCountIsOutsideGameRange() {
         // 몸으로 말해요는 3~4명. 2명으로는 시작할 수 없다.
-        givenGame(CHARADES_ID, "CHARADES", 3, 4, 1, 10, true);
+        givenGame(CHARADES_ID, "CHARADES", 3, 4, 1, 1, true);
 
         assertBusinessError(
             () -> service.validatePlayable(
@@ -229,17 +234,6 @@ class CourseServiceTest {
                 2
             ),
             ErrorCode.COURSE_PLAYERS_NOT_ELIGIBLE
-        );
-    }
-
-    @Test
-    void requiresAtLeastAsManyRoundsAsPlayersWhenMinRoundsIsNull() {
-        // min_rounds가 null인 게임(물건 가져오기)은 "참여자 수"가 최소 라운드다.
-        givenGame(3L, "FETCH_OBJECT", 2, 4, null, 10, false);
-
-        assertBusinessError(
-            () -> service.validatePlayable(List.of(new CourseItem(1, 3L, 3, null)), 4),
-            ErrorCode.COURSE_INVALID_ROUND_COUNT
         );
     }
 
