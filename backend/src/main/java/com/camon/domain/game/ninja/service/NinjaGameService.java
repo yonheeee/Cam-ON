@@ -357,7 +357,7 @@ public class NinjaGameService {
         boolean ending = false;
         if (roundEnded) {
             // 판 종료: 이 판의 탈락 순서로 점수를 부여하고, 마지막 판이면 게임을 끝낸다.
-            saveBoutScore(room, seq, round);
+            saveRoundScore(room, seq, round);
             ending = isLastRound(roomCode, seq, round);
         }
 
@@ -452,7 +452,7 @@ public class NinjaGameService {
         boolean roundEnded = exchange >= MAX_EXCHANGES_PER_ROUND;
         boolean ending = false;
         if (roundEnded) {
-            saveBoutScore(room, seq, round);
+            saveRoundScore(room, seq, round);
             ending = isLastRound(roomCode, seq, round);
         }
         if (ending) {
@@ -472,8 +472,8 @@ public class NinjaGameService {
 
     // 이 판(round)의 결과를 순위로 환산해 점수를 저장한다 — 생존자는 HP 내림차순, 그다음 이 판의 탈락자를
     // 늦게 탈락한 순서로 이어붙인다. 최후 1인으로 끝난 정상 판이면 [생존자, 마지막탈락, ..., 첫탈락] 형태.
-    private void saveBoutScore(Room room, int seq, int round) {
-        List<UUID> participantIdsByRank = buildBoutRanking(room, seq, round).stream()
+    private void saveRoundScore(Room room, int seq, int round) {
+        List<UUID> participantIdsByRank = buildRoundRanking(room, seq, round).stream()
             .map(entry -> UUID.fromString(entry.token()))
             .toList();
         SaveRoundResult result = gameScoreService.saveRoundRanking(room.roomId(), seq, round, participantIdsByRank);
@@ -496,7 +496,7 @@ public class NinjaGameService {
     }
 
     // 한 판 안에서의 순위(점수 부여용): 생존자 HP 내림차순 → 이 판 탈락자(늦게 탈락 순).
-    private List<RankingEntry> buildBoutRanking(Room room, int seq, int round) {
+    private List<RankingEntry> buildRoundRanking(Room room, int seq, int round) {
         String roomCode = room.roomCode();
         Map<Object, Object> hp = ninjaRedis.getAllHp(roomCode, seq, round);
         List<String> aliveByHpDesc = new ArrayList<>(ninjaRedis.getAlivePlayers(roomCode, seq, round));

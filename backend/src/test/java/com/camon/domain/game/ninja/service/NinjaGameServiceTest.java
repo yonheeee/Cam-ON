@@ -203,7 +203,7 @@ class NinjaGameServiceTest {
     }
 
     @Test
-    void attack_throws_whenParticipantNotAliveInThisBout() {
+    void attack_throws_whenParticipantNotAliveInThisRound() {
         when(ninjaRedis.getCurrentRound(roomCode, seq)).thenReturn(round);
         when(ninjaRedis.getCurrentExchange(roomCode, seq)).thenReturn(exchange);
         when(ninjaRedis.isAlive(roomCode, seq, round, attacker)).thenReturn(false);
@@ -263,7 +263,7 @@ class NinjaGameServiceTest {
     }
 
     @Test
-    void target_endsBoutAndStartsNextBout_whenOneSurvivorRemains_notLastRound() {
+    void target_endsRoundAndStartsNextRound_whenOneSurvivorRemains_notLastRound() {
         stubTargetCommon();
         when(ninjaRedis.decrementHp(roomCode, seq, round, target, 20)).thenReturn(-5L);
         // 대상 탈락 → 판에 1명만 생존 → 판 종료.
@@ -293,7 +293,7 @@ class NinjaGameServiceTest {
     }
 
     @Test
-    void target_endsGame_whenLastRoundBoutEnds() {
+    void target_endsGame_whenLastRoundEnds() {
         int lastRound = 3;
         when(ninjaRedis.getCurrentRound(roomCode, seq)).thenReturn(lastRound);
         when(ninjaRedis.getCurrentExchange(roomCode, seq)).thenReturn(exchange);
@@ -370,7 +370,7 @@ class NinjaGameServiceTest {
     // ---- startSession ----
 
     @Test
-    void startSession_clearsThenShufflesAndStartsFirstBout() {
+    void startSession_clearsThenShufflesAndStartsFirstRound() {
         Set<String> tokens = Set.of(attacker, target, third);
         when(skillRepository.findAllIds()).thenReturn(List.of(10L, 20L, 30L));
         when(ninjaRedis.getParticipants(roomCode, seq)).thenReturn(tokens);
