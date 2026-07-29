@@ -6,6 +6,10 @@ import type { ChatMessage } from '../../chat/hooks/useRoomChat';
 import { PixelConfirmModal } from '../../system/components/PixelConfirmModal';
 import { roomApi, RoomApiError } from '../api/roomApi';
 import { useRoomLobby } from '../hooks/useRoomLobby';
+import { CourseEditorModal } from '../../course/components/CourseEditorModal';
+import { GAME_LABELS, type GameName } from '../../course/api/courseApi';
+import { useCourse } from '../../course/hooks/useCourse';
+import { useTopics } from '../../course/hooks/useTopics';
 import {
   CamOffIcon,
   CamOnIcon,
@@ -30,7 +34,8 @@ interface LobbyScreenProps {
   roomId: string;
   accessToken: string;
   participantId: string;
-  onStartGame: (participantTokens: string[]) => void;
+  /** 코스는 서버가 읽으므로 인자가 없다 — 방장만 호출된다 */
+  onStartGame: () => void;
   starting: boolean;
   startError: string | null;
   /** 사용자가 스스로 방을 나갈 때 (연결 정리 + 메인 이동은 상위가 처리) */
@@ -39,13 +44,13 @@ interface LobbyScreenProps {
   onSendChat: (text: string) => void;
 }
 
-// 코스(게임 구성) 백엔드 도메인이 아직 없어서 표시용 mock — course API가 생기면 교체.
-// 최대 7세트까지 갈 수 있어서 아이콘 + 라운드 수만 있는 컴팩트 칩으로 표시한다.
-const MOCK_COURSE = [
-  { game: 'fetch', name: '물건 가져오기', rounds: 3, icon: FetchGameIcon },
-  { game: 'ninja', name: '손동작 따라하기', rounds: 3, icon: HandGameIcon },
-  { game: 'charades', name: '몸으로 말해요', rounds: 5, icon: CharadesGameIcon },
-];
+// 게임 이름(games.name) -> 칩에 쓰는 아이콘. 최대 7세트까지 가므로 이름 대신 아이콘 +
+// 라운드 수만 있는 컴팩트 칩으로 표시하고, 전체 이름은 툴팁으로 보여준다.
+const GAME_ICONS: Record<GameName, typeof FetchGameIcon> = {
+  FETCH_OBJECT: FetchGameIcon,
+  NINJA: HandGameIcon,
+  CHARADES: CharadesGameIcon,
+};
 
 // 대기방 전체 화면 — 피그마 로비 시안 구조를 Pixel Arcade Plaza 테마로 구현.
 // 참가자 정보(이름/역할/준비, 내 캠·마이크 토글)는 비디오 타일 자체에 표시하고,
@@ -71,6 +76,14 @@ export function LobbyScreen({
     null,
   );
   const [kickPending, setKickPending] = useState(false);
+  const [courseEditorOpen, setCourseEditorOpen] = useState(false);
+
+  // 코스는 서버가 원본이다 — 방장이 저장하면 member:game-updated로 전원 화면이 맞춰진다.
+  const { course, games, error: courseError, saving: courseSaving, saveCourse } = useCourse(
+    roomId,
+    accessToken,
+  );
+  const topicsByGameId = useTopics(games, accessToken);
 
   // 내 캠/마이크 상태·토글 (내 타일의 정보 바에 버튼으로 노출)
   const { localParticipant, isCameraEnabled, isMicrophoneEnabled } = useLocalParticipant();
@@ -323,10 +336,17 @@ export function LobbyScreen({
             <div className="lobby-screen__panel-head">
               <h2 className="lobby-screen__panel-title pap-pixel-title">게임 구성</h2>
               <span className="lobby-screen__panel-actions">
-                {/* 코스 도메인(백엔드) 연동 전까지 표시용 mock — 구성 변경은 그때 활성화 */}
-                <button type="button" className="pap-pixel-btn lobby-btn-sm" disabled title="준비 중">
-                  구성 변경
-                </button>
+                {/* 코스 편집은 방장만. 참가자에게는 버튼 자체를 띄우지 않는다(읽기 전용) */}
+                {amHost && (
+                  <button
+                    type="button"
+                    className="pap-pixel-btn lobby-btn-sm"
+                    onClick={() => setCourseEditorOpen(true)}
+                    title="게임 순서와 라운드 수 정하기"
+                  >
+                    구성 변경
+                  </button>
+                )}
                 <button
                   type="button"
                   className="lobby-screen__icon-btn lobby-screen__icon-btn--light"
@@ -340,17 +360,29 @@ export function LobbyScreen({
             </div>
             {/* 최대 7세트 — 이름 대신 아이콘 + 라운드 수 칩. 이름은 툴팁으로 */}
             <ol className="lobby-screen__sets">
-              {MOCK_COURSE.map((set, i) => (
+              {(course?.items ?? []).map((item) => (
                 <li
-                  key={i}
+                  key={item.idx}
                   className="lobby-screen__set"
-                  title={`${String(i + 1).padStart(2, '0')} ${set.name} · ${set.rounds}라운드`}
+                  title={`${String(item.idx).padStart(2, '0')} ${
+                    GAME_LABELS[item.gameName] ?? item.gameName
+                  } · ${item.roundCount}라운드${item.topicName ? ` · ${item.topicName}` : ''}`}
                 >
-                  <span className="lobby-screen__set-icon">{set.icon}</span>
-                  <span className="lobby-screen__set-rounds pap-pixel-title">{set.rounds}R</span>
+                  <span className="lobby-screen__set-icon">{GAME_ICONS[item.gameName]}</span>
+                  <span className="lobby-screen__set-rounds pap-pixel-title">
+                    {item.roundCount}R
+                  </span>
                 </li>
               ))}
             </ol>
+            {course?.items.length === 0 && (
+              <p className="lobby-screen__course-empty">
+                {amHost
+                  ? '구성 변경을 눌러 게임을 담아 주세요.'
+                  : '방장이 게임을 정하는 중이에요.'}
+              </p>
+            )}
+            {courseError && <p className="lobby-screen__course-empty">{courseError}</p>}
           </div>
 
           <div className="lobby-screen__chat pap-pixel-card">
@@ -381,8 +413,14 @@ export function LobbyScreen({
               <button
                 type="button"
                 className="pap-pixel-btn pap-pixel-btn--coral"
-                disabled={starting || !room}
-                onClick={() => room && onStartGame(room.participants.map((p) => p.participantId))}
+                // 코스가 비면 시작할 게 없다 — 서버도 COURSE_EMPTY로 거부하므로 미리 막는다.
+                disabled={starting || !room || !course || course.items.length === 0}
+                title={
+                  course && course.items.length === 0
+                    ? '먼저 게임 구성을 정해 주세요'
+                    : undefined
+                }
+                onClick={() => onStartGame()}
               >
                 {starting ? '시작 중...' : '게임 시작'}
               </button>
@@ -406,6 +444,18 @@ export function LobbyScreen({
       </div>
 
       {toast && <div className="pap-toast">{toast}</div>}
+      {courseEditorOpen && (
+        <CourseEditorModal
+          games={games}
+          course={course}
+          topicsByGameId={topicsByGameId}
+          playerCount={joinedCount}
+          saving={courseSaving}
+          saveError={courseError}
+          onSave={saveCourse}
+          onClose={() => setCourseEditorOpen(false)}
+        />
+      )}
       {confirmLeave && (
         <PixelConfirmModal
           title="정말 방을 나갈까요?"

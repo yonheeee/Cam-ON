@@ -45,8 +45,6 @@ export function NinjaGamePanel({ roomId, gameId, accessToken, onActiveChange }: 
     gameEnded,
     error,
     submitTarget,
-    resetGame,
-    resetting,
     isIntermission,
     inEffectPlayback,
     inCountdown,
@@ -101,17 +99,8 @@ export function NinjaGamePanel({ roomId, gameId, accessToken, onActiveChange }: 
 
   return (
     <>
-      <button
-        className="ninja-reset-button"
-        disabled={resetting}
-        onClick={() => void resetGame()}
-        title="진행 중인 게임을 지우고 대기방으로 되돌립니다"
-      >
-        {resetting ? '초기화 중...' : '🔄 게임 초기화'}
-      </button>
-
     <div className="ninja-panel">
-      <h2>닌자 게임</h2>
+      <h2>손은 눈보다 빠르다</h2>
 
       {gameStarted && gameEnded && (
         <div className="ninja-panel__ranking">

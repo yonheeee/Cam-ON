@@ -16,18 +16,20 @@ class CharadesRedisRepositoryTest {
     private final CharadesRedisRepository repository =
         new CharadesRedisRepository(redis);
 
+    // 라운드 수는 코스가 정하므로 2, 3라운드도 정상이다(예전 단일 라운드 정책 때는 1만 허용했다).
+    // 리포지토리는 저장 자체가 성립하지 않는 값(1 미만)만 막는다.
     @Test
-    void rejectsRoundCountOtherThanOne() {
+    void rejectsRoundCountBelowOne() {
         UUID participantId = UUID.randomUUID();
 
         assertThatThrownBy(() -> repository.initialize(
-            "CH4R4D", 1, 2, 7L, List.of(participantId)
+            "CH4R4D", 1, 0, 7L, List.of(participantId)
         )).isInstanceOf(IllegalArgumentException.class)
-            .hasMessage("totalRounds must be 1");
+            .hasMessage("totalRounds must be at least 1");
         assertThatThrownBy(() -> repository.initialize(
-            "CH4R4D", 1, 3, 7L, List.of(participantId)
+            "CH4R4D", 1, -1, 7L, List.of(participantId)
         )).isInstanceOf(IllegalArgumentException.class)
-            .hasMessage("totalRounds must be 1");
+            .hasMessage("totalRounds must be at least 1");
         verifyNoInteractions(redis);
     }
 
