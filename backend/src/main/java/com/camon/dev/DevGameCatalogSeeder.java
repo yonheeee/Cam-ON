@@ -6,6 +6,7 @@ import com.camon.domain.game.common.MissionTopic;
 import com.camon.domain.game.common.repository.GameRepository;
 import com.camon.domain.game.common.repository.MissionRepository;
 import com.camon.domain.game.common.repository.MissionTopicRepository;
+import com.camon.domain.game.fetch.domain.FetchObjectMissionCatalog;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -25,23 +26,8 @@ public class DevGameCatalogSeeder implements ApplicationRunner {
     public static final String FETCH_OBJECT = "FETCH_OBJECT";
     public static final String CHARADES = "CHARADES";
 
-    static final String FETCH_OBJECT_MISSION_TYPE = "OBJECT";
     private static final String CHARADES_MISSION_TYPE = "CHARADES";
     private static final String DEFAULT_DIFFICULTY = "NORMAL";
-    static final List<String> FETCH_OBJECT_KEYWORDS = List.of(
-        "휴대폰",
-        "마우스",
-        "가위",
-        "숟가락",
-        "안경",
-        "칫솔",
-        "라면",
-        "헤어드라이어",
-        "우산",
-        "그릇",
-        "모자",
-        "가방"
-    );
 
     private final GameRepository gameRepository;
     private final MissionTopicRepository missionTopicRepository;
@@ -112,14 +98,16 @@ public class DevGameCatalogSeeder implements ApplicationRunner {
         Set<String> existingKeywords = missionRepository
             .findAllByGameGameIdAndMissionTypeAndIsActiveTrue(
                 fetchObject.getGameId(),
-                FETCH_OBJECT_MISSION_TYPE
+                FetchObjectMissionCatalog.MISSION_TYPE
             )
             .stream()
             .map(Mission::getKeyword)
             .collect(Collectors.toSet());
 
         Set<String> unexpectedKeywords = existingKeywords.stream()
-            .filter(keyword -> !FETCH_OBJECT_KEYWORDS.contains(keyword))
+            .filter(keyword ->
+                !FetchObjectMissionCatalog.KEYWORDS.contains(keyword)
+            )
             .collect(Collectors.toSet());
         if (!unexpectedKeywords.isEmpty()) {
             // AI 서버 labels.py와 문자열 계약이 어긋난 데이터는 자동으로 수정/삭제하지 않는다.
@@ -130,7 +118,7 @@ public class DevGameCatalogSeeder implements ApplicationRunner {
             );
         }
 
-        List<String> missingKeywords = FETCH_OBJECT_KEYWORDS.stream()
+        List<String> missingKeywords = FetchObjectMissionCatalog.KEYWORDS.stream()
             .filter(keyword -> !existingKeywords.contains(keyword))
             .toList();
         if (missingKeywords.isEmpty()) {
@@ -146,7 +134,7 @@ public class DevGameCatalogSeeder implements ApplicationRunner {
             Mission.builder()
                 .game(fetchObject)
                 .topic(null)
-                .missionType(FETCH_OBJECT_MISSION_TYPE)
+                .missionType(FetchObjectMissionCatalog.MISSION_TYPE)
                 .keyword(keyword)
                 // 영어 프롬프트는 AI 서버 labels.py가 관리하므로 백엔드에는 저장하지 않는다.
                 .targetLabel(null)

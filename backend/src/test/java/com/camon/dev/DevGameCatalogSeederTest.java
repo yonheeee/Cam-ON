@@ -13,6 +13,7 @@ import com.camon.domain.game.common.MissionTopic;
 import com.camon.domain.game.common.repository.GameRepository;
 import com.camon.domain.game.common.repository.MissionRepository;
 import com.camon.domain.game.common.repository.MissionTopicRepository;
+import com.camon.domain.game.fetch.domain.FetchObjectMissionCatalog;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -71,7 +72,7 @@ class DevGameCatalogSeederTest {
         when(missionRepository
             .findAllByGameGameIdAndMissionTypeAndIsActiveTrue(
                 fetchObject.getGameId(),
-                DevGameCatalogSeeder.FETCH_OBJECT_MISSION_TYPE
+                FetchObjectMissionCatalog.MISSION_TYPE
             ))
             .thenReturn(List.of());
 
@@ -83,12 +84,12 @@ class DevGameCatalogSeederTest {
 
         assertThat(saved)
             .extracting(Mission::getKeyword)
-            .containsExactlyElementsOf(DevGameCatalogSeeder.FETCH_OBJECT_KEYWORDS);
+            .containsExactlyElementsOf(FetchObjectMissionCatalog.KEYWORDS);
         assertThat(saved).allSatisfy(mission -> {
             assertThat(mission.getGame()).isEqualTo(fetchObject);
             assertThat(mission.getTopic()).isNull();
             assertThat(mission.getMissionType())
-                .isEqualTo(DevGameCatalogSeeder.FETCH_OBJECT_MISSION_TYPE);
+                .isEqualTo(FetchObjectMissionCatalog.MISSION_TYPE);
             assertThat(mission.getTargetLabel()).isNull();
             assertThat(mission.getDifficulty()).isEqualTo("NORMAL");
             assertThat(mission.getIsActive()).isTrue();
@@ -97,14 +98,14 @@ class DevGameCatalogSeederTest {
 
     @Test
     void seedsOnlyMissingFetchObjectKeywords() throws Exception {
-        List<Mission> existing = DevGameCatalogSeeder.FETCH_OBJECT_KEYWORDS.stream()
+        List<Mission> existing = FetchObjectMissionCatalog.KEYWORDS.stream()
             .limit(2)
             .map(this::fetchMission)
             .toList();
         when(missionRepository
             .findAllByGameGameIdAndMissionTypeAndIsActiveTrue(
                 fetchObject.getGameId(),
-                DevGameCatalogSeeder.FETCH_OBJECT_MISSION_TYPE
+                FetchObjectMissionCatalog.MISSION_TYPE
             ))
             .thenReturn(existing);
 
@@ -115,19 +116,19 @@ class DevGameCatalogSeederTest {
         assertThat(captor.getAllValues())
             .extracting(Mission::getKeyword)
             .containsExactlyElementsOf(
-                DevGameCatalogSeeder.FETCH_OBJECT_KEYWORDS.subList(2, 12)
+                FetchObjectMissionCatalog.KEYWORDS.subList(2, 12)
             );
     }
 
     @Test
     void doesNotDuplicateCompleteFetchObjectKeywordSet() throws Exception {
-        List<Mission> existing = DevGameCatalogSeeder.FETCH_OBJECT_KEYWORDS.stream()
+        List<Mission> existing = FetchObjectMissionCatalog.KEYWORDS.stream()
             .map(this::fetchMission)
             .toList();
         when(missionRepository
             .findAllByGameGameIdAndMissionTypeAndIsActiveTrue(
                 fetchObject.getGameId(),
-                DevGameCatalogSeeder.FETCH_OBJECT_MISSION_TYPE
+                FetchObjectMissionCatalog.MISSION_TYPE
             ))
             .thenReturn(existing);
 
@@ -139,7 +140,7 @@ class DevGameCatalogSeederTest {
     private Mission fetchMission(String keyword) {
         return Mission.builder()
             .game(fetchObject)
-            .missionType(DevGameCatalogSeeder.FETCH_OBJECT_MISSION_TYPE)
+            .missionType(FetchObjectMissionCatalog.MISSION_TYPE)
             .keyword(keyword)
             .difficulty("NORMAL")
             .isActive(true)
