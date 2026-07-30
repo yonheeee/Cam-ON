@@ -8,6 +8,11 @@ import { Track } from 'livekit-client';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { GesturePanel } from '../../gesture/components/GesturePanel';
 import { useGestureBoardStore } from '../../gesture/store/gestureBoardStore';
+import { BackgroundMusic } from '../../sound/components/BackgroundMusic';
+import { useAnnouncementSound } from '../../sound/hooks/useAnnouncementSound';
+import { useCountdownSound } from '../../sound/hooks/useCountdownSound';
+import { useNinjaEliminationSound } from '../hooks/useNinjaEliminationSound';
+import { useNinjaEffectSound } from '../hooks/useNinjaEffectSound';
 import { useNinjaRound } from '../hooks/useNinjaRound';
 import { gestureImage } from '../lib/gestureImages';
 import { skillEffect, skillShake } from '../lib/skillEffects';
@@ -110,6 +115,28 @@ export function NinjaBattleScreen({
     lastAttack,
     roundResult,
   } = useNinjaRound(roomId, gameId, accessToken, myId, comboEntry?.comboLabel ?? null, comboEntry?.confidence ?? 0);
+
+  useCountdownSound(
+    inCountdown,
+    `ninja:${round}:${exchange}`,
+    Math.max(0, 3 - (countdownSeconds ?? 3)),
+  );
+  useNinjaEffectSound(
+    inEffectPlayback,
+    lastAttack?.skillId ?? requiredSkill?.skillId,
+    `${round}:${exchange}`,
+  );
+  useNinjaEliminationSound(round, alivePlayers);
+  useAnnouncementSound(
+    !!roundResult?.length && !gameEnded,
+    `ninja-round-result:${round}`,
+    '/assets/sounds/middle-winner.mp3',
+  );
+  useAnnouncementSound(
+    gameEnded && ranking.length > 0,
+    `ninja-winner:${ranking[0]?.token ?? 'unknown'}`,
+    '/assets/sounds/ninja-winner.mp3',
+  );
 
   const tracks = useTracks([{ source: Track.Source.Camera, withPlaceholder: true }], {
     onlySubscribed: false,
@@ -265,6 +292,10 @@ export function NinjaBattleScreen({
           src="/assets/cam-on-logo.png"
           alt="CAM, ON!"
           onClick={() => setConfirmLeave(true)}
+        />
+        <BackgroundMusic
+          source="/assets/sounds/ninja-bgm.mp3"
+          className="ninja-screen__music-toggle"
         />
       </header>
 

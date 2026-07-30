@@ -39,6 +39,15 @@
   cursor: pointer;
 }
 
+.charades-topbar__music-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 110px;
+  padding: 8px 12px;
+  font-size: 13px;
+}
+
 /* 라운드 배너 — 점등된 골드 사인(마퀴 전광판 톤) */
 .charades-header__badge {
   display: flex;

@@ -198,6 +198,16 @@
   cursor: pointer;
 }
 
+.ninja-screen__music-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 110px;
+  padding: 8px 12px;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
 /* ---- 본문: 좌 캠 / 중앙 보드 / 우 캠 ---- */
 .ninja-screen__body {
   flex: 1;

@@ -2,6 +2,8 @@ import { ParticipantTile, useLocalParticipant, useParticipants, useTracks } from
 import { Track } from 'livekit-client';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { roomApi } from '../../room/api/roomApi';
+import { BackgroundMusic } from '../../sound/components/BackgroundMusic';
+import { useCountdownSound } from '../../sound/hooks/useCountdownSound';
 import { PixelConfirmModal } from '../../system/components/PixelConfirmModal';
 import { useCharadesRound } from '../hooks/useCharadesRound';
 import './CharadesGamePanel.css';
@@ -157,6 +159,10 @@ export function CharadesGamePanel({
           src="/assets/cam-on-logo.png"
           alt="CAM, ON!"
           onClick={() => setConfirmLeave(true)}
+        />
+        <BackgroundMusic
+          source="/assets/sounds/silent-charades.mp3"
+          className="charades-topbar__music-toggle"
         />
         {/* 단일 라운드 정책(참가자 전원이 한 번씩 표현하면 게임 종료)이라 라운드가 아니라
             "몇 번째 표현자인지"가 진행도다 — 서버가 turn/totalTurnsInRound로 내려준다. */}
@@ -357,6 +363,11 @@ function CharadesCorrectBanner({
   answererName: string;
 }) {
   const [countdown, setCountdown] = useState(CORRECT_BANNER_SECONDS);
+  useCountdownSound(
+    countdown <= 3,
+    'charades:next-prompt',
+    Math.max(0, 3 - countdown),
+  );
 
   useEffect(() => {
     if (countdown <= 1) return;
