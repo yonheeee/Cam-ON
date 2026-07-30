@@ -49,6 +49,9 @@ public class FetchObjectGameService {
 
     static final Duration COUNTDOWN_DURATION = Duration.ofSeconds(3);
     static final Duration PLAY_DURATION = Duration.ofSeconds(20);
+    // 첫 정답 이후 나머지에게 주는 마지막 제출 기회 — 이 시간이 지나면 라운드를 조기 마감한다.
+    // (첫 정답 즉시 종료로 하면 "빨리 가져온 순서대로 1~4위" 경쟁이 사라져 그레이스를 둔다)
+    static final Duration FIRST_SUBMISSION_GRACE = Duration.ofSeconds(5);
     static final Duration ROUND_DURATION =
         COUNTDOWN_DURATION.plus(PLAY_DURATION);
     private static final int MIN_PLAYERS = 2;
@@ -143,6 +146,25 @@ public class FetchObjectGameService {
         );
         validateSubmission(result.status());
 
+        // 첫 정답이 나오면 라운드 마감을 그레이스(FIRST_SUBMISSION_GRACE)로 앞당긴다 —
+        // 다른 사람이 물건을 못 찾으면 먼저 맞춘 사람이 남은 시간을 통째로 기다리던 문제의 해결.
+        // 나머지 참가자는 그레이스 동안 마지막 제출 기회를 가진다(순위 경쟁 유지).
+        Long shortenedDeadlineAt = null;
+        if (result.rank() == 1 && !result.allParticipantsSubmitted()) {
+            Instant currentDeadline = Instant.ofEpochMilli(result.deadlineAt());
+            Instant graceDeadline = clock.instant().plus(FIRST_SUBMISSION_GRACE);
+            if (graceDeadline.isBefore(currentDeadline)) {
+                fetchRedis.shortenRoundDeadline(
+                    room.roomCode(),
+                    sessionSeq,
+                    request.round(),
+                    graceDeadline
+                );
+                rescheduleRoundTimeout(room, sessionSeq, request.round(), graceDeadline);
+                shortenedDeadlineAt = graceDeadline.toEpochMilli();
+            }
+        }
+
         long score = fetchRedis.scoreForRank(result.rank());
         fetchEventPublisher.publish(
             room.roomId(),
@@ -150,7 +172,8 @@ public class FetchObjectGameService {
             new FetchRoundSuccessPayload(
                 participantId,
                 result.rank(),
-                score
+                score,
+                shortenedDeadlineAt
             )
         );
         if (result.allParticipantsSubmitted()) {
@@ -236,6 +259,27 @@ public class FetchObjectGameService {
                 deadlineAt
             ),
             deadlineAt
+        );
+        pendingTimeouts.put(timerKey(room.roomCode(), sessionSeq), future);
+    }
+
+    // 첫 정답으로 마감이 앞당겨졌을 때 기존 타임아웃 타이머를 새 마감으로 교체한다.
+    // 옛 타이머가 원래 마감에 살아남아 있어도 expectedDeadlineAt(원래 값) ≠ 저장된 deadline_at
+    // (단축 값)이라 마감 CAS에서 무해하게 탈락하지만, 확실히 취소하고 새로 건다.
+    private void rescheduleRoundTimeout(
+        Room room,
+        int sessionSeq,
+        int round,
+        Instant newDeadlineAt
+    ) {
+        Integer totalRounds = fetchRedis.getTotalRounds(room.roomCode(), sessionSeq);
+        if (totalRounds == null) {
+            return;
+        }
+        cancelPendingTimeout(room.roomCode(), sessionSeq);
+        ScheduledFuture<?> future = taskScheduler.schedule(
+            () -> handleRoundTimeout(room, sessionSeq, round, totalRounds, newDeadlineAt),
+            newDeadlineAt
         );
         pendingTimeouts.put(timerKey(room.roomCode(), sessionSeq), future);
     }

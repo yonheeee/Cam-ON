@@ -64,7 +64,9 @@ export function FetchObjectGame({
     return () => clearInterval(timer);
   }, [playing]);
   const countdownLeft = Math.max(0, state.startedAt + COUNTDOWN_MS - nowMs);
-  const remainingMs = Math.max(0, state.startedAt + COUNTDOWN_MS + ROUND_DURATION_MS - nowMs);
+  // 마감 시각: 첫 정답으로 서버가 단축한 값(deadlineAt)이 있으면 그것을, 없으면 기본 제한시간.
+  const roundEndsAt = state.deadlineAt ?? state.startedAt + COUNTDOWN_MS + ROUND_DURATION_MS;
+  const remainingMs = Math.max(0, roundEndsAt - nowMs);
   // 3·2·1 카운트다운 — 전원이 제시어를 읽고 동시에 출발 (인식도 이 동안 잠금)
   const inCountdown = playing && countdownLeft > 0;
   const goFlash = playing && countdownLeft <= 0 && nowMs - (state.startedAt + COUNTDOWN_MS) < 700;

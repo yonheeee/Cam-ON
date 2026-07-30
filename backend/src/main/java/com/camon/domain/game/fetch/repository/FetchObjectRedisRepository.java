@@ -204,6 +204,21 @@ public class FetchObjectRedisRepository {
         );
     }
 
+    // 첫 정답 이후 라운드 마감을 앞당긴다 — deadline_at을 줄이면 제출 검증 Lua(deadline 비교)와
+    // 마감 CAS(closeRoundIfPlaying의 deadline 일치 검사)가 모두 새 시각 기준으로 동작한다.
+    public void shortenRoundDeadline(
+        String roomCode,
+        int sessionSeq,
+        int round,
+        Instant newDeadlineAt
+    ) {
+        redis.opsForHash().put(
+            FetchObjectRedisKeys.round(roomCode, sessionSeq, round),
+            "deadline_at",
+            Long.toString(newDeadlineAt.toEpochMilli())
+        );
+    }
+
     public boolean closeRoundIfPlaying(
         String roomCode,
         int sessionSeq,
