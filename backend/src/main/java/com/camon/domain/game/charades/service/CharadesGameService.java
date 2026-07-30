@@ -4,6 +4,7 @@ import com.camon.domain.game.charades.domain.CharadesGameState;
 import com.camon.domain.game.charades.domain.CharadesTurnStatus;
 import com.camon.domain.game.charades.dto.CharadesGuessRequest;
 import com.camon.domain.game.charades.dto.CharadesGuessResponse;
+import com.camon.domain.game.charades.dto.CharadesStateResponse;
 import com.camon.domain.game.charades.dto.CharadesWordResponse;
 import com.camon.domain.game.charades.repository.CharadesRedisRepository;
 import com.camon.domain.game.charades.ws.CharadesEventPublisher;
@@ -216,6 +217,32 @@ public class CharadesGameService {
             }
         }
         return Optional.empty();
+    }
+
+    @Transactional(readOnly = true)
+    public CharadesStateResponse getState(
+        UUID roomId,
+        Long gameId
+    ) {
+        Room room = resolveRoom(roomId);
+        int sessionSeq = room.currentSessionSeq();
+        CharadesGameState state = charadesRedis.findState(
+            room.roomCode(),
+            sessionSeq
+        ).orElseThrow(() ->
+            new BusinessException(ErrorCode.CHARADES_SESSION_NOT_FOUND)
+        );
+
+        requireCurrentGame(state, gameId);
+        return new CharadesStateResponse(
+            state.currentRound(),
+            state.totalRounds(),
+            state.currentTurn(),
+            state.totalTurnsInRound(),
+            state.presenterId(),
+            state.expiresAt(),
+            state.status()
+        );
     }
 
     @Transactional(readOnly = true)

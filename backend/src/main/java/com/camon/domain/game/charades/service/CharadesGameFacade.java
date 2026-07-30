@@ -2,6 +2,7 @@ package com.camon.domain.game.charades.service;
 
 import com.camon.domain.game.charades.dto.CharadesGuessRequest;
 import com.camon.domain.game.charades.dto.CharadesGuessResponse;
+import com.camon.domain.game.charades.dto.CharadesStateResponse;
 import com.camon.domain.game.charades.dto.CharadesWordResponse;
 import com.camon.domain.room.domain.Participant;
 import com.camon.domain.room.domain.Room;
@@ -38,6 +39,17 @@ public class CharadesGameFacade {
             context.room().roomId(),
             gameId,
             participantId
+        );
+    }
+
+    public CharadesStateResponse getState(
+        Long gameId,
+        UUID participantId
+    ) {
+        ParticipantContext context = resolveParticipant(participantId);
+        return charadesGameService.getState(
+            context.room().roomId(),
+            gameId
         );
     }
 

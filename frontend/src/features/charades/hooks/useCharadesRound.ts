@@ -1,6 +1,10 @@
 import { Client } from '@stomp/stompjs';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { charadesApi, CharadesApiError } from '../api/charadesApi';
+import {
+  charadesApi,
+  CharadesApiError,
+  type CharadesStateResponse,
+} from '../api/charadesApi';
 
 // 표현자가 정답을 확인하고 있는 시간(라운드 시작 직후 잠깐 "다음 표현자는 OOO입니다" 예고를 보여주는 시간).
 const PREVIEW_DURATION_MS = 2200;
@@ -86,12 +90,20 @@ export function useCharadesRound(
   // turn-started 처리를 지연시키기 위한 참조 — phase는 클로저 밖(STOMP 콜백)에서 최신값을 읽어야 해서 ref로 미러링한다.
   const phaseRef = useRef<CharadesPhase | null>(null);
   phaseRef.current = phase;
+  const roundRef = useRef<number | null>(null);
+  roundRef.current = round;
+  const turnRef = useRef<number | null>(null);
+  turnRef.current = turn;
   const correctShownAtRef = useRef<number | null>(null);
   const pendingTurnTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const stateEventVersionRef = useRef(0);
+  const syncRequestIdRef = useRef(0);
 
   const isPresenter = participantId !== null && presenterId === participantId;
 
   const handleTurnStarted = useCallback((data: TurnStartedData) => {
+    roundRef.current = data.round;
+    turnRef.current = data.turn;
     setRound(data.round);
     setTurn(data.turn);
     setTotalTurnsInRound(data.totalTurnsInRound);
@@ -102,8 +114,77 @@ export function useCharadesRound(
     setLastAnswererId(null);
     setLastInvalidReason(null);
     setGameEnded(false);
+    setError(null);
     setPhase('preview');
   }, []);
+
+  const applyStateSnapshot = useCallback((state: CharadesStateResponse) => {
+    const snapshotRound = state.round || null;
+    const snapshotTurn = state.turn || null;
+    const turnChanged =
+      roundRef.current !== snapshotRound || turnRef.current !== snapshotTurn;
+
+    roundRef.current = snapshotRound;
+    turnRef.current = snapshotTurn;
+    setTotalRounds(state.totalRounds || null);
+    setRound(snapshotRound);
+    setTurn(snapshotTurn);
+    setTotalTurnsInRound(state.totalTurnsInRound || null);
+    setPresenterId(state.presenterId);
+    setExpiresAt(state.expiresAt);
+    if (turnChanged) {
+      setMyWord(null);
+      setChatLog([]);
+      setLastAnswererId(null);
+      setLastInvalidReason(null);
+    }
+
+    switch (state.status) {
+      case 'PLAYING':
+        setGameEnded(false);
+        setError(null);
+        setPhase('playing');
+        break;
+      case 'CORRECT':
+        setPhase('correct');
+        break;
+      case 'TIMEOUT':
+        setPhase('timeout');
+        break;
+      case 'INVALIDATED':
+        setPhase('invalidated');
+        break;
+      case 'FINISHED':
+        setGameEnded(true);
+        setPhase(null);
+        break;
+      case 'READY':
+      default:
+        setPhase(null);
+        break;
+    }
+  }, []);
+
+  const syncState = useCallback(async () => {
+    if (!participantId) return;
+
+    const requestId = ++syncRequestIdRef.current;
+    const versionAtRequest = stateEventVersionRef.current;
+    try {
+      const state = await charadesApi.getState(gameId, accessToken);
+      if (syncRequestIdRef.current !== requestId) return;
+      if (stateEventVersionRef.current !== versionAtRequest) return;
+      applyStateSnapshot(state);
+    } catch (err: unknown) {
+      if (syncRequestIdRef.current !== requestId) return;
+      if (stateEventVersionRef.current !== versionAtRequest) return;
+      setError(
+        err instanceof CharadesApiError
+          ? `게임 상태 조회 실패: ${err.message}`
+          : '게임 상태 조회 실패',
+      );
+    }
+  }, [participantId, gameId, accessToken, applyStateSnapshot]);
 
   useEffect(() => {
     if (!roomId || !accessToken) return;
@@ -118,6 +199,15 @@ export function useCharadesRound(
       onConnect: () => {
         client.subscribe(`/topic/rooms/${roomId}`, (message) => {
           const event = JSON.parse(message.body) as RoomEvent<unknown>;
+          if (
+            event.event === 'charades:turn-started' ||
+            event.event === 'charades:answer-revealed' ||
+            event.event === 'charades:round-timeout' ||
+            event.event === 'charades:round-invalidated' ||
+            event.event === 'charades:game-ended'
+          ) {
+            stateEventVersionRef.current += 1;
+          }
           switch (event.event) {
             case 'charades:round-started': {
               const data = event.data as RoundStartedData;
@@ -177,6 +267,7 @@ export function useCharadesRound(
               break;
           }
         });
+        void syncState();
       },
     });
 
@@ -185,7 +276,12 @@ export function useCharadesRound(
       void client.deactivate();
       if (pendingTurnTimerRef.current) clearTimeout(pendingTurnTimerRef.current);
     };
-  }, [roomId, accessToken, handleTurnStarted]);
+  }, [roomId, accessToken, handleTurnStarted, syncState]);
+
+  useEffect(() => {
+    if (!participantId) return;
+    void syncState();
+  }, [participantId, syncState]);
 
   // 라운드/턴이 바뀌면 잠깐 "다음 표현자는 OOO입니다" 예고를 보여준 뒤 실제 진행 화면으로 넘어간다.
   useEffect(() => {
