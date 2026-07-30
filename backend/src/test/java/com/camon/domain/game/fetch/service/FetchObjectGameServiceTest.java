@@ -249,6 +249,9 @@ class FetchObjectGameServiceTest {
             NOW.plusSeconds(23).toEpochMilli()
         ));
         when(fetchRedis.scoreForRank(1)).thenReturn(5L);
+        // 첫 정답 → 그레이스 단축이 타임아웃 타이머를 재예약한다.
+        when(taskScheduler.schedule(any(Runnable.class), any(Instant.class)))
+            .thenAnswer(invocation -> scheduledFuture);
 
         FetchSubmissionResponse response = service.submit(
             room,
@@ -259,10 +262,22 @@ class FetchObjectGameServiceTest {
         assertThat(response).isEqualTo(
             new FetchSubmissionResponse(1, participantId, 1, 5L)
         );
+        // 첫 정답(아직 전원 제출 아님) → 마감을 그레이스(5초)로 단축하고 새 마감을 이벤트에 싣는다.
+        verify(fetchRedis).shortenRoundDeadline(
+            ROOM_CODE,
+            SESSION_SEQ,
+            1,
+            NOW.plus(FetchObjectGameService.FIRST_SUBMISSION_GRACE)
+        );
         verify(fetchEventPublisher).publish(
             ROOM_ID,
             "round:success",
-            new FetchRoundSuccessPayload(participantId, 1, 5L)
+            new FetchRoundSuccessPayload(
+                participantId,
+                1,
+                5L,
+                NOW.plus(FetchObjectGameService.FIRST_SUBMISSION_GRACE).toEpochMilli()
+            )
         );
     }
 

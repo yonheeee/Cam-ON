@@ -24,6 +24,8 @@ interface RoundSuccessData {
   participantId: string;
   rank: number;
   score: number;
+  /** 첫 정답으로 라운드 마감이 단축됐을 때의 새 마감(epoch ms). 아니면 null */
+  roundDeadlineAt: number | null;
 }
 
 interface ScoreEntryData {
@@ -88,6 +90,7 @@ export function useFetchRound(
                 totalRounds: data.totalRounds,
                 target: data.target,
                 startedAt: data.startedAt,
+                deadlineAt: null,
                 successes: [],
                 totals: data.round === 1 ? {} : prev.totals,
               }));
@@ -95,15 +98,20 @@ export function useFetchRound(
             }
             case 'round:success': {
               // 도착 순서 잠정치 — 확정 점수표는 round:end가 준다. elapsedMs는 서버가 안 주므로
-              // 이벤트 수신 시각으로 근사한다(표시용).
+              // 이벤트 수신 시각으로 근사한다(표시용). 첫 정답이면 서버가 마감을 그레이스(5초)로
+              // 단축한 새 마감(roundDeadlineAt)을 함께 실어 준다 — 타이머에 즉시 반영.
               const data = event.data as RoundSuccessData;
               setState((prev) => {
                 if (prev.phase !== 'playing') return prev;
+                const deadlineAt = data.roundDeadlineAt ?? prev.deadlineAt ?? null;
                 const nickname = resolveRef.current(data.participantId);
-                if (prev.successes.some((s) => s.nickname === nickname)) return prev;
+                if (prev.successes.some((s) => s.nickname === nickname)) {
+                  return { ...prev, deadlineAt };
+                }
                 const elapsedMs = Math.max(0, Date.now() - (prev.startedAt + COUNTDOWN_MS));
                 return {
                   ...prev,
+                  deadlineAt,
                   successes: [...prev.successes, { nickname, elapsedMs }],
                 };
               });

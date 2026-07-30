@@ -51,6 +51,9 @@ export interface FetchGameState {
   hostNickname: string | null;
   /** 이번 라운드 시작 시각(내 로컬 수신 기준) — 타이머/기록 계산용 */
   startedAt: number;
+  /** 라운드 마감 시각(epoch ms) — 첫 정답으로 마감이 단축되면 서버가 갱신해 준다(백엔드 모드).
+   *  null이면 startedAt + 카운트다운 + 제한시간으로 계산(mock 및 기본). */
+  deadlineAt?: number | null;
   /** 이번 라운드 성공자 (도착 순서) */
   successes: SuccessEntry[];
   /** 코스 누적 점수 (닉네임 → 점수). 순위 점수는 백엔드 GameScoreService와 동일하게 5/4/3/2 */
