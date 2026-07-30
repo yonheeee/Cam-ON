@@ -24,9 +24,30 @@
   min-width: 240px;
 }
 
+.landing__music-toggle {
+  position: fixed;
+  z-index: 20;
+  top: 20px;
+  right: 20px;
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  min-width: 118px;
+  padding: 10px 14px;
+  font-size: 14px;
+}
+
 @media (max-width: 640px) {
   .landing {
     gap: 32px;
+  }
+
+  .landing__music-toggle {
+    top: 12px;
+    right: 12px;
+    min-width: 104px;
+    padding: 8px 10px;
+    font-size: 12px;
   }
 
   .landing__cta {

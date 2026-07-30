@@ -238,7 +238,13 @@ export function CourseEditorModal({
           )}
 
           <div className="course-editor__actions">
-            <button type="button" className="pap-pixel-btn" onClick={onClose} disabled={saving}>
+            <button
+              type="button"
+              className="pap-pixel-btn"
+              data-button-sound="cancel"
+              onClick={onClose}
+              disabled={saving}
+            >
               취소
             </button>
             <button
