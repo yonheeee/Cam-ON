@@ -1,77 +1,249 @@
-/* 코드 입력(JoinRoomPage)·닉네임 입력(NicknamePage) 공용 스타일 — Pixel Arcade Plaza */
-
 .entry__card {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  width: min(420px, 90vw);
-  padding: 32px;
   box-sizing: border-box;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 128px;
+  grid-template-rows: auto auto auto;
+  column-gap: 16px;
+  row-gap: 24px;
+  width: min(440px, calc(100vw - 32px));
+  min-height: 244px;
+  padding: 28px 32px 24px;
+  border: var(--camon-stroke-2) solid var(--camon-color-ink);
+  border-radius: var(--camon-radius-12);
+  background: var(--camon-color-panel-cream);
+  color: var(--camon-color-ink);
+  box-shadow: var(--camon-shadow-hard);
+  font-family: var(--camon-font);
+}
+
+.entry__card--players {
+  grid-template-columns: 1fr;
+}
+
+.entry__header {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  min-height: 32px;
 }
 
 .entry__title {
   margin: 0;
-  font-size: 24px;
-  text-align: center;
+  color: var(--camon-color-ink);
+  font-family: var(--camon-font);
+  font-size: 21px;
+  font-weight: 700;
+  line-height: 1;
 }
 
-.entry__hint {
-  margin: -8px 0 0;
-  font-family: var(--pap-font-body);
-  font-size: 14px;
-  text-align: center;
-  color: var(--pap-ink);
-  opacity: 0.7;
+.entry__close {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--camon-color-ink);
+  font-size: 0;
+  cursor: pointer;
+  transform: translateY(-4px);
+}
+
+.entry__close::before,
+.entry__close::after {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 22px;
+  height: 2px;
+  border-radius: 999px;
+  background: currentColor;
+  content: '';
+}
+
+.entry__close::before {
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+
+.entry__close::after {
+  transform: translate(-50%, -50%) rotate(-45deg);
+}
+
+.entry__close:focus-visible {
+  outline: 3px solid var(--camon-color-arcade-blue);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.entry__field {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.entry__label {
+  color: #765f73;
+  font-size: 12px;
+  line-height: 1;
 }
 
 .entry__input {
+  box-sizing: border-box;
   width: 100%;
-  text-align: center;
+  height: 52px;
+  padding: 0 16px;
+  border: var(--camon-stroke-2) solid var(--camon-color-ink);
+  border-radius: var(--camon-radius-6);
+  outline: none;
+  background: var(--camon-color-input-cream);
+  color: var(--camon-color-ink);
+  font-family: var(--camon-font);
+  font-size: 16px;
+  line-height: 1;
+}
+
+.entry__input::placeholder {
+  color: #8e7d8d;
+  opacity: 1;
+}
+
+.entry__input:focus-visible {
+  border-width: 3px;
+  border-color: var(--camon-color-arcade-blue);
+  box-shadow: none;
 }
 
 .entry__input--code {
-  font-size: 28px;
-  letter-spacing: 8px;
+  letter-spacing: 4px;
   text-transform: uppercase;
 }
 
-.entry__players {
+.entry__input--error,
+.entry__input--error:focus-visible {
+  border-width: 3px;
+  border-color: var(--camon-color-error);
+  box-shadow: none;
+}
+
+.entry__submit {
+  align-self: start;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 12px;
-  font-family: var(--pap-font-body);
-  font-size: 15px;
-  color: var(--pap-ink);
-}
-
-.entry__players-btn {
+  box-sizing: border-box;
+  width: 128px;
+  height: 52px;
+  padding: 0 16px;
+  border: var(--camon-stroke-2) solid var(--camon-color-ink);
+  border-radius: var(--camon-radius-6);
+  background: var(--camon-color-action-orange);
+  color: var(--camon-color-ink);
+  font-family: var(--camon-font);
   font-size: 16px;
-  padding: 10px 16px;
+  font-weight: 700;
+  line-height: 1;
+  box-shadow: var(--camon-shadow-hard);
+  cursor: pointer;
+  transition:
+    transform 80ms ease-out,
+    box-shadow 80ms ease-out;
 }
 
-/* 선택된 인원 버튼 — 눌린 상태로 고정된 픽셀 버튼 느낌 */
-.entry__players-btn--selected {
-  background: var(--pap-arcade-teal);
-  color: var(--pap-white);
-  transform: translate(var(--pap-shadow-offset), var(--pap-shadow-offset));
-  box-shadow: 0 0 0 0 var(--pap-ink);
+.entry__field + .entry__submit {
+  margin-top: 23px;
 }
 
-.entry__actions {
+.entry__submit:hover:not(:disabled) {
+  transform: translate(-1px, -1px);
+  box-shadow: 6px 6px 0 rgb(41 33 58 / 52%);
+}
+
+.entry__submit:active:not(:disabled) {
+  transform: translate(5px, 5px);
+  box-shadow: none;
+}
+
+.entry__submit:disabled {
+  border-color: #9f969e;
+  background: #d8d2d0;
+  color: #766e75;
+  box-shadow: 3px 3px 0 rgb(41 33 58 / 25%);
+  cursor: not-allowed;
+}
+
+.entry__feedback {
+  grid-column: 1 / -1;
+  min-height: 17px;
+  margin: 0;
+  color: #765f73;
+  font-size: 13px;
+  line-height: 17px;
+  text-align: center;
+}
+
+.entry__feedback--error {
+  color: var(--camon-color-error);
+  font-weight: 700;
+}
+
+.entry__description {
+  margin: -8px 0 0;
+  color: #765f73;
+  font-size: 14px;
+  line-height: 20px;
+  text-align: center;
+}
+
+.entry__player-options {
   display: flex;
+  justify-content: center;
   gap: 12px;
 }
 
-.entry__actions > * {
-  flex: 1;
+.entry__player-option {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 96px;
+  height: 52px;
+  padding: 0;
+  border: var(--camon-stroke-2) solid var(--camon-color-ink);
+  border-radius: var(--camon-radius-6);
+  background: var(--camon-color-input-cream);
+  color: var(--camon-color-ink);
+  font-family: var(--camon-font);
+  font-size: 16px;
+  font-weight: 700;
+  box-shadow: var(--camon-shadow-hard);
+  cursor: pointer;
 }
 
-.entry__error {
-  margin: 0;
-  font-family: var(--pap-font-body);
-  font-size: 14px;
-  text-align: center;
-  color: var(--pap-festival-coral);
-  font-weight: 600;
+.entry__player-option--selected {
+  border-width: 3px;
+  border-color: var(--camon-color-action-orange);
+  background: var(--camon-color-selection-apricot);
+}
+
+.entry__card--players .entry__submit {
+  justify-self: center;
+  margin-top: 0;
+}
+
+@media (max-width: 480px) {
+  .entry__card {
+    grid-template-columns: 1fr;
+    padding-inline: 24px;
+  }
+
+  .entry__submit {
+    width: 100%;
+  }
+
+  .entry__player-option {
+    width: 82px;
+  }
 }

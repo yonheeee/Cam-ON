@@ -7,7 +7,37 @@
 /* 픽셀 폰트: Galmuri11 (한글 지원 픽셀 폰트, SIL OFL) */
 @import url('https://cdn.jsdelivr.net/npm/galmuri@latest/dist/galmuri.css');
 
+@font-face {
+  font-family: 'Mona12';
+  src: url('/fonts/Mona12-Regular.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Mona12';
+  src: url('/fonts/Mona12-Bold.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+}
+
 :root {
+  /* Pixel Arcade Plaza implementation tokens */
+  --camon-color-ink: #2b1833;
+  --camon-color-action-orange: #f6a13a;
+  --camon-color-selection-apricot: #ffc56e;
+  --camon-color-input-cream: #fff9ef;
+  --camon-color-panel-cream: #fff8e8;
+  --camon-color-arcade-blue: #4169c8;
+  --camon-color-error: #d94d64;
+  --camon-font: 'Mona12', 'Galmuri11', monospace;
+  --camon-stroke-2: 2px;
+  --camon-radius-6: 6px;
+  --camon-radius-12: 12px;
+  --camon-shadow-hard: 5px 5px 0 rgb(41 33 58 / 52%);
+
   /* 색상 토큰 */
   --pap-sky-blue: #80d8f4;
   --pap-plaza-cream: #fff0c8;
@@ -60,7 +90,10 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgb(43 24 51 / 0.45); /* Ink 반투명 */
+  box-sizing: border-box;
+  padding: 16px;
+  background: rgb(43 24 51 / 0.55);
+  backdrop-filter: blur(1px);
   z-index: 100;
 }
 
