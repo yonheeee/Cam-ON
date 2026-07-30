@@ -82,6 +82,9 @@ services:
       args:
         VITE_API_BASE_URL: https://${DOMAIN}
         VITE_WS_BASE_URL: wss://${DOMAIN}
+        # 백엔드에 주는 LIVEKIT_URL을 그대로 재사용한다 — 프론트가 접속할 프로젝트와 백엔드가
+        # 토큰을 서명하는 프로젝트가 갈라지면 연결만 거부되는 형태로 조용히 깨진다.
+        VITE_LIVEKIT_URL: ${LIVEKIT_URL}
     volumes:
       - frontend-dist:/output
     restart: "no"

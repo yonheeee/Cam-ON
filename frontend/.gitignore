@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# 환경설정은 커밋하지 않는다. 키 이름은 .env.example을 보고 각자 .env(또는 .env.local)를 만든다.
+.env
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

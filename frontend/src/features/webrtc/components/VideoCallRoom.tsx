@@ -41,8 +41,11 @@ const roomOptions: RoomOptions = {
   },
 };
 
-// LiveKit Cloud 프로젝트 서버 URL — 고정값이라 매번 입력받을 필요 없음.
-const LIVEKIT_SERVER_URL = 'wss://plaiground-gkmfgv1j.livekit.cloud';
+// LiveKit Cloud 프로젝트 서버 URL. 백엔드가 토큰을 서명할 때 쓰는 프로젝트(backend/.env의
+// LIVEKIT_*)와 반드시 같은 프로젝트여야 한다 — 어긋나면 토큰 서명은 정상인데 연결만 거부돼서
+// 원인을 찾기 어렵다. 키를 새로 발급받는 일이 반복되므로 코드에 박지 않고 frontend/.env에서 읽는다
+// (기본값은 커밋된 .env, 개인 환경만 다르게 하려면 .env.local에서 덮어쓴다).
+const LIVEKIT_SERVER_URL = import.meta.env.VITE_LIVEKIT_URL ?? '';
 
 interface VideoCallRoomProps {
   // 방 생성/입장 플로우를 마치고 들어오는 화면이라, 여기 도달한 시점엔 넷 다 이미 확보돼 있다.
@@ -56,7 +59,13 @@ export function VideoCallRoom({ accessToken, token, roomId, participantId }: Vid
   const navigate = useNavigate();
   // 방에 머무는 내내 하트비트를 보내 백엔드의 연결 가드(TTL 15초)에 의해 방에서 제거되지 않게 한다.
   useRoomHeartbeat(roomId, accessToken);
-  const [connectionError, setConnectionError] = useState<string | null>(null);
+  // 설정이 비어 있으면 빈 URL로 연결을 시도하게 되고, LiveKit이 주는 메시지로는 원인을 알 수
+  // 없다(단순 연결 실패로 보인다). 그래서 무엇이 빠졌는지 여기서 직접 짚어준다.
+  const [connectionError, setConnectionError] = useState<string | null>(
+    LIVEKIT_SERVER_URL
+      ? null
+      : 'VITE_LIVEKIT_URL이 설정되지 않았습니다 — frontend/.env를 확인하세요.',
+  );
   // 사용자가 스스로 나간 것(확인 팝업 경유)과 예기치 못한 종료를 구분한다 —
   // 스스로 나가면 바로 메인으로, 예기치 못한 종료면 "방 종료" 팝업(피그마 방 종료 프레임)을 띄운다.
   const leavingRef = useRef(false);
