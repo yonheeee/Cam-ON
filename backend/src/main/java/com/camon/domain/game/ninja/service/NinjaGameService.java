@@ -38,6 +38,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.ScheduledFuture;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -65,12 +66,19 @@ public class NinjaGameService {
     private static final int INITIAL_HP = 100;
     // 한 교환(콤보 완성 경합)의 제한시간.
     private static final Duration EXCHANGE_DURATION = Duration.ofSeconds(30);
+    // 공격권 획득 후 대상 지정 제한시간. 획득 순간 교환 30초 타이머는 취소되고 이 창이 새로 열린다.
+    // 제한시간 내 대상을 안 고르면 생존자 중 랜덤으로 자동 지정 — 공격권을 딴 공격이 무산되지 않게.
+    private static final Duration TARGET_DURATION = Duration.ofSeconds(15);
     // 공격 resolve 후 다음 교환/판 사이의 인터미션: 이펙트 재생 5초 + 다음 진행 직전 카운트다운 3초.
     // 타임아웃(공격 없음)으로 넘어갈 땐 이펙트가 없어 카운트다운(3초)만 태운다.
     private static final Duration EFFECT_DURATION = Duration.ofSeconds(5);
     private static final Duration COUNTDOWN_DURATION = Duration.ofSeconds(3);
     // 판이 무한히 안 끝나는 것(모두가 계속 타임아웃 등)을 막는 방어적 상한 — 도달하면 현재 HP 순으로 판을 마감한다.
     private static final int MAX_EXCHANGES_PER_ROUND = 50;
+    // 아무도 콤보를 못 낸 교환(타임아웃)마다 생존자 전원이 잃는 HP — 유한 HP가 곧 판 종료 보장
+    // 장치다(전원 정체 시 100 기준 5연속 타임아웃 ≈ 2분 45초면 판이 끝난다). 접전 중인 판은
+    // 타임아웃이 안 나므로 잘리지 않는다. 스킬 데미지 밸런스에 맞춰 튜닝하는 값.
+    private static final int TIMEOUT_HP_DECAY = 20;
 
     private final RoomRepository roomRepository;
     private final SkillRepository skillRepository;
@@ -311,11 +319,52 @@ public class NinjaGameService {
         }
 
         ninjaRedis.recordAttackSkill(roomCode, seq, round, exchange, requiredSkillId, Instant.now());
+
+        // 공격권이 확정됐으니 교환 30초 타이머는 의미가 없다 — 취소하고 대상 지정 창(15초)을 연다.
+        // 이걸 안 하면 교환 데드라인이 그대로 남아, 마감 직전에 공격권을 딴 사람의 대상 지정이
+        // 타임아웃에 잘려 NINJA_ROUND_CLOSED로 무효 처리되는 버그가 있었다.
+        Instant targetDeadline = Instant.now().plus(TARGET_DURATION);
+        scheduleSessionTask(room, seq, targetDeadline,
+            () -> handleTargetTimeout(room, seq, round, exchange, participantToken));
+
         eventPublisher.publish(room.roomId(), "ninja:attack-won",
-            new AttackWonPayload(round, exchange, participantToken, requiredSkillId));
-        log.info("[Service] attack : round={} ex={} token={} 공격권 선점 성공", round, exchange, participantToken);
+            new AttackWonPayload(round, exchange, participantToken, requiredSkillId, targetDeadline));
+        log.info("[Service] attack : round={} ex={} token={} 공격권 선점 성공 (대상 지정 데드라인 {})",
+            round, exchange, participantToken, targetDeadline);
 
         return new AttackResponse(round, exchange, participantToken, requiredSkillId);
+    }
+
+    // 대상 지정 제한시간 초과 — 공격권을 딴 공격이 무산되지 않도록 생존자 중 랜덤 대상을 자동
+    // 지정한다. 수동 지정(target)과의 경합은 동일한 claimTarget/closeExchange CAS가 해소한다.
+    void handleTargetTimeout(Room room, int seq, int round, int exchange, String attackerToken) {
+        String roomCode = room.roomCode();
+        pendingTimeouts.remove(timerKey(roomCode, seq));
+
+        List<String> candidates = ninjaRedis.getAlivePlayers(roomCode, seq, round).stream()
+            .filter(token -> !token.equals(attackerToken))
+            .toList();
+        if (candidates.isEmpty()) {
+            // 방어: 칠 상대가 없는 이상 상태(정상 흐름에선 판이 먼저 끝난다) — 교환만 닫고 다음으로.
+            if (ninjaRedis.closeExchange(roomCode, seq, round, exchange, "TARGET_TIMEOUT")) {
+                Instant nextRoundAt = Instant.now().plus(COUNTDOWN_DURATION);
+                ninjaRedis.enterIntermission(roomCode, seq, null, nextRoundAt);
+                scheduleSessionTask(room, seq, nextRoundAt,
+                    resolveNext(room, seq, round, exchange, false, false));
+            }
+            return;
+        }
+
+        String targetToken = candidates.get(ThreadLocalRandom.current().nextInt(candidates.size()));
+        if (!ninjaRedis.claimTarget(roomCode, seq, round, exchange, targetToken)) {
+            return; // 간발의 차로 수동 지정이 먼저 들어옴 — 그쪽 흐름이 마무리한다.
+        }
+        if (!ninjaRedis.closeExchange(roomCode, seq, round, exchange, "TARGET")) {
+            return;
+        }
+        log.info("[Service] handleTargetTimeout : round={} ex={} attacker={} 대상 미지정 — {} 랜덤 자동 공격",
+            round, exchange, attackerToken, targetToken);
+        resolveAttack(room, seq, round, exchange, attackerToken, targetToken);
     }
 
     public TargetResponse target(UUID gameId, int round, String participantToken, TargetRequest request) {
@@ -337,10 +386,23 @@ public class NinjaGameService {
             throw new BusinessException(ErrorCode.NINJA_TARGET_ALREADY_SET);
         }
         if (!ninjaRedis.closeExchange(roomCode, seq, round, exchange, "TARGET")) {
-            // 타임아웃이 먼저 교환을 닫아버린 경합 — 데미지는 적용하지 않는다.
+            // 자동 지정(handleTargetTimeout)이 먼저 교환을 닫아버린 경합 — 데미지는 적용하지 않는다.
             throw new BusinessException(ErrorCode.NINJA_ROUND_CLOSED);
         }
+        return resolveAttack(room, seq, round, exchange, participantToken, targetToken);
+    }
 
+    // 대상이 확정된(claimTarget + closeExchange를 이긴) 교환의 공격 판정 — 수동 지정(target)과
+    // 자동 지정(handleTargetTimeout) 공용 경로. 데미지 적용부터 인터미션 전개까지 책임진다.
+    private TargetResponse resolveAttack(
+        Room room,
+        int seq,
+        int round,
+        int exchange,
+        String participantToken,
+        String targetToken
+    ) {
+        String roomCode = room.roomCode();
         Skill skill = findExchangeSkill(roomCode, seq, round, exchange);
         int damage = skill.getDamage();
         long hpAfter = ninjaRedis.decrementHp(roomCode, seq, round, targetToken, damage);
@@ -383,7 +445,7 @@ public class NinjaGameService {
 
         // 인터미션 종료 시점에 다음 진행을 서버가 연다(전원 동일 타이밍 → 선입력 방지).
         Runnable next = resolveNext(room, seq, round, exchange, roundEnded, ending);
-        scheduleIntermissionTask(room, seq, ending ? effectUntil : nextRoundAt, next);
+        scheduleSessionTask(room, seq, ending ? effectUntil : nextRoundAt, next);
 
         return new TargetResponse(round, exchange, participantToken, targetToken, skill.getId(), damage,
             hpAfterClamped, eliminated, roundEnded, ending);
@@ -405,7 +467,7 @@ public class NinjaGameService {
         return totalRounds != null && round >= totalRounds;
     }
 
-    private void scheduleIntermissionTask(Room room, int seq, Instant runAt, Runnable task) {
+    private void scheduleSessionTask(Room room, int seq, Instant runAt, Runnable task) {
         cancelPendingTimeout(room.roomCode(), seq);
         ScheduledFuture<?> future = taskScheduler.schedule(task, runAt);
         pendingTimeouts.put(timerKey(room.roomCode(), seq), future);
@@ -454,16 +516,32 @@ public class NinjaGameService {
         pendingTimeouts.put(timerKey(roomCode, seq), future);
     }
 
-    private void handleTimeout(Room room, int seq, int round, int exchange) {
+    // 테스트에서 직접 호출할 수 있게 package-private (charades의 handleTimeout과 동일한 관례).
+    void handleTimeout(Room room, int seq, int round, int exchange) {
         String roomCode = room.roomCode();
         pendingTimeouts.remove(timerKey(roomCode, seq));
         if (!ninjaRedis.closeExchange(roomCode, seq, round, exchange, "TIMEOUT")) {
             return; // 이미 대상 지정으로 닫혔거나, 이전 세션의 좀비 타이머 — no-op.
         }
-        log.info("[Service] handleTimeout : round={} ex={} 제한시간 내 아무도 콤보 완성 못함 — 공격 없이 교환 종료", round, exchange);
 
-        // 타임아웃은 탈락이 없어 생존자 수가 그대로다. 상한에 도달했으면 판을 강제 마감, 아니면 다음 교환.
-        boolean roundEnded = exchange >= MAX_EXCHANGES_PER_ROUND;
+        // 아무도 콤보를 못 낸 교환은 생존자 전원의 HP를 깎는다(감쇠). 유한 HP가 곧 판 종료
+        // 보장 장치라, 전원이 계속 실패해도 몇 교환 안에 기존 aliveCount<=1 판정으로 판이 끝난다.
+        // 동시에 0이 된 사람들은 같은 시각으로 탈락 처리해 "진짜 동점"으로 남긴다(균등 점수).
+        Set<String> aliveBefore = ninjaRedis.getAlivePlayers(roomCode, seq, round);
+        List<String> newlyEliminated = new ArrayList<>();
+        for (String token : aliveBefore) {
+            long hpAfter = ninjaRedis.decrementHp(roomCode, seq, round, token, TIMEOUT_HP_DECAY);
+            if (hpAfter <= 0) {
+                newlyEliminated.add(token);
+            }
+        }
+        Instant decayedAt = Instant.now();
+        newlyEliminated.forEach(token -> ninjaRedis.eliminate(roomCode, seq, round, token, decayedAt));
+        int aliveCount = aliveBefore.size() - newlyEliminated.size();
+        log.info("[Service] handleTimeout : round={} ex={} 전원 콤보 실패 — 생존자 {}명 HP -{} (탈락 {}명, 남은 생존 {}명)",
+            round, exchange, aliveBefore.size(), TIMEOUT_HP_DECAY, newlyEliminated.size(), aliveCount);
+
+        boolean roundEnded = aliveCount <= 1 || exchange >= MAX_EXCHANGES_PER_ROUND;
         boolean ending = false;
         List<RoundResultEntry> roundResult = null;
         Map<String, Long> totals = null;
@@ -473,9 +551,15 @@ public class NinjaGameService {
             roundResult = buildRoundResult(room, seq, round);
             totals = sessionTotals(room, seq);
         }
+
+        // 감쇠 반영 후 스냅샷 — 이벤트만 구독하는 클라이언트가 화면 HP를 즉시 맞추는 재료.
+        List<String> aliveAfter = new ArrayList<>(ninjaRedis.getAlivePlayers(roomCode, seq, round));
+        Map<String, Integer> hpAfterDecay = hpSnapshot(roomCode, seq, round);
+
         if (ending) {
             eventPublisher.publish(room.roomId(), "ninja:round-timeout",
-                new RoundTimeoutPayload(round, exchange, NinjaPhase.ENDED, null, roundResult, totals));
+                new RoundTimeoutPayload(round, exchange, NinjaPhase.ENDED, null, roundResult, totals,
+                    aliveAfter, hpAfterDecay, List.copyOf(newlyEliminated)));
             finishGame(room, seq);
             return;
         }
@@ -483,21 +567,92 @@ public class NinjaGameService {
         Instant nextRoundAt = Instant.now().plus(COUNTDOWN_DURATION);
         ninjaRedis.enterIntermission(roomCode, seq, null, nextRoundAt);
         eventPublisher.publish(room.roomId(), "ninja:round-timeout",
-            new RoundTimeoutPayload(round, exchange, NinjaPhase.INTERMISSION, nextRoundAt, roundResult, totals));
+            new RoundTimeoutPayload(round, exchange, NinjaPhase.INTERMISSION, nextRoundAt, roundResult, totals,
+                aliveAfter, hpAfterDecay, List.copyOf(newlyEliminated)));
         Runnable next = resolveNext(room, seq, round, exchange, roundEnded, false);
-        scheduleIntermissionTask(room, seq, nextRoundAt, next);
+        scheduleSessionTask(room, seq, nextRoundAt, next);
     }
 
-    // 이 판(round)의 결과를 순위로 환산해 점수를 저장한다 — 생존자는 HP 내림차순, 그다음 이 판의 탈락자를
-    // 늦게 탈락한 순서로 이어붙인다. 최후 1인으로 끝난 정상 판이면 [생존자, 마지막탈락, ..., 첫탈락] 형태.
+    // 이 판(round)의 결과를 점수로 환산해 저장한다 — 순위는 [생존자 HP 내림차순 → 탈락자 늦게 죽은 순]이고,
+    // 순위 슬롯 점수 [5,4,3,2]를 부여하되 동점 그룹(같은 HP 생존 / 동시 탈락)은 차지한 슬롯 점수의
+    // 평균(내림)을 균등하게 받는다. 토큰 문자열 순서로 임의의 1등(5점)이 생기던 문제의 수정 —
+    // 예: 감쇠로 전원 동시 0 → 전원 (5+4+3+2)/4 = 3점.
     private void saveRoundScore(Room room, int seq, int round) {
-        List<UUID> participantIdsByRank = buildRoundRanking(room, seq, round).stream()
-            .map(entry -> UUID.fromString(entry.token()))
-            .toList();
-        SaveRoundResult result = gameScoreService.saveRoundRanking(room.roomId(), seq, round, participantIdsByRank);
+        Map<UUID, Long> scores = new java.util.LinkedHashMap<>();
+        int slot = 0;
+        for (List<String> group : buildRoundTieGroups(room, seq, round)) {
+            long sum = 0;
+            for (int i = 0; i < group.size(); i++) {
+                sum += pointsForSlot(slot + i);
+            }
+            long each = sum / group.size();
+            for (String token : group) {
+                scores.put(UUID.fromString(token), each);
+            }
+            slot += group.size();
+        }
+        SaveRoundResult result = gameScoreService.saveRoundScores(room.roomId(), seq, round, scores);
         if (result != SaveRoundResult.SUCCESS && result != SaveRoundResult.ALREADY_SAVED) {
             throw new IllegalStateException("Failed to save ninja round score: " + result);
         }
+    }
+
+    // 순위 슬롯별 점수. 닌자는 최대 4명이라 5번째 슬롯은 정상 흐름에서 없다(방어적 0).
+    private static long pointsForSlot(int slot) {
+        return switch (slot) {
+            case 0 -> 5;
+            case 1 -> 4;
+            case 2 -> 3;
+            case 3 -> 2;
+            default -> 0;
+        };
+    }
+
+    // 판 순위를 동점 그룹 단위로 만든다: 생존자는 HP 내림차순(같은 HP = 한 그룹), 그 뒤 탈락자는
+    // 늦게 탈락한 순서(같은 탈락 시각 = 한 그룹 — 감쇠 일괄 탈락이 여기 해당).
+    private List<List<String>> buildRoundTieGroups(Room room, int seq, int round) {
+        String roomCode = room.roomCode();
+        Map<Object, Object> hp = ninjaRedis.getAllHp(roomCode, seq, round);
+        List<String> aliveByHpDesc = new ArrayList<>(ninjaRedis.getAlivePlayers(roomCode, seq, round));
+        aliveByHpDesc.sort(
+            Comparator.<String>comparingInt(token -> parseInt(hp.get(token))).reversed()
+                .thenComparing(token -> token)
+        );
+
+        List<List<String>> groups = new ArrayList<>();
+        List<String> current = new ArrayList<>();
+        Integer currentHp = null;
+        for (String token : aliveByHpDesc) {
+            int tokenHp = parseInt(hp.get(token));
+            if (currentHp == null || currentHp != tokenHp) {
+                if (!current.isEmpty()) {
+                    groups.add(current);
+                }
+                current = new ArrayList<>();
+                currentHp = tokenHp;
+            }
+            current.add(token);
+        }
+        if (!current.isEmpty()) {
+            groups.add(current);
+        }
+
+        current = new ArrayList<>();
+        Long currentTime = null;
+        for (Map.Entry<String, Long> entry : ninjaRedis.getEliminatedWithTimeDesc(roomCode, seq, round)) {
+            if (currentTime == null || !currentTime.equals(entry.getValue())) {
+                if (!current.isEmpty()) {
+                    groups.add(current);
+                }
+                current = new ArrayList<>();
+                currentTime = entry.getValue();
+            }
+            current.add(entry.getKey());
+        }
+        if (!current.isEmpty()) {
+            groups.add(current);
+        }
+        return groups;
     }
 
     private void finishGame(Room room, int seq) {
@@ -514,27 +669,6 @@ public class NinjaGameService {
         );
     }
 
-    // 한 판 안에서의 순위(점수 부여용): 생존자 HP 내림차순 → 이 판 탈락자(늦게 탈락 순).
-    private List<RankingEntry> buildRoundRanking(Room room, int seq, int round) {
-        String roomCode = room.roomCode();
-        Map<Object, Object> hp = ninjaRedis.getAllHp(roomCode, seq, round);
-        List<String> aliveByHpDesc = new ArrayList<>(ninjaRedis.getAlivePlayers(roomCode, seq, round));
-        aliveByHpDesc.sort(
-            Comparator.<String>comparingInt(token -> parseInt(hp.get(token))).reversed()
-                .thenComparing(token -> token)
-        );
-        List<String> eliminatedDesc = ninjaRedis.getEliminatedOrderDesc(roomCode, seq, round);
-
-        List<RankingEntry> ranking = new ArrayList<>(aliveByHpDesc.size() + eliminatedDesc.size());
-        int rank = 1;
-        for (String token : aliveByHpDesc) {
-            ranking.add(new RankingEntry(token, rank++));
-        }
-        for (String token : eliminatedDesc) {
-            ranking.add(new RankingEntry(token, rank++));
-        }
-        return ranking;
-    }
 
     // 게임 최종 순위: 판별로 누적된 세션 점수 내림차순. 동점은 토큰으로 결정적 정렬.
     private List<RankingEntry> buildFinalRanking(Room room, int seq) {

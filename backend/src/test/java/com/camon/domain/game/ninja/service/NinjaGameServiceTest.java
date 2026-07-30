@@ -30,6 +30,7 @@ import com.camon.domain.game.ninja.dto.TargetResponse;
 import com.camon.domain.game.ninja.repository.NinjaRedisRepository;
 import com.camon.domain.game.ninja.repository.SkillRepository;
 import com.camon.domain.game.ninja.ws.NinjaEventPublisher;
+import com.camon.domain.game.ninja.ws.payload.AttackWonPayload;
 import com.camon.domain.game.ninja.ws.payload.GameEndedPayload;
 import com.camon.domain.room.domain.Room;
 import com.camon.domain.room.domain.RoomStatus;
@@ -100,12 +101,13 @@ class NinjaGameServiceTest {
             gameEventPublisher, gameScoreService, taskScheduler, applicationEventPublisher
         );
 
+        // handleTimeout/handleTargetTimeout 테스트는 Room을 직접 넘겨 findById를 안 타므로 lenient.
         Room room = new Room(roomId, roomCode, UUID.randomUUID(), 4, RoomStatus.PLAYING, seq, Instant.now());
-        when(roomRepository.findById(roomId)).thenReturn(Optional.of(room));
+        lenient().when(roomRepository.findById(roomId)).thenReturn(Optional.of(room));
 
         ScheduledFuture<?> scheduledFuture = mock(ScheduledFuture.class);
         lenient().doReturn(scheduledFuture).when(taskScheduler).schedule(any(Runnable.class), any(Instant.class));
-        lenient().when(gameScoreService.saveRoundRanking(any(UUID.class), anyInt(), anyInt(), any()))
+        lenient().when(gameScoreService.saveRoundScores(any(UUID.class), anyInt(), anyInt(), any()))
             .thenReturn(SaveRoundResult.SUCCESS);
         lenient().when(gameScoreService.getSessionTotals(any(UUID.class), anyInt())).thenReturn(Map.of());
 
@@ -171,8 +173,81 @@ class NinjaGameServiceTest {
 
         assertThat(response.attackerToken()).isEqualTo(attacker);
         assertThat(response.exchange()).isEqualTo(exchange);
-        verify(eventPublisher).publish(eq(roomId), eq("ninja:attack-won"), any());
         verify(ninjaRedis).recordAttackSkill(eq(roomCode), eq(seq), eq(round), eq(exchange), eq(10L), any(Instant.class));
+
+        // 공격권 획득 = 교환 30초 타이머를 대상 지정 창(15초)으로 교체. 이게 없으면 교환 데드라인이
+        // 살아남아 마감 직전 공격권이 무효 처리되는 버그(NINJA_ROUND_CLOSED)가 재발한다.
+        verify(taskScheduler).schedule(any(Runnable.class), any(Instant.class));
+        ArgumentCaptor<Object> payloadCaptor = ArgumentCaptor.forClass(Object.class);
+        verify(eventPublisher).publish(eq(roomId), eq("ninja:attack-won"), payloadCaptor.capture());
+        AttackWonPayload payload = (AttackWonPayload) payloadCaptor.getValue();
+        assertThat(payload.targetDeadlineAt()).isNotNull(); // 프론트 대상 지정 카운트다운의 기준 시각
+    }
+
+    // ---- 대상 지정 제한시간 (자동 공격) ----
+
+    @Test
+    void handleTargetTimeout_autoAttacksRandomSurvivor_whenNoTargetChosen() {
+        // 생존자 = 공격자 + target 하나뿐 → 랜덤이어도 target이 뽑힌다(결정적 검증).
+        when(ninjaRedis.getAlivePlayers(roomCode, seq, round)).thenReturn(Set.of(attacker, target));
+        when(ninjaRedis.claimTarget(roomCode, seq, round, exchange, target)).thenReturn(true);
+        when(ninjaRedis.closeExchange(roomCode, seq, round, exchange, "TARGET")).thenReturn(true);
+        when(ninjaRedis.getExchangeSkillId(roomCode, seq, round, exchange)).thenReturn(10L);
+        when(skillRepository.findById(10L)).thenReturn(Optional.of(skill));
+        when(ninjaRedis.decrementHp(roomCode, seq, round, target, 20)).thenReturn(80L);
+
+        service.handleTargetTimeout(room(), seq, round, exchange, attacker);
+
+        // 공격이 무산되지 않고 정상 판정 경로(attack-resolved)로 흘러야 한다.
+        verify(ninjaRedis).decrementHp(roomCode, seq, round, target, 20);
+        verify(eventPublisher).publish(eq(roomId), eq("ninja:attack-resolved"), any());
+    }
+
+    @Test
+    void handleTargetTimeout_yieldsToManualTarget_whenClaimLost() {
+        when(ninjaRedis.getAlivePlayers(roomCode, seq, round)).thenReturn(Set.of(attacker, target));
+        // 간발의 차로 수동 지정이 먼저 — 자동 지정은 조용히 물러난다.
+        when(ninjaRedis.claimTarget(roomCode, seq, round, exchange, target)).thenReturn(false);
+
+        service.handleTargetTimeout(room(), seq, round, exchange, attacker);
+
+        verify(ninjaRedis, never()).decrementHp(any(), anyInt(), anyInt(), anyString(), anyInt());
+        verify(eventPublisher, never()).publish(any(), eq("ninja:attack-resolved"), any());
+    }
+
+    // ---- 타임아웃 HP 감쇠 ----
+
+    @Test
+    void handleTimeout_decaysAllSurvivors_andSplitsPointsEvenlyOnSimultaneousElimination() {
+        when(ninjaRedis.closeExchange(roomCode, seq, round, exchange, "TIMEOUT")).thenReturn(true);
+        // 감쇠 전 생존 3명 → 감쇠 후 attacker만 생존(b,c는 동시 0 이하)
+        when(ninjaRedis.getAlivePlayers(roomCode, seq, round))
+            .thenReturn(Set.of(attacker, target, third))  // 감쇠 대상 순회
+            .thenReturn(Set.of(attacker))                 // 점수용 동점 그룹
+            .thenReturn(Set.of(attacker));                // 스냅샷
+        when(ninjaRedis.decrementHp(roomCode, seq, round, attacker, 20)).thenReturn(40L);
+        when(ninjaRedis.decrementHp(roomCode, seq, round, target, 20)).thenReturn(0L);
+        when(ninjaRedis.decrementHp(roomCode, seq, round, third, 20)).thenReturn(-5L);
+        when(ninjaRedis.getAllHp(roomCode, seq, round))
+            .thenReturn(Map.<Object, Object>of(attacker, "40", target, "0", third, "-5"));
+        // 동시 탈락 = 같은 시각 → 한 그룹
+        when(ninjaRedis.getEliminatedWithTimeDesc(roomCode, seq, round))
+            .thenReturn(List.of(Map.entry(target, 5000L), Map.entry(third, 5000L)));
+        when(ninjaRedis.getTotalRounds(roomCode, seq)).thenReturn(3); // round=2 < 3 → 게임은 계속
+        when(ninjaRedis.getParticipants(roomCode, seq)).thenReturn(Set.of(attacker, target, third));
+
+        service.handleTimeout(room(), seq, round, exchange);
+
+        // 생존자 전원 감쇠 + 0 이하 일괄 탈락 (같은 시각 = 동점)
+        verify(ninjaRedis).eliminate(eq(roomCode), eq(seq), eq(round), eq(target), any(Instant.class));
+        verify(ninjaRedis).eliminate(eq(roomCode), eq(seq), eq(round), eq(third), any(Instant.class));
+        // 판 종료(생존 1명): 생존자 5점, 동시 탈락 2명은 (4+3)/2 = 3점 균등 — 토큰 순서로
+        // 임의의 4점/3점이 갈리지 않는다.
+        verify(gameScoreService).saveRoundScores(roomId, seq, round, Map.of(p1, 5L, p2, 3L, p3, 3L));
+    }
+
+    private Room room() {
+        return new Room(roomId, roomCode, UUID.randomUUID(), 4, RoomStatus.PLAYING, seq, Instant.now());
     }
 
     @Test
@@ -252,7 +327,7 @@ class NinjaGameServiceTest {
 
         verify(ninjaRedis, never()).eliminate(any(), anyInt(), anyInt(), any(), any());
         // 판이 안 끝났으니 점수 저장은 아직 없다.
-        verify(gameScoreService, never()).saveRoundRanking(any(), anyInt(), anyInt(), any());
+        verify(gameScoreService, never()).saveRoundScores(any(), anyInt(), anyInt(), any());
         verify(ninjaRedis).enterIntermission(eq(roomCode), eq(seq), any(Instant.class), any(Instant.class));
 
         captureScheduledTask().run();
@@ -269,7 +344,9 @@ class NinjaGameServiceTest {
         // 대상 탈락 → 판에 1명만 생존 → 판 종료.
         when(ninjaRedis.getAlivePlayers(roomCode, seq, round)).thenReturn(Set.of(attacker));
         when(ninjaRedis.getAllHp(roomCode, seq, round)).thenReturn(Map.<Object, Object>of(attacker, "60"));
-        when(ninjaRedis.getEliminatedOrderDesc(roomCode, seq, round)).thenReturn(List.of(target, third));
+        // 늦게 탈락한 순서 + 탈락 시각(서로 다름 = 동점 아님): target(나중), third(먼저)
+        when(ninjaRedis.getEliminatedWithTimeDesc(roomCode, seq, round))
+            .thenReturn(List.of(Map.entry(target, 2000L), Map.entry(third, 1000L)));
         when(ninjaRedis.getTotalRounds(roomCode, seq)).thenReturn(3); // round=2 < 3 → 마지막 판 아님
         // 다음 판 준비용
         when(ninjaRedis.getParticipants(roomCode, seq)).thenReturn(Set.of(attacker, target, third));
@@ -282,8 +359,8 @@ class NinjaGameServiceTest {
         assertThat(response.gameEnded()).isFalse();
 
         verify(ninjaRedis).eliminate(eq(roomCode), eq(seq), eq(round), eq(target), any(Instant.class));
-        // 이 판의 탈락 순서로 점수 저장: [생존자, 마지막탈락, 첫탈락].
-        verify(gameScoreService).saveRoundRanking(roomId, seq, round, List.of(p1, p2, p3));
+        // 이 판의 탈락 순서로 점수 저장: 생존자 5점, 마지막 탈락 4점, 첫 탈락 3점 (동점 없음).
+        verify(gameScoreService).saveRoundScores(roomId, seq, round, Map.of(p1, 5L, p2, 4L, p3, 3L));
 
         captureScheduledTask().run();
         // 다음 판(round+1)이 열린다 — 전원 리셋 후 첫 교환.
@@ -306,7 +383,8 @@ class NinjaGameServiceTest {
         when(ninjaRedis.decrementHp(roomCode, seq, lastRound, target, 20)).thenReturn(-5L);
         when(ninjaRedis.getAlivePlayers(roomCode, seq, lastRound)).thenReturn(Set.of(attacker));
         when(ninjaRedis.getAllHp(roomCode, seq, lastRound)).thenReturn(Map.<Object, Object>of(attacker, "60"));
-        when(ninjaRedis.getEliminatedOrderDesc(roomCode, seq, lastRound)).thenReturn(List.of(target, third));
+        when(ninjaRedis.getEliminatedWithTimeDesc(roomCode, seq, lastRound))
+            .thenReturn(List.of(Map.entry(target, 2000L), Map.entry(third, 1000L)));
         when(ninjaRedis.getTotalRounds(roomCode, seq)).thenReturn(lastRound); // 마지막 판
         // finishGame: 최종 순위는 누적 세션 점수순.
         when(ninjaRedis.getParticipants(roomCode, seq)).thenReturn(Set.of(attacker, target, third));
@@ -317,7 +395,7 @@ class NinjaGameServiceTest {
 
         assertThat(response.roundEnded()).isTrue();
         assertThat(response.gameEnded()).isTrue();
-        verify(gameScoreService).saveRoundRanking(roomId, seq, lastRound, List.of(p1, p2, p3));
+        verify(gameScoreService).saveRoundScores(roomId, seq, lastRound, Map.of(p1, 5L, p2, 4L, p3, 3L));
         verify(ninjaRedis, never()).startRound(any(), anyInt(), anyInt(), any(), anyInt());
 
         captureScheduledTask().run(); // 이펙트 종료 시점의 마무리 태스크

@@ -133,6 +133,9 @@ export interface NinjaAttackWonEvent {
   exchange: number;
   attackerToken: string;
   skillId: number | null;
+  /** 대상 지정 제한시각(서버 기준) — 이 순간 교환 30초 타이머는 멈추고 지정 창이 열린다.
+   *  넘기면 서버가 생존자 중 랜덤 대상으로 자동 공격한다. */
+  targetDeadlineAt: string;
 }
 
 export interface NinjaAttackResolvedEvent {
@@ -159,9 +162,14 @@ export interface NinjaRoundTimeoutEvent {
   exchange: number;
   phase: NinjaPhase;
   nextRoundAt: string | null;
-  // 이 타임아웃이 판을 끝냈을 때(교환 상한 도달)만 채워진다.
+  // 이 타임아웃이 판을 끝냈을 때만 채워진다.
   roundResult: RoundResultEntry[] | null;
   sessionTotals: Record<string, number> | null;
+  // 타임아웃 감쇠(생존자 전원 HP 차감) 반영 후 스냅샷 — round-started와 같은 형태.
+  alivePlayers: string[];
+  hp: Record<string, number>;
+  // 이번 감쇠로 탈락한 참가자 (동시 탈락 = 동점).
+  eliminated: string[];
 }
 
 export interface NinjaGameEndedEvent {
