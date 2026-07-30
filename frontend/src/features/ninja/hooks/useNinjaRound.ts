@@ -16,7 +16,9 @@ import {
 import { useSequenceProgress } from '../lib/sequenceProgress';
 import { useNinjaRealtime } from './useNinjaRealtime';
 
-const ATTACK_TARGET_TIMER_SECONDS = 30;
+// 대상 지정 제한시간 폴백 — 서버 데드라인(attack-won의 targetDeadlineAt)을 못 받은 경우에만.
+// 백엔드 NinjaGameService.TARGET_DURATION(15초)과 맞춤.
+const ATTACK_TARGET_TIMER_SECONDS = 15;
 // 교환 제한시간 폴백 — 서버 데드라인(ninja:round-started의 deadlineAt)이 있으면 그걸 쓰고,
 // 이벤트를 못 받은 경우(새로고침 직후 스냅샷 동기화로 진입)에만 이 근사치로 다시 센다.
 // 백엔드 NinjaGameService.EXCHANGE_DURATION(30초)과 맞춤.
@@ -60,6 +62,8 @@ export function useNinjaRound(
   // 현재 교환의 서버 데드라인(ninja:round-started의 deadlineAt). 스냅샷 동기화(GET .../state)에는
   // 데드라인이 없어서 새로고침 직후엔 null일 수 있다 — 그 경우 타이머는 30초 근사치로 폴백.
   const [roundDeadline, setRoundDeadline] = useState<number | null>(null);
+  // 공격권 획득 시 서버가 내려주는 대상 지정 데드라인(attack-won의 targetDeadlineAt).
+  const [targetDeadline, setTargetDeadline] = useState<number | null>(null);
 
   // requiredSkill이 실제로 바뀔 때만(=라운드 전환) 새 배열이 되도록 메모.
   // 그냥 매 렌더 .map()을 새로 만들면 참조가 매번 달라져서, useSequenceProgress의
@@ -130,11 +134,14 @@ export function useNinjaRound(
         setEffectUntil(null);
         setNextRoundAt(null);
         setRoundDeadline(Date.parse(e.deadlineAt));
+        setTargetDeadline(null); // 이전 교환의 대상 지정 창 잔재 제거
         break;
       }
       case 'ninja:attack-won': {
         const e = data as NinjaAttackWonEvent;
         setCurrentAttackerToken(e.attackerToken);
+        // 공격권 획득 = 교환 30초 타이머가 멈추고 대상 지정 창이 열린다(서버 기준 시각).
+        setTargetDeadline(e.targetDeadlineAt ? Date.parse(e.targetDeadlineAt) : null);
         break;
       }
       case 'ninja:attack-resolved': {
@@ -160,12 +167,16 @@ export function useNinjaRound(
         break;
       }
       case 'ninja:round-timeout': {
-        // 아무도 콤보를 못 완성한 교환 — 공격 없이 인터미션(카운트다운만) 또는 게임 종료로.
+        // 아무도 콤보를 못 완성한 교환 — 서버가 생존자 전원 HP를 감쇠시키고 넘어간다.
+        // 감쇠 반영 후 스냅샷(alivePlayers/hp)으로 화면 HP를 즉시 맞춘다 — 안 맞추면 다음
+        // 판 시작까지 화면 HP가 서버와 어긋난다.
         const e = data as NinjaRoundTimeoutEvent;
         setPhase(e.phase);
         setEffectUntil(null);
         setNextRoundAt(e.nextRoundAt ? Date.parse(e.nextRoundAt) : null);
         setLastAttack(null);
+        if (e.alivePlayers) setAlivePlayers(e.alivePlayers);
+        if (e.hp) setHp(e.hp);
         if (e.roundResult) setRoundResult(e.roundResult);
         if (e.sessionTotals) setSessionTotals(e.sessionTotals);
         break;
@@ -306,20 +317,25 @@ export function useNinjaRound(
     if (currentAttackerToken) setRoundTimerSeconds(0);
   }, [currentAttackerToken]);
 
-  // 공격권을 획득하면 대상을 지정할 30초를 보여준다 — 백엔드가 이 창을 별도로 강제하진 않고
-  // (라운드 자체 타임아웃만 서버가 관리) 순수 UI 재촉용 타이머다.
+  // 공격권 획득 후 대상 지정 카운트다운 — 서버가 attack-won에 실어준 데드라인(15초) 기준.
+  // 시간 내 대상을 안 고르면 서버가 랜덤 자동 공격하므로, 이 타이머는 정확한 서버 시각을 보여줘야
+  // "0초인데 안 넘어감/시간 남았는데 잘림" 같은 어긋남이 없다. 데드라인을 못 받은 경우(재접속 등)만
+  // 근사치로 폴백.
   const [attackTimerSeconds, setAttackTimerSeconds] = useState<number | null>(null);
   useEffect(() => {
     if (!isMyAttack) {
       setAttackTimerSeconds(null);
       return;
     }
-    setAttackTimerSeconds(ATTACK_TARGET_TIMER_SECONDS);
+    const initial = targetDeadline !== null
+      ? Math.max(0, Math.ceil((targetDeadline - Date.now()) / 1000))
+      : ATTACK_TARGET_TIMER_SECONDS;
+    setAttackTimerSeconds(initial);
     const interval = setInterval(() => {
       setAttackTimerSeconds((prev) => (prev !== null && prev > 0 ? prev - 1 : 0));
     }, 1000);
     return () => clearInterval(interval);
-  }, [isMyAttack, round, exchange]);
+  }, [isMyAttack, round, exchange, targetDeadline]);
 
   // 인터미션 진행은 서버 기준 시각으로만 판단한다 — 클라 로컬 카운터로 "몇 초 지났나"를 세지 않고,
   // effectUntil/nextRoundAt(절대 시각)까지 남은 시간을 매 틱 계산한다. 그래서 늦게 폴링한 클라이언트나

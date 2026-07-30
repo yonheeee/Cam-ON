@@ -358,6 +358,22 @@ public class NinjaRedisRepository {
         return members == null ? List.of() : List.copyOf(members);
     }
 
+    // 늦게 탈락한 순서 + 탈락 시각(epoch ms). 같은 시각 = 동시 탈락(감쇠 일괄 탈락 등)으로,
+    // 점수 부여 시 동점 그룹 판별에 쓴다.
+    public List<Map.Entry<String, Long>> getEliminatedWithTimeDesc(String roomCode, int seq, int round) {
+        Set<org.springframework.data.redis.core.ZSetOperations.TypedTuple<String>> tuples =
+            redis.opsForZSet().reverseRangeWithScores(eliminatedKey(roomCode, seq, round), 0, -1);
+        if (tuples == null) {
+            return List.of();
+        }
+        return tuples.stream()
+            .map(tuple -> Map.entry(
+                String.valueOf(tuple.getValue()),
+                tuple.getScore() == null ? 0L : tuple.getScore().longValue()
+            ))
+            .toList();
+    }
+
     // --- 게임 종료 ---
 
     // 최종 순위(누적 점수순)는 WS(ninja:game-ended)로만 나가면 STOMP를 안 붙인 프론트는 못 받는다 —
