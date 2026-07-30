@@ -4,6 +4,7 @@ import { DevFetchPage } from './features/fetch/pages/DevFetchPage';
 import { NinjaEffectPreview } from './features/ninja/components/NinjaEffectPreview';
 import { JoinRoomPage } from './features/room/pages/JoinRoomPage';
 import { NicknamePage } from './features/room/pages/NicknamePage';
+import { PlayerCountPage } from './features/room/pages/PlayerCountPage';
 import { RoomPage } from './features/room/pages/RoomPage';
 import { ButtonSounds } from './features/sound/components/ButtonSounds';
 
@@ -24,6 +25,7 @@ function App() {
         {/* 랜딩이 레이아웃을 겸한다 — /join, /nickname은 랜딩 위에 모달(팝업)로 렌더링 */}
         <Route path="/" element={<LandingPage />}>
           <Route path="join" element={<JoinRoomPage />} />
+          <Route path="players" element={<PlayerCountPage />} />
           <Route path="nickname" element={<NicknamePage />} />
         </Route>
         {/* 개발 전용: 원클릭으로 방 생성 + 물건 가져오기 게임 자동 시작 (프로드 빌드엔 없음) */}
