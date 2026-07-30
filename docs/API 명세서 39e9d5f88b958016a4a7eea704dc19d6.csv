@@ -6,6 +6,7 @@ No,방,프 -> 백,API,방 나가기,현재 방에서 자발적으로 퇴장,DELE
 No,방,프 -> 백,API,참가자 강퇴,방장이 대기방에서 참가자를 강퇴. 강퇴된 참가자는 같은 방에 재입장 불가,DELETE,,/api/rooms/{roomId}/members/{participantId},구현,미구현,방장,필요
 No,방,프 -> 백,API,준비 상태 변경,현재 참가자의 준비 완료 상태를 변경,PATCH,,/api/rooms/{roomId}/members/me/ready,구현,미구현,방 참가자,필요
 No,방,프 -> 백,API,게임 시작,방장이 대기방에서 확정한 코스대로 진행 시작,POST,,/api/rooms/{roomId}/start,미구현,미구현,방장,필요
+No,방,프 -> 백,API,대기방 복귀,코스 종합 결과에서 방장이 대기방으로 복귀. 코스 점수 기록을 초기화하고 방을 WAITING으로 되돌림(코스 항목은 유지),POST,,/api/rooms/{roomId}/return,구현,구현,방장,필요
 No,방,프->백->프,WebSocket,방 실시간 연결,방 상태 동기화·시그널링용 STOMP 연결 수립,,connect,/ws/rooms/{roomId},미구현,미구현,방 참가자,필요
 No,방,프->백->프,WS Event,WebRTC Offer 전달,화상통화 연결을 위한 offer SDP 중계,,webrtc:offer,/ws/rooms/{roomId},미구현,미구현,방 참가자,필요
 No,방,프->백->프,WS Event,WebRTC Answer 전달,화상통화 연결을 위한 answer SDP 중계,,webrtc:answer,/ws/rooms/{roomId},미구현,미구현,방 참가자,필요
@@ -17,6 +18,7 @@ No,방,백 -> 프,WS Event,연결 상태 변경 전파,참가자의 연결 끊�
 No,방,백 -> 프,WS Event,게임 선택 변경 전파,대기방에서 코스(게임 목록/순서) 설정이 바뀐 것을 알림,,member:game-updated,/ws/rooms/{roomId},미구현,미구현,방 참가자,필요
 No,방,백 -> 프,WS Event,준비 상태 변경 전파,참가자의 준비 완료 상태와 전원 준비 여부를 알림,,member:ready-updated,/ws/rooms/{roomId},구현,미구현,방 참가자,필요
 No,방,백 -> 프,WS Event,게임 시작 전파,코스의 다음 게임(세션)이 시작됨을 알림,,game:started,/ws/rooms/{roomId},미구현,미구현,방 참가자,필요
+No,방,백 -> 프,WS Event,대기방 복귀 전파,방장이 코스 종합 결과에서 대기방 복귀를 눌러 방이 WAITING으로 되돌아갔음을 알림,,course:reset,/ws/rooms/{roomId},구현,구현,방 참가자,필요
 No,게임 공통,백 -> 프,WS Event,게임 라운드 결과 브로드캐스트,저장된 라운드 결과를 방 참가자 전체에 실시간 전파,,game:round-result,/ws/rooms/{roomId},미구현,미구현,방 참가자,필요
 No,물건 가져오기,프 -> 백,API,이번 라운드 제시 물건 조회,이번 라운드에 찾아야 할 물건(제시어)을 Spring이 MySQL에서 뽑아 응답,GET,,/api/games/{gameId}/fetch-object/mission,미구현,미구현,방 참가자,필요
 No,물건 가져오기,프 -> AI -> 프,API,물건 인식 요청,카메라 프레임 속 물체가 무엇인지 분류만 해서 응답(정답 여부는 판단 안 함),POST,,/ai/games/{gameId}/fetch-object/detections,미구현,미구현,방 참가자,필요

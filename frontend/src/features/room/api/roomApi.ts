@@ -123,4 +123,18 @@ export const roomApi = {
     request<StartGameResult>(`/api/rooms/${roomId}/start`, accessToken, {
       method: 'POST',
     }),
+
+  // [방장 전용] 코스 종합 결과에서 대기방으로 복귀. 서버가 점수 기록을 초기화하고 방을
+  // WAITING으로 되돌린 뒤 course:reset을 브로드캐스트한다 — 화면 전환은 그 이벤트가 담당.
+  // leaveRoom과 같은 이유(204 No Content)로 request()를 쓰지 않는다.
+  returnToLobby: async (roomId: string, accessToken: string): Promise<void> => {
+    const response = await fetch(`${BASE_URL}/api/rooms/${roomId}/return`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!response.ok) {
+      const body = await response.json().catch(() => null);
+      throw new RoomApiError(body?.message ?? `요청 실패 (HTTP ${response.status})`, body?.code);
+    }
+  },
 };

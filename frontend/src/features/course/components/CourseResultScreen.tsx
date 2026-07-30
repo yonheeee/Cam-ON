@@ -8,16 +8,27 @@ interface CourseResultScreenProps {
   nicknameById: Map<string, string>;
   /** 내 participantId — 내 줄을 강조하려고 */
   participantId: string;
+  /** 방장인가 — 대기방 복귀 버튼은 방장만 누를 수 있다(서버도 검증) */
+  isHost: boolean;
+  /** [방장 전용] 대기방 복귀 요청. 화면 전환은 서버의 course:reset 브로드캐스트가 담당 */
+  onReturnToLobby: () => void;
+  returning: boolean;
+  returnError: string | null;
   onLeave: () => void;
 }
 
 // 코스의 모든 게임이 끝난 뒤 뜨는 종합 결과. 점수는 코스 전체 누적(room:{code}:course:totals)이다.
-// 여기서 방은 이미 FINISHED이므로 대기방으로 돌아가지 않는다 — 다시 놀려면 새 방을 만든다.
+// 방장이 "방으로 돌아가기"를 누르면 서버가 점수를 초기화하고 방을 WAITING으로 되돌려
+// 전원이 함께 대기방으로 돌아간다(course:reset). 개별로 떠나려면 "메인으로".
 export function CourseResultScreen({
   ranking,
   totalSessions,
   nicknameById,
   participantId,
+  isHost,
+  onReturnToLobby,
+  returning,
+  returnError,
   onLeave,
 }: CourseResultScreenProps) {
   return (
@@ -46,9 +57,25 @@ export function CourseResultScreen({
           ))}
         </ol>
 
+        {isHost ? (
+          <button
+            type="button"
+            className="pap-pixel-btn pap-pixel-btn--primary course-result__leave"
+            onClick={onReturnToLobby}
+            disabled={returning}
+          >
+            {returning ? '돌아가는 중...' : '방으로 돌아가기'}
+          </button>
+        ) : (
+          <p className="course-result__wait-host">
+            방장이 [방으로 돌아가기]를 누르면 함께 대기방으로 이동해요
+          </p>
+        )}
+        {returnError && <p className="course-result__error">{returnError}</p>}
+
         <button
           type="button"
-          className="pap-pixel-btn pap-pixel-btn--primary course-result__leave"
+          className="pap-pixel-btn course-result__leave"
           onClick={onLeave}
         >
           메인으로

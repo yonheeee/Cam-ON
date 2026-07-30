@@ -40,4 +40,15 @@ public class GameStartController {
             started.totalRounds()
         )));
     }
+
+    // 코스 종합 결과에서 방장이 "방으로 돌아가기"를 누르는 지점. 점수를 초기화하고 방을
+    // WAITING으로 되돌린다 — 전파는 서비스가 course:reset 이벤트로 한다.
+    @PostMapping("/{roomId}/return")
+    public ResponseEntity<Void> returnToLobby(
+        @AuthenticationPrincipal GuestPrincipal principal,
+        @PathVariable UUID roomId
+    ) {
+        courseRunner.returnToLobby(roomId, principal.participantId());
+        return ResponseEntity.noContent().build();
+    }
 }

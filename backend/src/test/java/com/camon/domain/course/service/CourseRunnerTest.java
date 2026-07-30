@@ -14,6 +14,7 @@ import com.camon.domain.course.domain.CourseItem;
 import com.camon.domain.course.repository.CourseRepository;
 import com.camon.domain.course.ws.CourseEventPublisher;
 import com.camon.domain.course.ws.payload.CourseFinishedPayload;
+import com.camon.domain.course.ws.payload.CourseResetPayload;
 import com.camon.domain.course.ws.payload.CourseSessionSkippedPayload;
 import com.camon.domain.game.common.Game;
 import com.camon.domain.game.common.service.GameCatalogService;
@@ -300,6 +301,53 @@ class CourseRunnerTest {
     }
 
     // --- fixtures ---
+
+    @Test
+    void returnToLobby_clearsScoresAndReopensRoom() {
+        givenRoom(RoomStatus.FINISHED, 3);
+
+        runner.returnToLobby(roomId, hostId);
+
+        // 점수 초기화가 WAITING 복귀보다 먼저여야 한다 — 반대면 새 코스가 시작될 수 있는
+        // 상태에서 이전 점수가 잠깐 남는다. 방장 ready 복원은 WAITING 이후여야 성립한다.
+        InOrder order = Mockito.inOrder(
+            gameScoreService, participantRepository, roomRepository
+        );
+        order.verify(gameScoreService).clearCourseResults(roomId);
+        order.verify(participantRepository).resetAllReady(roomId);
+        order.verify(roomRepository).updateCurrentSessionSeq(roomId, 1);
+        order.verify(roomRepository).updateStatus(roomId, RoomStatus.WAITING);
+        order.verify(participantRepository).updateReady(roomId, hostId, true);
+
+        ArgumentCaptor<CourseResetPayload> payload =
+            ArgumentCaptor.forClass(CourseResetPayload.class);
+        verify(courseEventPublisher).publishCourseReset(eq(roomId), payload.capture());
+        assertThat(payload.getValue().byParticipantId()).isEqualTo(hostId);
+    }
+
+    @Test
+    void returnToLobby_rejectsNonHost() {
+        givenRoom(RoomStatus.FINISHED, 3);
+
+        assertBusinessError(
+            () -> runner.returnToLobby(roomId, UUID.randomUUID()),
+            ErrorCode.ROOM_NOT_HOST
+        );
+        verify(roomRepository, never()).updateStatus(any(), any());
+        verify(gameScoreService, never()).clearCourseResults(any());
+    }
+
+    @Test
+    void returnToLobby_rejectsWhenCourseNotFinished() {
+        givenRoom(RoomStatus.PLAYING, 2);
+
+        assertBusinessError(
+            () -> runner.returnToLobby(roomId, hostId),
+            ErrorCode.ROOM_NOT_FINISHED
+        );
+        verify(roomRepository, never()).updateStatus(any(), any());
+        verify(gameScoreService, never()).clearCourseResults(any());
+    }
 
     private void givenRoom(RoomStatus status, int currentSessionSeq) {
         when(roomRepository.findById(roomId)).thenReturn(Optional.of(new Room(

@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 // - game:started        코스의 다음 게임이 열렸다 (게임별 패널 전환의 유일한 신호)
 // - course:session-skipped  인원이 안 맞아 그 게임을 건너뛰었다
 // - course:finished     코스의 마지막 게임까지 끝났다 → 종합 결과
+// - course:reset        방장이 종합 결과에서 대기방 복귀를 눌렀다 → 대기방으로
 interface RoomEvent<T> {
   event: string;
   data: T;
@@ -76,6 +77,12 @@ export function useCourseProgress(
               break;
             case 'course:finished':
               setFinished(event.data as CourseFinishedData);
+              setActiveSession(null);
+              break;
+            case 'course:reset':
+              // 방장이 종합 결과에서 "방으로 돌아가기"를 눌렀다 — 방이 WAITING으로 돌아갔으니
+              // 결과 화면을 접고 대기방으로 전환한다(대기방이 스냅샷을 새로 읽는다).
+              setFinished(null);
               setActiveSession(null);
               break;
             default:

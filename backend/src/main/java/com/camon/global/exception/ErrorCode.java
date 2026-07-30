@@ -15,6 +15,7 @@ public enum ErrorCode {
     ROOM_KICK_SELF(HttpStatus.BAD_REQUEST, "자기 자신은 강퇴할 수 없습니다."),
     ROOM_BANNED(HttpStatus.FORBIDDEN, "강퇴된 방에는 다시 입장할 수 없습니다."),
     ROOM_NOT_ALL_READY(HttpStatus.CONFLICT, "모든 참가자가 준비되어야 게임을 시작할 수 있습니다."),
+    ROOM_NOT_FINISHED(HttpStatus.CONFLICT, "코스가 끝난 방에서만 대기방으로 돌아갈 수 있습니다."),
     NICKNAME_DUPLICATED(HttpStatus.CONFLICT, "이미 사용 중인 닉네임입니다."),
     ALREADY_JOINED(HttpStatus.CONFLICT, "이미 참가한 방입니다."),
     ROOM_CODE_GENERATION_FAILED(
