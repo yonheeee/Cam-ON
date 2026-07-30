@@ -2,6 +2,7 @@ package com.camon.domain.game.charades.controller;
 
 import com.camon.domain.game.charades.dto.CharadesGuessRequest;
 import com.camon.domain.game.charades.dto.CharadesGuessResponse;
+import com.camon.domain.game.charades.dto.CharadesStateResponse;
 import com.camon.domain.game.charades.dto.CharadesWordResponse;
 import com.camon.domain.game.charades.service.CharadesGameFacade;
 import com.camon.global.apiresponse.ApiResponse;
@@ -23,6 +24,19 @@ public class CharadesController {
 
     public CharadesController(CharadesGameFacade charadesGameFacade) {
         this.charadesGameFacade = charadesGameFacade;
+    }
+
+    @GetMapping("/state")
+    public ApiResponse<CharadesStateResponse> getState(
+        @PathVariable Long gameId,
+        @AuthenticationPrincipal GuestPrincipal principal
+    ) {
+        return ApiResponse.ok(
+            charadesGameFacade.getState(
+                gameId,
+                principal.participantId()
+            )
+        );
     }
 
     @GetMapping("/word")

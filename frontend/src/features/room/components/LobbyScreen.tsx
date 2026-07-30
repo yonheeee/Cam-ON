@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ParticipantTile, useLocalParticipant, useTracks } from '@livekit/components-react';
 import { Track } from 'livekit-client';
 import { ChatPanel } from '../../chat/components/ChatPanel';
@@ -96,6 +96,12 @@ export function LobbyScreen({
 
   const self = room?.participants.find((p) => p.participantId === participantId);
   const isHost = participantId === room?.hostParticipantId;
+  // 방장을 제외한 전원이 준비 완료인가 — 게임 시작 게이트 (혼자면 바로 시작 가능)
+  const allOthersReady =
+    !!room &&
+    room.participants
+      .filter((p) => p.participantId !== room.hostParticipantId)
+      .every((p) => p.ready);
   // 타일 map 안에서 isHost가 "이 타일 주인이 방장인가"로 섀도잉되므로, "내가 방장인가"는 별칭으로 들고 간다.
   const amHost = isHost;
   // 타일 테두리·표시에 쓸 참가자 정보 (LiveKit identity == participantId)
@@ -177,6 +183,49 @@ export function LobbyScreen({
       setReadyPending(false);
     }
   };
+
+  // 스페이스바 단축키 — 방장은 게임 시작, 참가자는 준비 토글. 마우스 없이 대기방을 진행할 수
+  // 있게 한다. 오작동 방지 가드:
+  //  - 채팅 입력 등 폼 요소/버튼에 포커스가 있으면 무시 (입력 중 스페이스, 포커스된 버튼의
+  //    네이티브 스페이스 클릭과의 이중 동작 방지)
+  //  - 팝업(코스 편집/나가기/강퇴 확인)이 열려 있으면 무시
+  //  - 꾹 누르고 있을 때의 반복 입력(e.repeat) 무시 — 준비 상태가 깜빡거리지 않게
+  // 시작 조건 미달이면 시작 대신 그 이유를 토스트로 보여준다(hover 말풍선과 같은 문구).
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.code !== 'Space' || e.repeat) return;
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          target.tagName === 'BUTTON' ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      if (courseEditorOpen || confirmLeave || kickTarget) return;
+      e.preventDefault(); // 페이지 스크롤 방지
+
+      if (amHost) {
+        if (starting) return;
+        if (!course || course.items.length === 0) {
+          showToast('코스를 정해주세요!');
+          return;
+        }
+        if (!allOthersReady) {
+          showToast('모든 참가자가 준비를 완료해야 해요!');
+          return;
+        }
+        onStartGame();
+      } else {
+        void handleToggleReady();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  });
 
   return (
     <div className="lobby-screen">
@@ -365,7 +414,7 @@ export function LobbyScreen({
                 </button>
               </span>
             </div>
-            {/* 최대 7세트 — 이름 대신 아이콘 + 라운드 수 칩. 이름은 툴팁으로 */}
+            {/* 최대 7세트 — 칩 하나 = 게임 1세트. 아이콘만 보여주고 이름/주제는 툴팁으로 */}
             <ol className="lobby-screen__sets">
               {(course?.items ?? []).map((item) => (
                 <li
@@ -373,12 +422,9 @@ export function LobbyScreen({
                   className="lobby-screen__set"
                   title={`${String(item.idx).padStart(2, '0')} ${
                     GAME_LABELS[item.gameName] ?? item.gameName
-                  } · ${item.roundCount}라운드${item.topicName ? ` · ${item.topicName}` : ''}`}
+                  } 1세트${item.topicName ? ` · ${item.topicName}` : ''}`}
                 >
                   <span className="lobby-screen__set-icon">{GAME_ICONS[item.gameName]}</span>
-                  <span className="lobby-screen__set-rounds pap-pixel-title">
-                    {item.roundCount}R
-                  </span>
                 </li>
               ))}
             </ol>
@@ -417,20 +463,32 @@ export function LobbyScreen({
             </button>
             {/* 주 액션은 하나로 통일 — 방장: 게임 시작 / 참가자: 준비 토글 */}
             {isHost ? (
-              <button
-                type="button"
-                className="pap-pixel-btn pap-pixel-btn--coral"
-                // 코스가 비면 시작할 게 없다 — 서버도 COURSE_EMPTY로 거부하므로 미리 막는다.
-                disabled={starting || !room || !course || course.items.length === 0}
-                title={
+              // 공통 요구사항: 전원 준비 완료여야 시작 가능 (방장 본인 제외 — 방장은 시작이 곧 준비).
+              // 왜 안 눌리는지는 네이티브 title이 아니라 CSS 말풍선으로 보여준다 — 비활성 버튼의
+              // title 툴팁은 뜨기까지 1초쯤 걸리고 눈에 잘 안 띄어서 "버튼이 고장났다"로 읽힌다.
+              <span
+                className="lobby-screen__start-wrap"
+                data-hint={
                   course && course.items.length === 0
-                    ? '먼저 게임 구성을 정해 주세요'
-                    : undefined
+                    ? '코스를 정해주세요!'
+                    : allOthersReady
+                      ? undefined
+                      : '모든 참가자가 준비를 완료해야 해요!'
                 }
-                onClick={() => onStartGame()}
               >
-                {starting ? '시작 중...' : '게임 시작'}
-              </button>
+                <button
+                  type="button"
+                  className="pap-pixel-btn pap-pixel-btn--coral"
+                  // 코스가 비면 시작할 게 없고(서버도 COURSE_EMPTY로 거부), 전원 준비 전에도
+                  // 서버가 거부하므로(ROOM_NOT_ALL_READY) 둘 다 미리 막는다.
+                  disabled={
+                    starting || !room || !course || course.items.length === 0 || !allOthersReady
+                  }
+                  onClick={() => onStartGame()}
+                >
+                  {starting ? '시작 중...' : allOthersReady ? '게임 시작 (Space)' : '준비 대기 중...'}
+                </button>
+              </span>
             ) : (
               // 준비되면 눌린 채 고정된 라임 버튼으로 — 누르는 순간의 "철컥" UX.
               // (확정안은 준비 버튼 제거 예정 — 백엔드 ready 규칙 정리 전까지 임시)
@@ -443,7 +501,7 @@ export function LobbyScreen({
                 disabled={readyPending || !self}
                 onClick={() => void handleToggleReady()}
               >
-                {readyPending ? '...' : self?.ready ? '준비 완료!' : '준비 하기'}
+                {readyPending ? '...' : self?.ready ? '준비 완료!' : '준비 하기 (Space)'}
               </button>
             )}
           </div>

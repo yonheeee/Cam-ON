@@ -237,10 +237,6 @@ public class CourseRunner {
         if (playerCount > game.getMaxPlayers()) {
             return Optional.of("TOO_MANY_PLAYERS");
         }
-        // min_rounds가 null인 게임은 하한이 "참여자 수"다 — 인원이 늘었으면 라운드가 모자랄 수 있다.
-        if (game.getMinRounds() == null && item.roundCount() < playerCount) {
-            return Optional.of("NOT_ENOUGH_ROUNDS");
-        }
         if (!startersByGameName.containsKey(game.getName())) {
             return Optional.of("GAME_NOT_SUPPORTED");
         }

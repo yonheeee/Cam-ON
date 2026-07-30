@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes, useSearchParams } from 'react-router';
 import { LandingPage } from './features/landing/components/LandingPage';
+import { DevFetchPage } from './features/fetch/pages/DevFetchPage';
 import { NinjaEffectPreview } from './features/ninja/components/NinjaEffectPreview';
 import { JoinRoomPage } from './features/room/pages/JoinRoomPage';
 import { NicknamePage } from './features/room/pages/NicknamePage';
@@ -25,6 +26,8 @@ function App() {
           <Route path="join" element={<JoinRoomPage />} />
           <Route path="nickname" element={<NicknamePage />} />
         </Route>
+        {/* 개발 전용: 원클릭으로 방 생성 + 물건 가져오기 게임 자동 시작 (프로드 빌드엔 없음) */}
+        {import.meta.env.DEV && <Route path="/dev/fetch" element={<DevFetchPage />} />}
         {/* 정적 세그먼트가 :roomId보다 우선 매칭되므로 /rooms/join이 RoomPage에 잡히지 않는다 */}
         <Route path="/rooms/join" element={<InviteRedirect />} />
         <Route path="/rooms/:roomId" element={<RoomPage />} />

@@ -62,7 +62,7 @@ export interface TargetResponse {
   targetHpAfter: number;
   targetEliminated: boolean;
   // 이 교환으로 판이 끝났는가(최후 1인).
-  boutEnded: boolean;
+  roundEnded: boolean;
   // 이 공격이 게임 전체를 끝냈는가(마지막 판 종료).
   gameEnded: boolean;
 }
@@ -72,8 +72,8 @@ export interface RankingEntry {
   rank: number;
 }
 
-// 방금 끝난 판(bout)의 순위 한 줄 — 그 판의 등수와 그 판으로 얻은 점수.
-export interface BoutResultEntry {
+// 방금 끝난 판(round)의 순위 한 줄 — 그 판의 등수와 그 판으로 얻은 점수.
+export interface RoundResultEntry {
   token: string;
   rank: number;
   points: number;
@@ -112,7 +112,69 @@ export interface NinjaStateResponse {
   // 판을 가로질러 누적된 참가자별 점수(최종 발표 합산용).
   sessionTotals: Record<string, number>;
   // 방금 끝난 판의 순위+획득 점수. 판 종료 인터미션 동안에만 채워지고, 그 외엔 null.
-  boutResult: BoutResultEntry[] | null;
+  roundResult: RoundResultEntry[] | null;
+}
+
+// ---- ninja:* STOMP 이벤트 payload (백엔드 ws/payload 레코드와 1:1) ----
+// 상태의 단일 소스: 입장/재연결 시 GET .../state로 스냅샷을 한 번 받고, 이후엔 아래 이벤트들로만
+// 증분 갱신한다(폴링 없음). 시각 필드는 ISO 문자열.
+
+export interface NinjaRoundStartedEvent {
+  round: number;
+  exchange: number;
+  deadlineAt: string;
+  // 판 시작 = 전원 부활/HP 리셋. 그 스냅샷을 함께 실어 준다.
+  alivePlayers: string[];
+  hp: Record<string, number>;
+}
+
+export interface NinjaAttackWonEvent {
+  round: number;
+  exchange: number;
+  attackerToken: string;
+  skillId: number | null;
+  /** 대상 지정 제한시각(서버 기준) — 이 순간 교환 30초 타이머는 멈추고 지정 창이 열린다.
+   *  넘기면 서버가 생존자 중 랜덤 대상으로 자동 공격한다. */
+  targetDeadlineAt: string;
+}
+
+export interface NinjaAttackResolvedEvent {
+  round: number;
+  exchange: number;
+  attackerToken: string;
+  targetToken: string;
+  skillId: number | null;
+  damage: number;
+  targetHpAfter: number;
+  targetEliminated: boolean;
+  phase: NinjaPhase;
+  effectUntil: string | null;
+  nextRoundAt: string | null;
+  roundEnded: boolean;
+  ending: boolean;
+  // roundEnded=true일 때만 채워진다.
+  roundResult: RoundResultEntry[] | null;
+  sessionTotals: Record<string, number> | null;
+}
+
+export interface NinjaRoundTimeoutEvent {
+  round: number;
+  exchange: number;
+  phase: NinjaPhase;
+  nextRoundAt: string | null;
+  // 이 타임아웃이 판을 끝냈을 때만 채워진다.
+  roundResult: RoundResultEntry[] | null;
+  sessionTotals: Record<string, number> | null;
+  // 타임아웃 감쇠(생존자 전원 HP 차감) 반영 후 스냅샷 — round-started와 같은 형태.
+  alivePlayers: string[];
+  hp: Record<string, number>;
+  // 이번 감쇠로 탈락한 참가자 (동시 탈락 = 동점).
+  eliminated: string[];
+}
+
+export interface NinjaGameEndedEvent {
+  ranking: RankingEntry[];
+  sessionTotals: Record<string, number>;
 }
 
 export class NinjaApiError extends Error {

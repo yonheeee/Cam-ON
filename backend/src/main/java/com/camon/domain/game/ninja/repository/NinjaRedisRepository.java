@@ -70,12 +70,12 @@ public class NinjaRedisRepository {
         return sessionKey(roomCode, seq) + ":participants";
     }
 
-    private String boutKey(String roomCode, int seq, int round) {
+    private String roundKey(String roomCode, int seq, int round) {
         return sessionKey(roomCode, seq) + ":round:" + round;
     }
 
     private String exchangeKey(String roomCode, int seq, int round, int exchange) {
-        return boutKey(roomCode, seq, round) + ":ex:" + exchange;
+        return roundKey(roomCode, seq, round) + ":ex:" + exchange;
     }
 
     private String attackKey(String roomCode, int seq, int round, int exchange) {
@@ -83,15 +83,15 @@ public class NinjaRedisRepository {
     }
 
     private String aliveKey(String roomCode, int seq, int round) {
-        return boutKey(roomCode, seq, round) + ":alive";
+        return roundKey(roomCode, seq, round) + ":alive";
     }
 
     private String eliminatedKey(String roomCode, int seq, int round) {
-        return boutKey(roomCode, seq, round) + ":eliminated";
+        return roundKey(roomCode, seq, round) + ":eliminated";
     }
 
     private String hpKey(String roomCode, int seq, int round) {
-        return boutKey(roomCode, seq, round) + ":hp";
+        return roundKey(roomCode, seq, round) + ":hp";
     }
 
     private String finalRankingKey(String roomCode, int seq) {
@@ -236,16 +236,16 @@ public class NinjaRedisRepository {
         return value == null ? null : Instant.ofEpochMilli(Long.parseLong(value.toString()));
     }
 
-    // --- 판(bout) 시작: HP/생존/탈락순 리셋 ---
+    // --- 판(round) 시작: HP/생존/탈락순 리셋 ---
 
-    public void startBout(String roomCode, int seq, int round, Set<String> tokens, int initialHp) {
+    public void startRound(String roomCode, int seq, int round, Set<String> tokens, int initialHp) {
         redis.delete(aliveKey(roomCode, seq, round));
         redis.delete(hpKey(roomCode, seq, round));
         redis.delete(eliminatedKey(roomCode, seq, round));
         // 공통 점수 저장(GameResult) Lua 스크립트가 "round 키 존재"로 라운드가 열렸는지 검증하므로,
-        // 판(bout)이 열릴 때 bout 키(room:...:round:{r})에 마커를 남겨 그 검증을 통과시킨다.
+        // 판(round)이 열릴 때 판 키(room:...:round:{r})에 마커를 남겨 그 검증을 통과시킨다.
         // (판별 alive/hp/eliminated/ex는 하위 키라 이 검증 대상이 아니다.)
-        redis.opsForHash().put(boutKey(roomCode, seq, round), "round", String.valueOf(round));
+        redis.opsForHash().put(roundKey(roomCode, seq, round), "round", String.valueOf(round));
         redis.opsForSet().add(aliveKey(roomCode, seq, round), tokens.toArray(String[]::new));
         String hp = hpKey(roomCode, seq, round);
         for (String token : tokens) {
@@ -356,6 +356,22 @@ public class NinjaRedisRepository {
     public List<String> getEliminatedOrderDesc(String roomCode, int seq, int round) {
         Set<String> members = redis.opsForZSet().reverseRange(eliminatedKey(roomCode, seq, round), 0, -1);
         return members == null ? List.of() : List.copyOf(members);
+    }
+
+    // 늦게 탈락한 순서 + 탈락 시각(epoch ms). 같은 시각 = 동시 탈락(감쇠 일괄 탈락 등)으로,
+    // 점수 부여 시 동점 그룹 판별에 쓴다.
+    public List<Map.Entry<String, Long>> getEliminatedWithTimeDesc(String roomCode, int seq, int round) {
+        Set<org.springframework.data.redis.core.ZSetOperations.TypedTuple<String>> tuples =
+            redis.opsForZSet().reverseRangeWithScores(eliminatedKey(roomCode, seq, round), 0, -1);
+        if (tuples == null) {
+            return List.of();
+        }
+        return tuples.stream()
+            .map(tuple -> Map.entry(
+                String.valueOf(tuple.getValue()),
+                tuple.getScore() == null ? 0L : tuple.getScore().longValue()
+            ))
+            .toList();
     }
 
     // --- 게임 종료 ---

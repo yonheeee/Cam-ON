@@ -16,6 +16,7 @@ import static org.mockito.Mockito.when;
 import com.camon.domain.game.charades.domain.CharadesGameState;
 import com.camon.domain.game.charades.domain.CharadesTurnStatus;
 import com.camon.domain.game.charades.dto.CharadesGuessRequest;
+import com.camon.domain.game.charades.dto.CharadesStateResponse;
 import com.camon.domain.game.charades.repository.CharadesRedisRepository;
 import com.camon.domain.game.charades.ws.CharadesEventPublisher;
 import com.camon.domain.game.charades.ws.payload.CharadesAnswerRevealedPayload;
@@ -346,6 +347,55 @@ class CharadesGameServiceTest {
         verify(charadesRedis, never()).openTurn(
             any(), anyInt(), anyInt(), anyInt(),
             any(), any(Long.class), any(Instant.class)
+        );
+    }
+
+    @Test
+    void returnsCurrentStateWithoutRequiringPlayingTurn() {
+        UUID presenterId = UUID.randomUUID();
+        Instant expiresAt = Instant.now().minusSeconds(1);
+        CharadesGameState state = new CharadesGameState(
+            1,
+            1,
+            2,
+            3,
+            TOPIC_ID,
+            presenterId,
+            42L,
+            expiresAt,
+            CharadesTurnStatus.TIMEOUT
+        );
+        when(roomRepository.findById(roomId)).thenReturn(Optional.of(room));
+        when(charadesRedis.findState(ROOM_CODE, SESSION_SEQ))
+            .thenReturn(Optional.of(state));
+        when(missionTopicRepository
+            .existsByTopicIdAndGameGameIdAndIsActiveTrue(TOPIC_ID, GAME_ID))
+            .thenReturn(true);
+
+        CharadesStateResponse response = service.getState(roomId, GAME_ID);
+
+        assertThat(response.round()).isEqualTo(1);
+        assertThat(response.totalRounds()).isEqualTo(1);
+        assertThat(response.turn()).isEqualTo(2);
+        assertThat(response.totalTurnsInRound()).isEqualTo(3);
+        assertThat(response.presenterId()).isEqualTo(presenterId);
+        assertThat(response.expiresAt()).isEqualTo(expiresAt);
+        assertThat(response.status()).isEqualTo(CharadesTurnStatus.TIMEOUT);
+        verify(missionRepository, never())
+            .findByMissionIdAndGameGameIdAndTopicTopicIdAndMissionTypeAndIsActiveTrue(
+                any(), any(), any(), any()
+            );
+    }
+
+    @Test
+    void rejectsStateRequestWhenSessionDoesNotExist() {
+        when(roomRepository.findById(roomId)).thenReturn(Optional.of(room));
+        when(charadesRedis.findState(ROOM_CODE, SESSION_SEQ))
+            .thenReturn(Optional.empty());
+
+        assertBusinessError(
+            () -> service.getState(roomId, GAME_ID),
+            ErrorCode.CHARADES_SESSION_NOT_FOUND
         );
     }
 

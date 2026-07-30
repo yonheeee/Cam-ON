@@ -7,7 +7,18 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface MissionRepository extends JpaRepository<Mission, Long> {
 
+    List<Mission> findAllByGameGameIdAndMissionTypeAndIsActiveTrue(
+        Long gameId,
+        String missionType
+    );
+
     List<Mission> findAllByGameGameIdAndTopicTopicIdAndMissionTypeAndIsActiveTrue(
+        Long gameId,
+        Long topicId,
+        String missionType
+    );
+
+    List<Mission> findAllByGameGameIdAndTopicTopicIdAndMissionType(
         Long gameId,
         Long topicId,
         String missionType
