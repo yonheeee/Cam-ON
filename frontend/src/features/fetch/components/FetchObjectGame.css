@@ -128,6 +128,15 @@
   width: calc(50% - 8px);
 }
 
+/* 3~4인(2줄 배치): 타일 높이는 화면 절반인데 폭은 그대로라 캠이 옆으로 과하게 길어진다 —
+   타일 폭을 "타일 높이 기준 16:9"로 상한을 걸고 그리드를 가운데 정렬한다.
+   120px = 상하 패딩(32) + 헤더(≈56) + 헤더-본문 gap(12) + 줄 사이 gap(16) 어림값. */
+.fetch-game__grid--3,
+.fetch-game__grid--4 {
+  justify-content: center;
+  grid-template-columns: repeat(2, minmax(0, calc((100dvh - 120px) / 2 * 16 / 9)));
+}
+
 .fetch-game__tile {
   position: relative;
   display: flex;
