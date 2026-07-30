@@ -316,6 +316,7 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
           gameId={session.gameId}
           accessToken={accessToken}
           onActiveChange={(active) => setBetweenGames(!active)}
+          onLeave={onLeave}
         />
       )}
       {/* 코스가 연 물건 가져오기 — 서버 주도 진행(round:start/end를 STOMP로 수신).
@@ -341,6 +342,7 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
           gameId={session.gameId}
           accessToken={accessToken}
           onActiveChange={(active) => setBetweenGames(!active)}
+          onLeave={onLeave}
         />
       )}
 
