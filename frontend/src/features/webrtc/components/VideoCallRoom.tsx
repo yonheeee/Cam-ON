@@ -15,6 +15,7 @@ import { PixelConfirmModal } from '../../system/components/PixelConfirmModal';
 import { useRoomHeartbeat } from '../../room/hooks/useRoomHeartbeat';
 import { clearRoom } from '../../room/lib/roomStorage';
 import { FetchObjectGame } from '../../fetch/components/FetchObjectGame';
+import { FetchCoursePanel } from '../../fetch/components/FetchCoursePanel';
 import { useFetchGame } from '../../fetch/hooks/useFetchGame';
 import { roomApi, RoomApiError, type ParticipantResponse } from '../../room/api/roomApi';
 import '@livekit/components-styles';
@@ -161,10 +162,8 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
     }
   }, [activeSession]);
 
-  // 물건 가져오기 게임 상태 — 아직 LiveKit 데이터 채널 mock이다(fetch 백엔드/코스와 미연동).
-  // ⚠ 코스가 FETCH_OBJECT 세트에 도달해도 이 화면이 자동으로 뜨지 않는다. 지금은 /dev/fetch
-  //   진입로(?autostart=fetch)로만 시작하며, 백엔드 fetch 도메인과 연동해 코스 흐름(session의
-  //   gameName === 'FETCH_OBJECT')으로 전환하는 것이 후속 작업이다.
+  // [개발 전용] /dev/fetch 진입로의 데이터채널 mock 상태 — 백엔드 없이 화면만 확인하는 용도.
+  // 코스가 연 실제 물건 가져오기는 아래 FetchCoursePanel(서버 주도, useFetchRound)이 담당한다.
   const fetchGame = useFetchGame();
   const fetchActive = fetchGame.state.phase !== 'idle';
 
@@ -274,14 +273,24 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
           onActiveChange={(active) => setBetweenGames(!active)}
         />
       )}
-      {/* 카탈로그 조회가 실패해 이름을 모를 때도 게임 화면은 띄워야 하므로 닌자를 기본으로 둔다
-          (지금 코스에 담을 수 있는 게임 중 캠 그리드를 쓰는 것은 닌자뿐이다). */}
+      {/* 코스가 연 물건 가져오기 — 서버 주도 진행(round:start/end를 STOMP로 수신).
+          위의 fetchActive(/dev/fetch mock)와는 진입로가 다르다. */}
+      {inGame && session && activeGameName === 'FETCH_OBJECT' && (
+        <FetchCoursePanel
+          roomId={roomId}
+          gameId={session.gameId}
+          accessToken={accessToken}
+          nicknameById={nicknameById}
+          onLeave={onLeave}
+        />
+      )}
+      {/* 카탈로그 조회가 실패해 이름을 모를 때도 게임 화면은 띄워야 하므로 닌자를 기본으로 둔다. */}
       {/* 닌자도 몸으로말해요처럼 자체 전체화면에 캠 타일까지 직접 그린다 — HP/점수/공격권/이펙트를
           각 참가자 타일에 얹으려면 그리드 소유권이 게임 화면에 있어야 한다. 그래서 VideoConference와
           손동작 디버그 박스(GesturePanel/GestureBoard)를 따로 띄우지 않는다(인식 루프를 소유한
           GesturePanel은 NinjaBattleScreen 사이드바 안에서 마운트된다).
           닌자 게임 중엔 채팅 창도 띄우지 않는다(손동작 게임이라 불필요). */}
-      {inGame && session && activeGameName !== 'CHARADES' && (
+      {inGame && session && activeGameName !== 'CHARADES' && activeGameName !== 'FETCH_OBJECT' && (
         <NinjaBattleScreen
           roomId={roomId}
           gameId={session.gameId}

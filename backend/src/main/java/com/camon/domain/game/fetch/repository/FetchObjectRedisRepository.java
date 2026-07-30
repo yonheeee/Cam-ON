@@ -193,6 +193,15 @@ public class FetchObjectRedisRepository {
                 STATUS_FIELD, PLAYING
             )
         );
+        // 공통 점수 저장(GameScoreService)의 Lua가 room:{code}:session:{seq}:round:{n} 키의
+        // 존재를 검증한다 — fetch의 라운드 상태는 :fetch:round:{n}에 있으므로, 공통 키에는
+        // 마커만 남겨 검증을 통과시킨다 (닌자 NinjaRedisRepository.startRound와 동일한 패턴).
+        // 이게 없으면 라운드 종료 시 ROUND_NOT_FOUND로 점수 저장이 터져 게임이 멈춘다.
+        redis.opsForHash().put(
+            FetchObjectRedisKeys.session(roomCode, sessionSeq) + ":round:" + round,
+            "round",
+            Integer.toString(round)
+        );
     }
 
     public boolean closeRoundIfPlaying(
