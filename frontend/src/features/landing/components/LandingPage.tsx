@@ -1,4 +1,5 @@
 import { Outlet, useNavigate } from 'react-router';
+import { BackgroundMusic } from '../../sound/components/BackgroundMusic';
 import './LandingPage.css';
 
 // 메인(랜딩) — Pixel Arcade Plaza 테마.
@@ -15,6 +16,10 @@ export function LandingPage() {
 
   return (
     <main className="pap-plaza-screen landing">
+      <BackgroundMusic
+        source="/assets/sounds/party-lobby-pixel.mp3"
+        className="landing__music-toggle"
+      />
       <img
         className="landing__logo pap-pixel-img"
         src="/assets/cam-on-logo.png"

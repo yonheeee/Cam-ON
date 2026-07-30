@@ -29,6 +29,15 @@
   cursor: pointer;
 }
 
+.lobby-screen__music-toggle {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  min-width: 118px;
+  padding: 8px 12px;
+  font-size: 13px;
+}
+
 /* 참여 코드 — 글자 하나씩 아케이드 티켓 타일로 (좌측 픽셀 로고와 톤 맞춤) */
 .lobby-screen__code-area {
   display: flex;

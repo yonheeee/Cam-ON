@@ -3,6 +3,7 @@ import { ParticipantTile, useLocalParticipant, useTracks } from '@livekit/compon
 import { Track } from 'livekit-client';
 import { ChatPanel } from '../../chat/components/ChatPanel';
 import type { ChatMessage } from '../../chat/hooks/useRoomChat';
+import { BackgroundMusic } from '../../sound/components/BackgroundMusic';
 import { PixelConfirmModal } from '../../system/components/PixelConfirmModal';
 import { roomApi, RoomApiError } from '../api/roomApi';
 import { useRoomLobby } from '../hooks/useRoomLobby';
@@ -187,6 +188,10 @@ export function LobbyScreen({
           alt="CAM, ON!"
           onClick={() => setConfirmLeave(true)}
         />
+        <BackgroundMusic
+          source="/assets/sounds/cozy-cartridge-club.mp3"
+          className="lobby-screen__music-toggle"
+        />
         {room && (
           <div className="lobby-screen__code-area">
             {/* 방 코드를 글자 타일(아케이드 티켓 느낌)로 — 좌측 픽셀 로고와 톤 맞춤 */}
@@ -267,6 +272,7 @@ export function LobbyScreen({
                         <button
                           type="button"
                           className={`lobby-tile__control${isCameraEnabled ? '' : ' lobby-tile__control--off'}`}
+                          data-button-sound={isCameraEnabled ? 'cancel' : 'basic'}
                           onClick={() => void localParticipant.setCameraEnabled(!isCameraEnabled)}
                           title={isCameraEnabled ? '카메라 끄기' : '카메라 켜기'}
                           aria-label={isCameraEnabled ? '카메라 끄기' : '카메라 켜기'}
@@ -276,6 +282,7 @@ export function LobbyScreen({
                         <button
                           type="button"
                           className={`lobby-tile__control${isMicrophoneEnabled ? '' : ' lobby-tile__control--off'}`}
+                          data-button-sound={isMicrophoneEnabled ? 'cancel' : 'basic'}
                           onClick={() =>
                             void localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled)
                           }
@@ -432,6 +439,7 @@ export function LobbyScreen({
                 className={`pap-pixel-btn${
                   self?.ready ? ' lobby-screen__ready-btn--on' : ' pap-pixel-btn--teal'
                 }`}
+                data-button-sound={self?.ready ? 'cancel' : 'ready'}
                 disabled={readyPending || !self}
                 onClick={() => void handleToggleReady()}
               >
