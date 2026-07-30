@@ -76,7 +76,6 @@ export function FetchObjectGame({
     onlySubscribed: false,
   });
   const localTrack = tracks.find((t) => t.participant.isLocal)?.publication?.track;
-  const remoteTracks = tracks.filter((t) => !t.participant.isLocal);
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !localTrack) return;
@@ -140,7 +139,13 @@ export function FetchObjectGame({
   }, [isHost, playing, state.round, state.successes.length, participants.length, onEndRound]);
 
   const nearMatch = streak > 0;
-  const totalTiles = 1 + remoteTracks.length;
+  // 타일 순서는 모든 참가자 화면에서 같아야 한다("왼쪽 위에 있는 사람!" 같은 말이 통하려면).
+  // 내 타일을 항상 앞에 두는 방식은 서로 다른 배치를 보게 되므로, 닌자와 같은 규칙으로
+  // identity 문자열 정렬(전 클라이언트 결정적)을 쓴다. 카메라 트랙이 없는 참가자도
+  // 자리를 유지해야 하므로 participants 기준으로 좌석을 만들고 트랙은 따로 붙인다.
+  const seats = [...participants].sort((a, b) => a.identity.localeCompare(b.identity));
+  const trackByIdentity = new Map(tracks.map((t) => [t.participant.identity, t]));
+  const totalTiles = seats.length;
   const ranking = Object.entries(state.totals).sort((a, b) => b[1] - a[1]);
   // 누적 선두 — 타일 이름 바에 왕관으로 표시
   const leader = ranking.length > 0 && ranking[0][1] > 0 ? ranking[0][0] : null;
@@ -191,10 +196,54 @@ export function FetchObjectGame({
       <div className="fetch-game__body">
         {/* 비디오 그리드 — 로비와 동일 골격 */}
         <section
-          className={`fetch-game__grid${totalTiles === 3 ? ' fetch-game__grid--3' : ''}`}
+          className={`fetch-game__grid${totalTiles === 3 ? ' fetch-game__grid--3' : ''}${
+            totalTiles >= 4 ? ' fetch-game__grid--4' : ''
+          }`}
         >
-          {/* 내 타일: ROI + 판정 힌트 */}
+          {seats.map((seat) => {
+            const seatNickname = seat.name ?? '';
+            if (!seat.isLocal) {
+              const trackRef = trackByIdentity.get(seat.identity);
+              const successIndex = state.successes.findIndex((s) => s.nickname === seatNickname);
+              const done = successIndex >= 0;
+              return (
+                <div
+                  key={seat.identity}
+                  className={`fetch-game__tile${done ? ' fetch-game__tile--done' : ''}`}
+                >
+                  {trackRef ? (
+                    <ParticipantTile trackRef={trackRef} disableSpeakingIndicator />
+                  ) : (
+                    <div className="fetch-game__cam-off">
+                      <span className="fetch-game__cam-off-icon">{CamOffIcon}</span>
+                      <span>카메라가 꺼져 있어요</span>
+                    </div>
+                  )}
+                  {done && (
+                    <span className="fetch-game__badge pap-pixel-title">{successIndex + 1}위!</span>
+                  )}
+                  <div className="fetch-game__tile-bar">
+                    <span className="fetch-game__tile-name">
+                      {leader === seatNickname && '👑 '}
+                      {seatNickname}
+                    </span>
+                    <span className="fetch-game__score pap-pixel-title">
+                      {scoreOf(seatNickname)}점
+                    </span>
+                    {done && (
+                      <span className="fetch-game__rank">
+                        {successIndex + 1}등 ·{' '}
+                        {(state.successes[successIndex].elapsedMs / 1000).toFixed(1)}s
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            }
+            // 내 타일: 인식용 <video> + ROI + 판정 힌트 — 자리만 남들과 같은 정렬 규칙을 따른다
+            return (
           <div
+            key={seat.identity}
             className={`fetch-game__tile fetch-game__tile--me${
               mySuccess ? ' fetch-game__tile--done' : ''
             }`}
@@ -251,34 +300,6 @@ export function FetchObjectGame({
               </span>
             </div>
           </div>
-
-          {/* 다른 참가자 타일 */}
-          {remoteTracks.map((trackRef) => {
-            const nickname = trackRef.participant.name ?? '';
-            const successIndex = state.successes.findIndex((s) => s.nickname === nickname);
-            const done = successIndex >= 0;
-            return (
-              <div
-                key={trackRef.participant.identity}
-                className={`fetch-game__tile${done ? ' fetch-game__tile--done' : ''}`}
-              >
-                <ParticipantTile trackRef={trackRef} disableSpeakingIndicator />
-                {done && (
-                  <span className="fetch-game__badge pap-pixel-title">{successIndex + 1}위!</span>
-                )}
-                <div className="fetch-game__tile-bar">
-                  <span className="fetch-game__tile-name">
-                    {leader === nickname && '👑 '}
-                    {nickname}
-                  </span>
-                  <span className="fetch-game__score pap-pixel-title">{scoreOf(nickname)}점</span>
-                  {done && (
-                    <span className="fetch-game__rank">
-                      {successIndex + 1}등 · {(state.successes[successIndex].elapsedMs / 1000).toFixed(1)}s
-                    </span>
-                  )}
-                </div>
-              </div>
             );
           })}
         </section>
