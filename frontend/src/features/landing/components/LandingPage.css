@@ -54,6 +54,22 @@
   white-space: nowrap;
 }
 
+/* 세션 만료 안내. 히어로 안의 다른 요소들처럼 절대 배치라, 안내가 떠도 버튼 위치가 밀리지 않는다
+   (supporting-copy 196px 끝 ~ actions 252px 시작 사이의 빈 구간에 넣는다). */
+.landing__notice {
+  position: absolute;
+  top: 204px;
+  left: 50%;
+  width: min(420px, 88vw);
+  margin: 0;
+  transform: translateX(-50%);
+  color: #8a3b2f;
+  font-family: var(--camon-font);
+  font-size: 13px;
+  line-height: 1.35;
+  text-align: center;
+}
+
 .landing__actions {
   position: absolute;
   top: 252px;
