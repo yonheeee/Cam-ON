@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ParticipantTile, useLocalParticipant, useTracks } from '@livekit/components-react';
 import { Track } from 'livekit-client';
 import { ChatPanel } from '../../chat/components/ChatPanel';
@@ -182,6 +182,49 @@ export function LobbyScreen({
       setReadyPending(false);
     }
   };
+
+  // 스페이스바 단축키 — 방장은 게임 시작, 참가자는 준비 토글. 마우스 없이 대기방을 진행할 수
+  // 있게 한다. 오작동 방지 가드:
+  //  - 채팅 입력 등 폼 요소/버튼에 포커스가 있으면 무시 (입력 중 스페이스, 포커스된 버튼의
+  //    네이티브 스페이스 클릭과의 이중 동작 방지)
+  //  - 팝업(코스 편집/나가기/강퇴 확인)이 열려 있으면 무시
+  //  - 꾹 누르고 있을 때의 반복 입력(e.repeat) 무시 — 준비 상태가 깜빡거리지 않게
+  // 시작 조건 미달이면 시작 대신 그 이유를 토스트로 보여준다(hover 말풍선과 같은 문구).
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.code !== 'Space' || e.repeat) return;
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          target.tagName === 'BUTTON' ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      if (courseEditorOpen || confirmLeave || kickTarget) return;
+      e.preventDefault(); // 페이지 스크롤 방지
+
+      if (amHost) {
+        if (starting) return;
+        if (!course || course.items.length === 0) {
+          showToast('코스를 정해주세요!');
+          return;
+        }
+        if (!allOthersReady) {
+          showToast('모든 참가자가 준비를 완료해야 해요!');
+          return;
+        }
+        onStartGame();
+      } else {
+        void handleToggleReady();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  });
 
   return (
     <div className="lobby-screen">
@@ -436,7 +479,7 @@ export function LobbyScreen({
                   }
                   onClick={() => onStartGame()}
                 >
-                  {starting ? '시작 중...' : allOthersReady ? '게임 시작' : '준비 대기 중...'}
+                  {starting ? '시작 중...' : allOthersReady ? '게임 시작 (Space)' : '준비 대기 중...'}
                 </button>
               </span>
             ) : (
@@ -450,7 +493,7 @@ export function LobbyScreen({
                 disabled={readyPending || !self}
                 onClick={() => void handleToggleReady()}
               >
-                {readyPending ? '...' : self?.ready ? '준비 완료!' : '준비 하기'}
+                {readyPending ? '...' : self?.ready ? '준비 완료!' : '준비 하기 (Space)'}
               </button>
             )}
           </div>
