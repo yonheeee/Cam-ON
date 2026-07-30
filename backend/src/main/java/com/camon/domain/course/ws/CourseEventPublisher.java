@@ -2,6 +2,7 @@ package com.camon.domain.course.ws;
 
 import com.camon.domain.course.dto.CourseResponse;
 import com.camon.domain.course.ws.payload.CourseFinishedPayload;
+import com.camon.domain.course.ws.payload.CourseResetPayload;
 import com.camon.domain.course.ws.payload.CourseSessionSkippedPayload;
 import com.camon.global.ws.StompBroadcaster;
 import com.camon.global.ws.StompEvent;
@@ -33,6 +34,11 @@ public class CourseEventPublisher {
         CourseFinishedPayload payload
     ) {
         publish(roomId, "course:finished", payload);
+    }
+
+    // 방장이 코스 종합 결과에서 대기방 복귀를 눌렀다 — 전원이 결과 화면을 접고 대기방으로 돌아간다.
+    public void publishCourseReset(UUID roomId, CourseResetPayload payload) {
+        publish(roomId, "course:reset", payload);
     }
 
     public void publishSessionSkipped(

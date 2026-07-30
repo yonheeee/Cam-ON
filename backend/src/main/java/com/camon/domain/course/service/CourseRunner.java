@@ -4,6 +4,7 @@ import com.camon.domain.course.domain.CourseItem;
 import com.camon.domain.course.repository.CourseRepository;
 import com.camon.domain.course.ws.CourseEventPublisher;
 import com.camon.domain.course.ws.payload.CourseFinishedPayload;
+import com.camon.domain.course.ws.payload.CourseResetPayload;
 import com.camon.domain.course.ws.payload.CourseScoreEntry;
 import com.camon.domain.course.ws.payload.CourseSessionSkippedPayload;
 import com.camon.domain.game.common.Game;
@@ -39,9 +40,10 @@ import org.springframework.stereotype.Service;
 // 코스 = 게임 여러 개의 줄. 한 게임이 끝나면(GameSessionFinishedEvent) 잠깐 결과를 보여준 뒤
 // 다음 칸의 게임 세션을 연다. 마지막 칸까지 끝나면 코스 종합 결과를 발행하고 방을 끝낸다.
 //
-// 세션 번호(seq)는 코스의 위치(idx)와 1:1이다. 코스는 방당 한 번만 진행된다 —
-// 점수 키(session:{seq}:totals, course:totals)가 HINCRBY로 누적되고 초기화 수단이 없어서
-// seq를 재사용하면 이전 코스 점수가 그대로 얹히기 때문이다. 코스가 끝난 방은 FINISHED로 닫는다.
+// 세션 번호(seq)는 코스의 위치(idx)와 1:1이다. 코스가 끝난 방은 FINISHED로 닫히고,
+// 방장이 "방으로 돌아가기"(returnToLobby)를 누르면 점수 키(session:{seq}:*, course:totals)를
+// 전부 지우고 WAITING으로 되돌린다 — 점수가 HINCRBY로 누적되므로 지우지 않고 seq를
+// 재사용하면 이전 코스 점수가 그대로 얹힌다.
 @Slf4j
 @Service
 public class CourseRunner {
@@ -228,6 +230,36 @@ public class CourseRunner {
         );
     }
 
+    // 코스 종합 결과 화면에서 방장이 "방으로 돌아가기"를 누르는 지점. 이전 코스의 점수 기록을
+    // 지우고 방을 WAITING으로 되돌려, 같은 방에서 코스를 다시 시작할 수 있게 한다.
+    // 코스 항목(room:{code}:course:{idx})은 남긴다 — 같은 구성으로 다시 놀거나 대기방에서 고친다.
+    public void returnToLobby(UUID roomId, UUID requesterId) {
+        Room room = requireRoom(roomId);
+        if (!room.hostParticipantId().equals(requesterId)) {
+            throw new BusinessException(ErrorCode.ROOM_NOT_HOST);
+        }
+        if (room.status() != RoomStatus.FINISHED) {
+            throw new BusinessException(ErrorCode.ROOM_NOT_FINISHED);
+        }
+
+        log.info("[Course] returnToLobby : roomCode={} 점수 초기화 후 대기방 복귀",
+            room.roomCode());
+        // 점수를 먼저 지우고 나서 WAITING으로 되돌린다 — 순서가 반대면 새 코스가 시작될 수
+        // 있는 상태에서 이전 점수가 잠깐 남는다.
+        gameScoreService.clearCourseResults(roomId);
+        // 전원 준비 해제(카메라/인식 테스트를 다시 거치게) 후 방장만 준비 상태로 복원한다 —
+        // 방장은 준비 토글 대신 "게임 시작" 버튼을 쓴다는 방 생성 시 불변식과 맞춘다.
+        participantRepository.resetAllReady(roomId);
+        roomRepository.updateCurrentSessionSeq(roomId, 1);
+        roomRepository.updateStatus(roomId, RoomStatus.WAITING);
+        participantRepository.updateReady(roomId, requesterId, true);
+
+        courseEventPublisher.publishCourseReset(
+            roomId,
+            new CourseResetPayload(requesterId)
+        );
+    }
+
     // 건너뛸 이유가 있으면 사람이 읽을 수 있는 문자열로, 없으면 empty.
     private Optional<String> findSkipReason(CourseItem item, int playerCount) {
         Game game = gameCatalogService.requireSelectableGame(item.gameId());
@@ -246,8 +278,8 @@ public class CourseRunner {
     private void finishCourse(Room room, int totalSessions) {
         log.info("[Course] finishCourse : roomCode={} 코스 {}칸 전부 종료 — 종합 결과 발행",
             room.roomCode(), totalSessions);
-        // 방을 FINISHED로 닫는다. 같은 방에서 코스를 다시 돌리는 것은 지원하지 않는다
-        // (누적 점수 키를 초기화할 수단이 없어 두 번째 코스의 점수가 오염된다).
+        // 방을 FINISHED로 닫는다. 같은 방에서 다시 놀려면 방장이 returnToLobby로 점수를
+        // 초기화하고 WAITING으로 되돌린 뒤 코스를 다시 시작한다.
         roomRepository.updateStatus(room.roomId(), RoomStatus.FINISHED);
         courseEventPublisher.publishCourseFinished(
             room.roomId(),
