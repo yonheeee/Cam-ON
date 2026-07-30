@@ -5,6 +5,7 @@ import {
   CharadesApiError,
   type CharadesStateResponse,
 } from '../api/charadesApi';
+import { useCharadesAnswerSound } from './useCharadesAnswerSound';
 
 // 표현자가 정답을 확인하고 있는 시간(라운드 시작 직후 잠깐 "다음 표현자는 OOO입니다" 예고를 보여주는 시간).
 const PREVIEW_DURATION_MS = 2200;
@@ -86,6 +87,7 @@ export function useCharadesRound(
   const [lastInvalidReason, setLastInvalidReason] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [gameEnded, setGameEnded] = useState(false);
+  const playAnswerSound = useCharadesAnswerSound();
 
   // turn-started 처리를 지연시키기 위한 참조 — phase는 클로저 밖(STOMP 콜백)에서 최신값을 읽어야 해서 ref로 미러링한다.
   const phaseRef = useRef<CharadesPhase | null>(null);
@@ -244,6 +246,7 @@ export function useCharadesRound(
               const data = event.data as AnswerRevealedData;
               setLastAnswererId(data.answererId);
               correctShownAtRef.current = Date.now();
+              playAnswerSound(true);
               setPhase('correct');
               break;
             }
@@ -276,7 +279,7 @@ export function useCharadesRound(
       void client.deactivate();
       if (pendingTurnTimerRef.current) clearTimeout(pendingTurnTimerRef.current);
     };
-  }, [roomId, accessToken, handleTurnStarted, syncState]);
+  }, [roomId, accessToken, handleTurnStarted, syncState, playAnswerSound]);
 
   useEffect(() => {
     if (!participantId) return;
@@ -312,12 +315,13 @@ export function useCharadesRound(
     async (text: string) => {
       if (phase !== 'playing' || isPresenter) return;
       try {
-        await charadesApi.submitGuess(gameId, text, accessToken);
+        const result = await charadesApi.submitGuess(gameId, text, accessToken);
+        if (!result.correct) playAnswerSound(false);
       } catch (err) {
         setError(err instanceof CharadesApiError ? err.message : '정답 제출 실패');
       }
     },
-    [phase, isPresenter, gameId, accessToken],
+    [phase, isPresenter, gameId, accessToken, playAnswerSound],
   );
 
   const timeLeftSeconds = useTimeLeft(expiresAt, phase === 'playing');

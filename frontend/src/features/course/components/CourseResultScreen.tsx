@@ -1,4 +1,5 @@
 import type { CourseScoreEntry } from '../hooks/useCourseProgress';
+import { useAnnouncementSound } from '../../sound/hooks/useAnnouncementSound';
 import './CourseResultScreen.css';
 
 interface CourseResultScreenProps {
@@ -31,6 +32,12 @@ export function CourseResultScreen({
   returnError,
   onLeave,
 }: CourseResultScreenProps) {
+  useAnnouncementSound(
+    ranking.length > 0,
+    `course-final:${totalSessions}:${ranking[0]?.participantId ?? 'unknown'}`,
+    '/assets/sounds/final-winner.mp3',
+  );
+
   return (
     <div className="course-result">
       <div className="course-result__card pap-pixel-card">
