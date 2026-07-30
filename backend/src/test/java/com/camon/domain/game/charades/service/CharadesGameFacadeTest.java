@@ -8,7 +8,9 @@ import static org.mockito.Mockito.when;
 
 import com.camon.domain.game.charades.dto.CharadesGuessRequest;
 import com.camon.domain.game.charades.dto.CharadesGuessResponse;
+import com.camon.domain.game.charades.dto.CharadesStateResponse;
 import com.camon.domain.game.charades.dto.CharadesWordResponse;
+import com.camon.domain.game.charades.domain.CharadesTurnStatus;
 import com.camon.domain.room.domain.ConnectionStatus;
 import com.camon.domain.room.domain.Participant;
 import com.camon.domain.room.domain.Room;
@@ -59,6 +61,38 @@ class CharadesGameFacadeTest {
             1,
             Instant.now()
         );
+    }
+
+    @Test
+    void resolvesCurrentRoomAndDelegatesStateRequest() {
+        Long gameId = 3L;
+        Instant expiresAt = Instant.now().plusSeconds(60);
+        Participant participant = new Participant(
+            participantId,
+            "presenter",
+            true,
+            ConnectionStatus.CONNECTED,
+            Instant.now()
+        );
+        CharadesStateResponse expected = new CharadesStateResponse(
+            1,
+            1,
+            1,
+            3,
+            participantId,
+            expiresAt,
+            CharadesTurnStatus.PLAYING
+        );
+        when(participantRepository.findCurrentRoomId(participantId))
+            .thenReturn(Optional.of(roomId));
+        when(roomRepository.findById(roomId)).thenReturn(Optional.of(room));
+        when(participantRepository.findById(roomId, participantId))
+            .thenReturn(Optional.of(participant));
+        when(charadesGameService.getState(roomId, gameId))
+            .thenReturn(expected);
+
+        assertThat(facade.getState(gameId, participantId))
+            .isEqualTo(expected);
     }
 
     @Test

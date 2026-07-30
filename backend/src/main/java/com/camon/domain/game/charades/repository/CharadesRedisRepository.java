@@ -339,9 +339,12 @@ public class CharadesRedisRepository {
         }
     }
 
+    // 라운드 수는 코스가 정한다(예전 단일 라운드 정책 때는 1로 고정돼 있었다).
+    // 허용 범위(games.min_rounds~max_rounds) 검증은 코스 저장 시점에 하고, 여기서는
+    // 저장 자체가 성립하지 않는 값만 막는다.
     private static void validateTotalRounds(int totalRounds) {
-        if (totalRounds != 1) {
-            throw new IllegalArgumentException("totalRounds must be 1");
+        if (totalRounds < 1) {
+            throw new IllegalArgumentException("totalRounds must be at least 1");
         }
     }
 

@@ -16,9 +16,11 @@ interface FetchObjectGameProps {
   state: FetchGameState;
   myNickname: string;
   onReportSuccess: (elapsedMs: number) => void;
-  onEndRound: () => void;
-  onNextRound: () => void;
-  onExit: () => void;
+  /** 라운드 마감/다음/퇴장 콜백 — /dev/fetch mock(방장 주도)에서만 넘긴다.
+   *  안 넘기면 "서버 주도" 모드: 진행은 백엔드가 하므로 진행 버튼 대신 대기 문구를 보여준다. */
+  onEndRound?: () => void;
+  onNextRound?: () => void;
+  onExit?: () => void;
   /** 로고 클릭 → 확인 팝업 → 방 나가기 (확정안: 방 안에서 로고는 항상 확인 팝업 경유) */
   onLeave: () => void;
 }
@@ -62,7 +64,9 @@ export function FetchObjectGame({
     return () => clearInterval(timer);
   }, [playing]);
   const countdownLeft = Math.max(0, state.startedAt + COUNTDOWN_MS - nowMs);
-  const remainingMs = Math.max(0, state.startedAt + COUNTDOWN_MS + ROUND_DURATION_MS - nowMs);
+  // 마감 시각: 첫 정답으로 서버가 단축한 값(deadlineAt)이 있으면 그것을, 없으면 기본 제한시간.
+  const roundEndsAt = state.deadlineAt ?? state.startedAt + COUNTDOWN_MS + ROUND_DURATION_MS;
+  const remainingMs = Math.max(0, roundEndsAt - nowMs);
   // 3·2·1 카운트다운 — 전원이 제시어를 읽고 동시에 출발 (인식도 이 동안 잠금)
   const inCountdown = playing && countdownLeft > 0;
   const goFlash = playing && countdownLeft <= 0 && nowMs - (state.startedAt + COUNTDOWN_MS) < 700;
@@ -111,8 +115,9 @@ export function FetchObjectGame({
 
   // 케이스 1: 타임아웃 — "시간 초과!" 연출이 보일 시간(1.5초)을 주고 마감.
   // (remainingMs는 0에 도달하면 그대로 0에 머물러서 타이머가 리셋되지 않는다)
+  // 서버 주도 모드(onEndRound 없음)에서는 백엔드 타임아웃이 round:end를 밀어주므로 하지 않는다.
   useEffect(() => {
-    if (!isHost || !playing || endedRoundRef.current === state.round) return;
+    if (!onEndRound || !isHost || !playing || endedRoundRef.current === state.round) return;
     if (remainingMs > 0) return;
     const timer = setTimeout(() => {
       if (endedRoundRef.current === state.round) return;
@@ -124,7 +129,7 @@ export function FetchObjectGame({
 
   // 케이스 2: 전원 성공 — 마지막 성공자의 셀레브레이션이 끝날 시간을 주고 마감
   useEffect(() => {
-    if (!isHost || !playing || endedRoundRef.current === state.round) return;
+    if (!onEndRound || !isHost || !playing || endedRoundRef.current === state.round) return;
     if (state.successes.length < participants.length) return;
     const timer = setTimeout(() => {
       if (endedRoundRef.current === state.round) return;
@@ -296,7 +301,9 @@ export function FetchObjectGame({
                 ))}
                 {state.successes.length === 0 && <li>성공자 없음 😢</li>}
               </ol>
-              {isHost ? (
+              {!onNextRound ? (
+                <p className="fetch-game__wait">잠시 후 다음 라운드가 시작돼요...</p>
+              ) : isHost ? (
                 <button
                   type="button"
                   className="pap-pixel-btn pap-pixel-btn--primary"
@@ -325,7 +332,9 @@ export function FetchObjectGame({
                   </li>
                 ))}
               </ol>
-              {isHost ? (
+              {!onExit ? (
+                <p className="fetch-game__wait">잠시 후 다음 게임으로 넘어가요...</p>
+              ) : isHost ? (
                 <button type="button" className="pap-pixel-btn pap-pixel-btn--primary" onClick={onExit}>
                   대기방으로
                 </button>

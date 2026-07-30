@@ -113,6 +113,19 @@
   outline-offset: 4px;
 }
 
+.landing__music-toggle {
+  position: fixed;
+  z-index: 20;
+  top: 20px;
+  right: 20px;
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  min-width: 118px;
+  padding: 10px 14px;
+  font-size: 14px;
+}
+
 @media (max-width: 760px), (max-height: 680px) {
   .landing__hero {
     top: 32%;
@@ -124,6 +137,14 @@
   .landing__hero {
     top: 28%;
     transform: translateX(-50%) scale(0.62);
+  }
+
+  .landing__music-toggle {
+    top: 12px;
+    right: 12px;
+    min-width: 104px;
+    padding: 8px 10px;
+    font-size: 12px;
   }
 }
 

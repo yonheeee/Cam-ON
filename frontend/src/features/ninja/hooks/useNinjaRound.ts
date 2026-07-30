@@ -2,7 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ninjaApi,
   NinjaApiError,
-  type BoutResultEntry,
+  type NinjaAttackResolvedEvent,
+  type NinjaAttackWonEvent,
+  type NinjaGameEndedEvent,
+  type NinjaRoundStartedEvent,
+  type NinjaRoundTimeoutEvent,
+  type RoundResultEntry,
   type LastAttack,
   type NinjaPhase,
   type RankingEntry,
@@ -11,16 +16,19 @@ import {
 import { useSequenceProgress } from '../lib/sequenceProgress';
 import { useNinjaRealtime } from './useNinjaRealtime';
 
-const STATE_POLL_INTERVAL_MS = 1500;
-const ATTACK_TARGET_TIMER_SECONDS = 30;
-// 백엔드 NinjaGameService.ROUND_DURATION(30초)과 맞춤 — 서버가 실제 데드라인을 안 내려주기 때문에
-// (폴링 기반이라 WS RoundStartedPayload.deadline을 못 받음) 라운드 번호가 바뀔 때마다 클라이언트가
-// 자체적으로 다시 세는 근사치다. 폴링 텀(1.5초)만큼 서버 시각과 어긋날 수 있지만 UI 용도로는 충분.
+// 대상 지정 제한시간 폴백 — 서버 데드라인(attack-won의 targetDeadlineAt)을 못 받은 경우에만.
+// 백엔드 NinjaGameService.TARGET_DURATION(15초)과 맞춤.
+const ATTACK_TARGET_TIMER_SECONDS = 15;
+// 교환 제한시간 폴백 — 서버 데드라인(ninja:round-started의 deadlineAt)이 있으면 그걸 쓰고,
+// 이벤트를 못 받은 경우(새로고침 직후 스냅샷 동기화로 진입)에만 이 근사치로 다시 센다.
+// 백엔드 NinjaGameService.EXCHANGE_DURATION(30초)과 맞춤.
 const ROUND_DURATION_SECONDS = 30;
 
-// 원래 라운드 시작/공격 결과 전파는 STOMP(/ws/rooms/{roomId})로 와야 하는데 방/세션 도메인이
-// 아직 없어서 GET .../state를 폴링한다. 상태 모양(반환 타입)은 그대로 두고 나중에 STOMP
-// 구독으로 갈아끼우면 되도록, 이 훅 밖(NinjaGamePanel)에는 폴링 여부가 안 드러나게 했다.
+// 상태 동기화 구조("상태 변경 요청은 REST, 변경 전파는 WS" 프로젝트 원칙):
+// - 입장/STOMP (재)연결 시 GET .../state로 전체 스냅샷을 1회 동기화하고,
+// - 이후에는 서버가 미는 ninja:* 이벤트로만 증분 갱신한다. 폴링 없음.
+// 이벤트는 접속 중인 사람에게만 가므로, 새로고침/끊김 복귀의 이벤트 공백은 재연결 시점의
+// 스냅샷 동기화가 메운다(useNinjaRealtime.onConnected).
 export function useNinjaRound(
   roomId: string,
   gameId: number,
@@ -30,7 +38,7 @@ export function useNinjaRound(
   comboConfidence: number,
 ) {
   const [round, setRound] = useState<number | null>(null);
-  // round=판(bout), exchange=판 안의 교환. 판이 이어지는 동안 exchange가 늘고, 판이 바뀌면 1로 리셋된다.
+  // round=판(round), exchange=판 안의 교환. 판이 이어지는 동안 exchange가 늘고, 판이 바뀌면 1로 리셋된다.
   const [exchange, setExchange] = useState<number | null>(null);
   const [totalRounds, setTotalRounds] = useState<number | null>(null);
   const [alivePlayers, setAlivePlayers] = useState<string[]>([]);
@@ -50,7 +58,12 @@ export function useNinjaRound(
   // "공격 성공" 표시를 판단한다 — 콤보를 완성해도 남이 먼저 선점했으면 여기엔 안 들어온다.
   const [attackAckKey, setAttackAckKey] = useState<string | null>(null);
   // 방금 끝난 판의 순위+획득 점수(판 종료 인터미션 동안만 채워짐).
-  const [boutResult, setBoutResult] = useState<BoutResultEntry[] | null>(null);
+  const [roundResult, setRoundResult] = useState<RoundResultEntry[] | null>(null);
+  // 현재 교환의 서버 데드라인(ninja:round-started의 deadlineAt). 스냅샷 동기화(GET .../state)에는
+  // 데드라인이 없어서 새로고침 직후엔 null일 수 있다 — 그 경우 타이머는 30초 근사치로 폴백.
+  const [roundDeadline, setRoundDeadline] = useState<number | null>(null);
+  // 공격권 획득 시 서버가 내려주는 대상 지정 데드라인(attack-won의 targetDeadlineAt).
+  const [targetDeadline, setTargetDeadline] = useState<number | null>(null);
 
   // requiredSkill이 실제로 바뀔 때만(=라운드 전환) 새 배열이 되도록 메모.
   // 그냥 매 렌더 .map()을 새로 만들면 참조가 매번 달라져서, useSequenceProgress의
@@ -79,9 +92,8 @@ export function useNinjaRound(
     };
   }, []);
 
-  // attack/target 제출 직후에도 즉시 다시 부를 수 있도록 poll 자체를 재사용 가능한 함수로 뺐다 —
-  // 안 그러면 최대 폴링 주기(1.5초)만큼 화면이 "안 바뀌는 것처럼" 느껴진다.
-  const poll = useCallback(async () => {
+  // 전체 스냅샷 동기화 — 입장/STOMP (재)연결 시에만 부른다. 진행 중 갱신은 전부 이벤트 리듀서 몫.
+  const syncState = useCallback(async () => {
     if (!participantId) return;
     try {
       const state = await ninjaApi.getState(gameId, accessToken);
@@ -98,28 +110,95 @@ export function useNinjaRound(
       setNextRoundAt(state.nextRoundAt ? Date.parse(state.nextRoundAt) : null);
       setLastAttack(state.lastAttack);
       setSessionTotals(state.sessionTotals ?? {});
-      setBoutResult(state.boutResult ?? null);
+      setRoundResult(state.roundResult ?? null);
     } catch {
-      // 세션이 아직 없으면 404 — 조용히 무시하고 다음 폴링을 기다린다.
+      // 세션이 아직 없으면 404 — 세션이 열리면 ninja:round-started 이벤트가 상태를 채운다.
     }
   }, [participantId, gameId, accessToken]);
 
-  // ninja:* WS 이벤트가 오면 폴링 주기를 기다리지 않고 즉시 다시 읽어 반영한다(실시간성). 상태의
-  // 단일 소스는 여전히 getState — 이 구독은 "언제 읽을지"만 앞당긴다(WS 놓쳐도 폴링 폴백).
-  useNinjaRealtime(
-    roomId,
-    accessToken,
-    useCallback(() => {
-      void poll();
-    }, [poll]),
-  );
+  // ninja:* 이벤트 리듀서 — 각 이벤트 payload가 화면 상태를 직접 갱신한다(재조회 없음).
+  const handleNinjaEvent = useCallback((eventName: string, data: unknown) => {
+    if (!mountedRef.current) return;
+    switch (eventName) {
+      case 'ninja:round-started': {
+        // 새 교환(판이 바뀌면 전원 부활/HP 리셋 스냅샷 포함) — 이전 인터미션 상태를 걷어낸다.
+        const e = data as NinjaRoundStartedEvent;
+        setRound(e.round);
+        setExchange(e.exchange);
+        setPhase('ROUND');
+        setAlivePlayers(e.alivePlayers);
+        setHp(e.hp);
+        setCurrentAttackerToken(null);
+        setLastAttack(null);
+        setRoundResult(null);
+        setEffectUntil(null);
+        setNextRoundAt(null);
+        setRoundDeadline(Date.parse(e.deadlineAt));
+        setTargetDeadline(null); // 이전 교환의 대상 지정 창 잔재 제거
+        break;
+      }
+      case 'ninja:attack-won': {
+        const e = data as NinjaAttackWonEvent;
+        setCurrentAttackerToken(e.attackerToken);
+        // 공격권 획득 = 교환 30초 타이머가 멈추고 대상 지정 창이 열린다(서버 기준 시각).
+        setTargetDeadline(e.targetDeadlineAt ? Date.parse(e.targetDeadlineAt) : null);
+        break;
+      }
+      case 'ninja:attack-resolved': {
+        const e = data as NinjaAttackResolvedEvent;
+        setPhase(e.phase);
+        setEffectUntil(e.effectUntil ? Date.parse(e.effectUntil) : null);
+        setNextRoundAt(e.nextRoundAt ? Date.parse(e.nextRoundAt) : null);
+        setHp((prev) => ({ ...prev, [e.targetToken]: e.targetHpAfter }));
+        if (e.targetEliminated) {
+          setAlivePlayers((prev) => prev.filter((token) => token !== e.targetToken));
+        }
+        setLastAttack({
+          attackerToken: e.attackerToken,
+          targetToken: e.targetToken,
+          skillId: e.skillId,
+          damage: e.damage,
+          targetHpAfter: e.targetHpAfter,
+          targetEliminated: e.targetEliminated,
+        });
+        // 판이 끝난 공격이면 결과창 재료(그 판의 순위/누적 점수)가 함께 실려 온다.
+        if (e.roundResult) setRoundResult(e.roundResult);
+        if (e.sessionTotals) setSessionTotals(e.sessionTotals);
+        break;
+      }
+      case 'ninja:round-timeout': {
+        // 아무도 콤보를 못 완성한 교환 — 서버가 생존자 전원 HP를 감쇠시키고 넘어간다.
+        // 감쇠 반영 후 스냅샷(alivePlayers/hp)으로 화면 HP를 즉시 맞춘다 — 안 맞추면 다음
+        // 판 시작까지 화면 HP가 서버와 어긋난다.
+        const e = data as NinjaRoundTimeoutEvent;
+        setPhase(e.phase);
+        setEffectUntil(null);
+        setNextRoundAt(e.nextRoundAt ? Date.parse(e.nextRoundAt) : null);
+        setLastAttack(null);
+        if (e.alivePlayers) setAlivePlayers(e.alivePlayers);
+        if (e.hp) setHp(e.hp);
+        if (e.roundResult) setRoundResult(e.roundResult);
+        if (e.sessionTotals) setSessionTotals(e.sessionTotals);
+        break;
+      }
+      case 'ninja:game-ended': {
+        const e = data as NinjaGameEndedEvent;
+        setRanking(e.ranking);
+        setSessionTotals(e.sessionTotals);
+        setPhase('ENDED');
+        break;
+      }
+    }
+  }, []);
 
+  useNinjaRealtime(roomId, accessToken, handleNinjaEvent, syncState);
+
+  // 마운트 직후 1회 동기화 — STOMP 연결이 늦거나 실패해도 최소한 현재 스냅샷은 그린다.
+  // (재연결 동기화는 useNinjaRealtime.onConnected가 담당)
   useEffect(() => {
     if (!participantId) return;
-    poll();
-    const interval = setInterval(poll, STATE_POLL_INTERVAL_MS);
-    return () => clearInterval(interval);
-  }, [participantId, poll]);
+    void syncState();
+  }, [participantId, syncState]);
 
   // 판이 이어지는 동안 교환마다 요구 스킬이 바뀌므로, (round, exchange)가 바뀔 때마다 다시 조회한다
   // (서버는 "현재 교환"의 스킬을 돌려준다).
@@ -171,26 +250,26 @@ export function useNinjaRound(
       .submitAttack(gameId, round, requiredSkill.skillId, accessToken)
       .then(() => {
         // 서버가 공격권 선점을 수락(200)한 교환만 "공격 성공"으로 표시한다.
+        // 화면 반영은 서버가 곧바로 쏘는 ninja:attack-won 이벤트가 담당한다(재조회 불필요).
         setAttackAckKey(key);
-        void poll();
       })
       .catch((err: unknown) => {
         // 이미 다른 참가자가 선점(NINJA_ALREADY_CLAIMED)한 것도 정상적인 결과라 에러로만 표시.
         setError(err instanceof NinjaApiError ? err.message : '공격 제출 실패');
       });
-  }, [completed, participantId, requiredSkill, round, exchange, phase, poll, gameId, accessToken]);
+  }, [completed, participantId, requiredSkill, round, exchange, phase, gameId, accessToken]);
 
   const submitTarget = useCallback(
     async (targetToken: string) => {
       if (!participantId || round == null) return;
       try {
+        // HP/인터미션 전환 반영은 서버가 곧바로 쏘는 ninja:attack-resolved 이벤트가 담당한다.
         await ninjaApi.submitTarget(gameId, round, targetToken, accessToken);
-        await poll(); // 다음 폴링까지 안 기다리고 HP/라운드 전환을 바로 반영
       } catch (err) {
         setError(err instanceof NinjaApiError ? err.message : '대상 지정 실패');
       }
     },
-    [participantId, round, poll, gameId, accessToken],
+    [participantId, round, gameId, accessToken],
   );
 
   // 공격권을 획득했는데 생존한 상대가 정확히 한 명이면(2인전 등) 굳이 고를 필요가 없어서 자동으로
@@ -207,23 +286,6 @@ export function useNinjaRound(
     void submitTarget(others[0]);
   }, [participantId, round, exchange, currentAttackerToken, phase, alivePlayers, submitTarget]);
 
-  const [resetting, setResetting] = useState(false);
-  const resetGame = useCallback(async () => {
-    setResetting(true);
-    setError(null);
-    try {
-      await ninjaApi.reset(roomId, accessToken);
-      attackedKeyRef.current = null;
-      targetedKeyRef.current = null;
-      armedKeyRef.current = null;
-      setAttackAckKey(null);
-      await poll();
-    } catch (err) {
-      setError(err instanceof NinjaApiError ? err.message : '게임 초기화 실패');
-    } finally {
-      setResetting(false);
-    }
-  }, [poll, roomId, accessToken]);
 
   const isMyAttack = participantId !== null && currentAttackerToken === participantId;
   // 현재 교환에서 내 공격 제출이 서버에 수락됐는가(콤보 완성이 아니라 서버 200 기준).
@@ -231,40 +293,49 @@ export function useNinjaRound(
     round != null && exchange != null && attackAckKey === `${round}:${exchange}`;
   const gameEnded = ranking.length > 0;
 
-  // 라운드 제한시간(15초) 카운트다운. 서버 데드라인을 못 받아서(폴링 기반) round가 바뀔 때마다
-  // 클라이언트가 15초부터 다시 센다 — 누군가 공격권을 획득하는 순간(currentAttackerToken이 채워짐)
-  // 승부는 이미 난 거라 0으로 확정해서 "타이머가 멈췄다"는 걸 보여준다.
+  // 교환 제한시간 카운트다운. 서버 데드라인(deadlineAt)이 있으면 그 절대 시각까지 남은 시간으로
+  // 시작하고(전원 동일한 값), 없으면(새로고침 직후 스냅샷 진입) 30초 근사치로 폴백한다.
+  // 누군가 공격권을 획득하는 순간(currentAttackerToken이 채워짐) 승부는 이미 난 거라 0으로
+  // 확정해서 "타이머가 멈췄다"는 걸 보여준다.
   const [roundTimerSeconds, setRoundTimerSeconds] = useState<number | null>(null);
   useEffect(() => {
     if (round == null || exchange == null) {
       setRoundTimerSeconds(null);
       return;
     }
-    setRoundTimerSeconds(ROUND_DURATION_SECONDS);
+    const initial = roundDeadline !== null
+      ? Math.max(0, Math.ceil((roundDeadline - Date.now()) / 1000))
+      : ROUND_DURATION_SECONDS;
+    setRoundTimerSeconds(initial);
     const interval = setInterval(() => {
       setRoundTimerSeconds((prev) => (prev !== null && prev > 0 ? prev - 1 : 0));
     }, 1000);
     return () => clearInterval(interval);
-  }, [round, exchange]);
+  }, [round, exchange, roundDeadline]);
 
   useEffect(() => {
     if (currentAttackerToken) setRoundTimerSeconds(0);
   }, [currentAttackerToken]);
 
-  // 공격권을 획득하면 대상을 지정할 30초를 보여준다 — 백엔드가 이 창을 별도로 강제하진 않고
-  // (라운드 자체 타임아웃만 서버가 관리) 순수 UI 재촉용 타이머다.
+  // 공격권 획득 후 대상 지정 카운트다운 — 서버가 attack-won에 실어준 데드라인(15초) 기준.
+  // 시간 내 대상을 안 고르면 서버가 랜덤 자동 공격하므로, 이 타이머는 정확한 서버 시각을 보여줘야
+  // "0초인데 안 넘어감/시간 남았는데 잘림" 같은 어긋남이 없다. 데드라인을 못 받은 경우(재접속 등)만
+  // 근사치로 폴백.
   const [attackTimerSeconds, setAttackTimerSeconds] = useState<number | null>(null);
   useEffect(() => {
     if (!isMyAttack) {
       setAttackTimerSeconds(null);
       return;
     }
-    setAttackTimerSeconds(ATTACK_TARGET_TIMER_SECONDS);
+    const initial = targetDeadline !== null
+      ? Math.max(0, Math.ceil((targetDeadline - Date.now()) / 1000))
+      : ATTACK_TARGET_TIMER_SECONDS;
+    setAttackTimerSeconds(initial);
     const interval = setInterval(() => {
       setAttackTimerSeconds((prev) => (prev !== null && prev > 0 ? prev - 1 : 0));
     }, 1000);
     return () => clearInterval(interval);
-  }, [isMyAttack, round, exchange]);
+  }, [isMyAttack, round, exchange, targetDeadline]);
 
   // 인터미션 진행은 서버 기준 시각으로만 판단한다 — 클라 로컬 카운터로 "몇 초 지났나"를 세지 않고,
   // effectUntil/nextRoundAt(절대 시각)까지 남은 시간을 매 틱 계산한다. 그래서 늦게 폴링한 클라이언트나
@@ -307,8 +378,6 @@ export function useNinjaRound(
     gameEnded,
     error,
     submitTarget,
-    resetGame,
-    resetting,
     resetSequence: reset,
     // 서버 주도 인터미션
     phase,
@@ -317,6 +386,6 @@ export function useNinjaRound(
     inCountdown,
     countdownSeconds,
     lastAttack,
-    boutResult,
+    roundResult,
   };
 }

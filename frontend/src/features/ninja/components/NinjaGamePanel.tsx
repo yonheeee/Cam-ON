@@ -45,14 +45,12 @@ export function NinjaGamePanel({ roomId, gameId, accessToken, onActiveChange }: 
     gameEnded,
     error,
     submitTarget,
-    resetGame,
-    resetting,
     isIntermission,
     inEffectPlayback,
     inCountdown,
     countdownSeconds,
     lastAttack,
-    boutResult,
+    roundResult,
   } = useNinjaRound(roomId, gameId, accessToken, myParticipantId, comboLabel, comboConfidence);
 
   const [otherParticipantIds, setOtherParticipantIds] = useState<Record<string, string>>({});
@@ -101,17 +99,8 @@ export function NinjaGamePanel({ roomId, gameId, accessToken, onActiveChange }: 
 
   return (
     <>
-      <button
-        className="ninja-reset-button"
-        disabled={resetting}
-        onClick={() => void resetGame()}
-        title="진행 중인 게임을 지우고 대기방으로 되돌립니다"
-      >
-        {resetting ? '초기화 중...' : '🔄 게임 초기화'}
-      </button>
-
     <div className="ninja-panel">
-      <h2>닌자 게임</h2>
+      <h2>손은 눈보다 빠르다</h2>
 
       {gameStarted && gameEnded && (
         <div className="ninja-panel__ranking">
@@ -164,24 +153,24 @@ export function NinjaGamePanel({ roomId, gameId, accessToken, onActiveChange }: 
 
           {isIntermission && (
             <div className="ninja-panel__intermission">
-              {/* 판이 끝난 인터미션이면(boutResult 존재) 이펙트 대신 그 판의 순위+획득 점수를 보여준다. */}
-              {boutResult && boutResult.length > 0 ? (
-                <div className="ninja-panel__bout-result">
+              {/* 판이 끝난 인터미션이면(roundResult 존재) 이펙트 대신 그 판의 순위+획득 점수를 보여준다. */}
+              {roundResult && roundResult.length > 0 ? (
+                <div className="ninja-panel__round-result">
                   {inEffectPlayback && requiredSkill && <NinjaEffectOverlay effect={requiredSkill.effect} />}
-                  <p className="ninja-panel__bout-result-title">🥷 라운드 {round} 결과</p>
+                  <p className="ninja-panel__round-result-title">🥷 라운드 {round} 결과</p>
                   <ol>
-                    {boutResult.map((entry) => (
+                    {roundResult.map((entry) => (
                       <li
                         key={entry.token}
                         className={entry.token === myParticipantId ? 'ninja-panel__ranking-me' : ''}
                       >
                         {entry.rank}위 — {displayName(entry.token)}
-                        <span className="ninja-panel__bout-result-points"> +{entry.points}점</span>
+                        <span className="ninja-panel__round-result-points"> +{entry.points}점</span>
                       </li>
                     ))}
                   </ol>
                   {inCountdown && countdownSeconds !== null && (
-                    <p className="ninja-panel__bout-result-next">다음 라운드 시작까지 {countdownSeconds}</p>
+                    <p className="ninja-panel__round-result-next">다음 라운드 시작까지 {countdownSeconds}</p>
                   )}
                 </div>
               ) : (

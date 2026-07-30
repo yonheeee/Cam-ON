@@ -4,6 +4,7 @@ import com.camon.domain.game.charades.domain.CharadesGameState;
 import com.camon.domain.game.charades.domain.CharadesTurnStatus;
 import com.camon.domain.game.charades.dto.CharadesGuessRequest;
 import com.camon.domain.game.charades.dto.CharadesGuessResponse;
+import com.camon.domain.game.charades.dto.CharadesStateResponse;
 import com.camon.domain.game.charades.dto.CharadesWordResponse;
 import com.camon.domain.game.charades.repository.CharadesRedisRepository;
 import com.camon.domain.game.charades.ws.CharadesEventPublisher;
@@ -18,6 +19,7 @@ import com.camon.domain.game.charades.ws.payload.CharadesScoreEntry;
 import com.camon.domain.game.charades.ws.payload.CharadesTurnStartedPayload;
 import com.camon.domain.game.charades.ws.payload.ChatMessageReceivedPayload;
 import com.camon.domain.game.common.Mission;
+import com.camon.domain.game.common.event.GameSessionFinishedEvent;
 import com.camon.domain.game.common.repository.MissionRepository;
 import com.camon.domain.game.common.repository.MissionTopicRepository;
 import com.camon.domain.game.common.repository.SaveRoundResult;
@@ -43,6 +45,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ThreadLocalRandom;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.TaskScheduler;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -52,7 +55,6 @@ public class CharadesGameService {
 
     static final int MIN_PLAYERS = 3;
     static final int MAX_PLAYERS = 4;
-    static final int TOTAL_ROUNDS = 1;
     static final Duration TURN_DURATION = Duration.ofMinutes(1);
 
     private static final String MISSION_TYPE = "CHARADES";
@@ -76,6 +78,7 @@ public class CharadesGameService {
     private final GameEventPublisher gameEventPublisher;
     private final CharadesEventPublisher charadesEventPublisher;
     private final TaskScheduler taskScheduler;
+    private final ApplicationEventPublisher applicationEventPublisher;
     private final Map<String, ScheduledFuture<?>> pendingTimeouts =
         new ConcurrentHashMap<>();
 
@@ -89,7 +92,8 @@ public class CharadesGameService {
         GameScoreService gameScoreService,
         GameEventPublisher gameEventPublisher,
         CharadesEventPublisher charadesEventPublisher,
-        TaskScheduler taskScheduler
+        TaskScheduler taskScheduler,
+        ApplicationEventPublisher applicationEventPublisher
     ) {
         this.roomRepository = roomRepository;
         this.participantRepository = participantRepository;
@@ -101,21 +105,28 @@ public class CharadesGameService {
         this.gameEventPublisher = gameEventPublisher;
         this.charadesEventPublisher = charadesEventPublisher;
         this.taskScheduler = taskScheduler;
+        this.applicationEventPublisher = applicationEventPublisher;
     }
 
+    // totalRounds는 코스가 정한다. 1라운드 = 참가자 전원이 한 번씩 표현자가 되는 것이므로,
+    // 4명이 2라운드면 표현 턴이 8번이다. (예전엔 단일 라운드 정책으로 1에 고정돼 있었다.)
     @Transactional
     public CharadesTurnStartedPayload startSession(
         UUID roomId,
         Long gameId,
-        Long topicId
+        Long topicId,
+        int totalRounds
     ) {
         Room room = resolveRoom(roomId);
         List<Participant> participants = connectedParticipants(roomId);
         validatePlayerCount(participants.size());
+        validateRoundCount(totalRounds);
         validateTopic(gameId, topicId);
 
         List<Mission> missions = findTopicMissions(gameId, topicId);
-        int requiredMissionCount = participants.size();
+        // 제시어는 한 턴에 하나씩 소진되고 재사용되지 않으므로, 이 게임이 쓸 총 턴 수
+        // (인원 x 라운드)만큼 주제에 제시어가 있어야 중간에 끊기지 않는다.
+        int requiredMissionCount = participants.size() * totalRounds;
         if (missions.size() < requiredMissionCount) {
             throw new BusinessException(ErrorCode.CHARADES_NOT_ENOUGH_MISSIONS);
         }
@@ -128,7 +139,7 @@ public class CharadesGameService {
         charadesRedis.initialize(
             room.roomCode(),
             sessionSeq,
-            TOTAL_ROUNDS,
+            totalRounds,
             topicId,
             presenterOrder
         );
@@ -137,7 +148,7 @@ public class CharadesGameService {
             room.roomId(),
             gameId,
             sessionSeq,
-            TOTAL_ROUNDS
+            totalRounds
         );
         return openTurn(
             room,
@@ -206,6 +217,32 @@ public class CharadesGameService {
             }
         }
         return Optional.empty();
+    }
+
+    @Transactional(readOnly = true)
+    public CharadesStateResponse getState(
+        UUID roomId,
+        Long gameId
+    ) {
+        Room room = resolveRoom(roomId);
+        int sessionSeq = room.currentSessionSeq();
+        CharadesGameState state = charadesRedis.findState(
+            room.roomCode(),
+            sessionSeq
+        ).orElseThrow(() ->
+            new BusinessException(ErrorCode.CHARADES_SESSION_NOT_FOUND)
+        );
+
+        requireCurrentGame(state, gameId);
+        return new CharadesStateResponse(
+            state.currentRound(),
+            state.totalRounds(),
+            state.currentTurn(),
+            state.totalTurnsInRound(),
+            state.presenterId(),
+            state.expiresAt(),
+            state.status()
+        );
     }
 
     @Transactional(readOnly = true)
@@ -542,6 +579,10 @@ public class CharadesGameService {
             )
         );
         charadesRedis.clear(room.roomCode(), sessionSeq);
+        // 코스가 다음 칸으로 넘어갈 수 있도록 종료를 알린다(닌자 finishGame과 같은 계약).
+        applicationEventPublisher.publishEvent(
+            new GameSessionFinishedEvent(room.roomId(), sessionSeq)
+        );
     }
 
     private void saveCompletedRound(
@@ -794,6 +835,14 @@ public class CharadesGameService {
             || !missionTopicRepository
                 .existsByTopicIdAndGameGameIdAndIsActiveTrue(topicId, gameId)) {
             throw new BusinessException(ErrorCode.CHARADES_TOPIC_NOT_FOUND);
+        }
+    }
+
+    private static void validateRoundCount(int totalRounds) {
+        // 코스 저장 시 games.min/max_rounds로 이미 검증되지만, 이 서비스는 코스 없이도
+        // 호출될 수 있는 진입점이라(테스트 등) 최소 조건은 스스로 지킨다.
+        if (totalRounds < 1) {
+            throw new BusinessException(ErrorCode.COURSE_INVALID_ROUND_COUNT);
         }
     }
 

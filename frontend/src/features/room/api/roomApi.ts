@@ -37,6 +37,7 @@ export interface UpdateReadyResult {
 
 export interface StartGameResult {
   gameId: number;
+  sessionSeq: number;
   totalRounds: number;
 }
 
@@ -115,12 +116,25 @@ export const roomApi = {
       body: JSON.stringify({ ready }),
     }),
 
-  // 방장이 대기방에서 게임을 시작한다. 참가자 토큰은 서버가 방의 실제 참가자 목록에서 만들므로
-  // 클라이언트가 넘기지 않는다. 서버가 방장 여부·전원 준비를 검증하고 방을 PLAYING으로 전환한 뒤
-  // 세션을 열며 game:started를 브로드캐스트한다.
-  startGame: (roomId: string, gameId: number, totalRounds: number, accessToken: string) =>
+  // 방장이 대기방에서 확정한 코스대로 진행을 시작한다. 무엇을 몇 라운드 할지는 코스에 이미
+  // 들어 있고 참가자 목록도 서버가 직접 읽으므로 보낼 바디가 없다. 서버가 방장 여부·전원 준비·
+  // 코스 유효성을 검증하고 방을 PLAYING으로 전환한 뒤 첫 세션을 열며 game:started를 쏜다.
+  startGame: (roomId: string, accessToken: string) =>
     request<StartGameResult>(`/api/rooms/${roomId}/start`, accessToken, {
       method: 'POST',
-      body: JSON.stringify({ gameId, totalRounds }),
     }),
+
+  // [방장 전용] 코스 종합 결과에서 대기방으로 복귀. 서버가 점수 기록을 초기화하고 방을
+  // WAITING으로 되돌린 뒤 course:reset을 브로드캐스트한다 — 화면 전환은 그 이벤트가 담당.
+  // leaveRoom과 같은 이유(204 No Content)로 request()를 쓰지 않는다.
+  returnToLobby: async (roomId: string, accessToken: string): Promise<void> => {
+    const response = await fetch(`${BASE_URL}/api/rooms/${roomId}/return`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!response.ok) {
+      const body = await response.json().catch(() => null);
+      throw new RoomApiError(body?.message ?? `요청 실패 (HTTP ${response.status})`, body?.code);
+    }
+  },
 };

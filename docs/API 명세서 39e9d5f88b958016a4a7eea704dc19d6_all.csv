@@ -6,6 +6,7 @@
 참가자 강퇴,방장이 대기방에서 참가자를 강퇴. 강퇴된 참가자는 같은 방에 재입장 불가,/api/rooms/{roomId}/members/{participantId},,DELETE,방장,방,구현,프 -> 백,No,필요,API,미구현
 준비 상태 변경,현재 참가자의 준비 완료 상태를 변경,/api/rooms/{roomId}/members/me/ready,,PATCH,방 참가자,방,구현,프 -> 백,No,필요,API,미구현
 게임 시작,방장이 대기방에서 확정한 코스대로 진행 시작,/api/rooms/{roomId}/start,,POST,방장,방,미구현,프 -> 백,No,필요,API,미구현
+대기방 복귀,코스 종합 결과에서 방장이 대기방으로 복귀. 코스 점수 기록을 초기화하고 방을 WAITING으로 되돌림(코스 항목은 유지),/api/rooms/{roomId}/return,,POST,방장,방,구현,프 -> 백,No,필요,API,구현
 방 실시간 연결,방 상태 동기화·시그널링용 STOMP 연결 수립,/ws/rooms/{roomId},connect,,방 참가자,방,미구현,프->백->프,No,필요,WebSocket,미구현
 WebRTC Offer 전달,화상통화 연결을 위한 offer SDP 중계,/ws/rooms/{roomId},webrtc:offer,,방 참가자,방,미구현,프->백->프,No,필요,WS Event,미구현
 WebRTC Answer 전달,화상통화 연결을 위한 answer SDP 중계,/ws/rooms/{roomId},webrtc:answer,,방 참가자,방,미구현,프->백->프,No,필요,WS Event,미구현
@@ -17,10 +18,12 @@ ICE Candidate 전달,WebRTC 연결 후보 정보 중계,/ws/rooms/{roomId},webrt
 게임 선택 변경 전파,대기방에서 코스(게임 목록/순서) 설정이 바뀐 것을 알림,/ws/rooms/{roomId},member:game-updated,,방 참가자,방,미구현,백 -> 프,No,필요,WS Event,미구현
 준비 상태 변경 전파,참가자의 준비 완료 상태와 전원 준비 여부를 알림,/ws/rooms/{roomId},member:ready-updated,,방 참가자,방,구현,백 -> 프,No,필요,WS Event,미구현
 게임 시작 전파,코스의 다음 게임(세션)이 시작됨을 알림,/ws/rooms/{roomId},game:started,,방 참가자,방,미구현,백 -> 프,No,필요,WS Event,미구현
+대기방 복귀 전파,방장이 코스 종합 결과에서 대기방 복귀를 눌러 방이 WAITING으로 되돌아갔음을 알림,/ws/rooms/{roomId},course:reset,,방 참가자,방,구현,백 -> 프,No,필요,WS Event,구현
 게임 라운드 결과 브로드캐스트,저장된 라운드 결과를 방 참가자 전체에 실시간 전파,/ws/rooms/{roomId},game:round-result,,방 참가자,게임 공통,미구현,백 -> 프,No,필요,WS Event,미구현
 이번 라운드 제시 물건 조회,이번 라운드에 찾아야 할 물건(제시어)을 Spring이 MySQL에서 뽑아 응답,/api/games/{gameId}/fetch-object/mission,,GET,방 참가자,물건 가져오기,미구현,프 -> 백,No,필요,API,미구현
 물건 인식 요청,카메라 프레임 속 물체가 무엇인지 분류만 해서 응답(정답 여부는 판단 안 함),/ai/games/{gameId}/fetch-object/detections,,POST,방 참가자,물건 가져오기,미구현,프 -> AI -> 프,No,필요,API,미구현
 물건 인증 제출,AI가 분류한 물체 결과를 제출하면 Spring이 정답 여부와 제출 순서를 즉시 응답,/api/games/{gameId}/fetch-object/submissions,,POST,방 참가자,물건 가져오기,미구현,프 -> 백,No,필요,API,미구현
+게임 상태 조회,최초 이벤트 유실·새로고침·재접속 시 현재 라운드와 턴·표현자·종료 시각·진행 상태를 조회하며 제시어는 포함하지 않음,/api/games/{gameId}/charades/state,,GET,방 참가자,몸으로 말해요,구현,프 -> 백,Yes,필요,API,구현
 제시어 조회,현재 표현자가 이번 턴의 제시어와 종료 시각을 조회,/api/games/{gameId}/charades/word,,GET,표현자,몸으로 말해요,구현,프 -> 백,Yes,필요,API,미구현
 정답 채팅 제출,채팅을 전체 참가자에게 전파하고 최초 정답자만 원자적으로 인정해 정답 공개 이벤트를 발행함,/api/games/{gameId}/charades/guesses,,POST,일반 참가자(표현자 제외),몸으로 말해요,백엔드 구현,프 -> 백,Yes,필요,API,구현
 채팅 메세지 브로드캐스트,제출된 채팅 내용을 라운드와 턴 정보와 함께 방 참가자 전체에 실시간 전파,/ws/rooms/{roomId},chat:message-received,,방 참가자,몸으로 말해요,구현,백 -> 프,Yes,필요,WS Event,미구현

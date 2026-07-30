@@ -16,6 +16,19 @@ interface ChatPanelProps {
 export function ChatPanel({ messages, onSend, variant = 'floating', nicknameColorFor }: ChatPanelProps) {
   const [draft, setDraft] = useState('');
   const listRef = useRef<HTMLDivElement>(null);
+  const sendSoundRef = useRef<HTMLAudioElement>(null);
+
+  useEffect(() => {
+    const audio = new Audio('/assets/sounds/button-click.mp3');
+    audio.preload = 'auto';
+    audio.volume = 0.6;
+    sendSoundRef.current = audio;
+
+    return () => {
+      audio.pause();
+      sendSoundRef.current = null;
+    };
+  }, []);
 
   // 새 메시지가 오면 맨 아래로 스크롤
   useEffect(() => {
@@ -25,6 +38,15 @@ export function ChatPanel({ messages, onSend, variant = 'floating', nicknameColo
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
     if (!draft.trim()) return;
+
+    const sendSound = sendSoundRef.current;
+    if (sendSound) {
+      sendSound.currentTime = 0;
+      void sendSound.play().catch(() => {
+        // 효과음 재생 실패가 채팅 전송을 막아서는 안 된다.
+      });
+    }
+
     onSend(draft);
     setDraft('');
   };
@@ -49,7 +71,9 @@ export function ChatPanel({ messages, onSend, variant = 'floating', nicknameColo
           placeholder="메시지 입력"
           maxLength={200}
         />
-        <button type="submit">전송</button>
+        <button type="submit" data-button-sound="none">
+          전송
+        </button>
       </form>
     </div>
   );

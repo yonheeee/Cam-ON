@@ -14,6 +14,24 @@ export interface CharadesGuessResponse {
   correct: boolean;
 }
 
+export type CharadesStatus =
+  | 'READY'
+  | 'PLAYING'
+  | 'CORRECT'
+  | 'TIMEOUT'
+  | 'INVALIDATED'
+  | 'FINISHED';
+
+export interface CharadesStateResponse {
+  round: number;
+  totalRounds: number;
+  turn: number;
+  totalTurnsInRound: number;
+  presenterId: string | null;
+  expiresAt: string | null;
+  status: CharadesStatus;
+}
+
 export class CharadesApiError extends Error {
   code?: string;
 
@@ -40,6 +58,9 @@ async function request<T>(path: string, accessToken: string, init?: RequestInit)
 }
 
 export const charadesApi = {
+  getState: (gameId: number, accessToken: string) =>
+    request<CharadesStateResponse>(`/api/games/${gameId}/charades/state`, accessToken),
+
   // 표현자만 호출 가능(백엔드가 participantId로 검증) — 관전자가 호출하면 403.
   getCurrentWord: (gameId: number, accessToken: string) =>
     request<CharadesWordResponse>(`/api/games/${gameId}/charades/word`, accessToken),

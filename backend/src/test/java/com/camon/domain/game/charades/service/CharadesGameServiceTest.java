@@ -16,6 +16,7 @@ import static org.mockito.Mockito.when;
 import com.camon.domain.game.charades.domain.CharadesGameState;
 import com.camon.domain.game.charades.domain.CharadesTurnStatus;
 import com.camon.domain.game.charades.dto.CharadesGuessRequest;
+import com.camon.domain.game.charades.dto.CharadesStateResponse;
 import com.camon.domain.game.charades.repository.CharadesRedisRepository;
 import com.camon.domain.game.charades.ws.CharadesEventPublisher;
 import com.camon.domain.game.charades.ws.payload.CharadesAnswerRevealedPayload;
@@ -54,6 +55,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.TaskScheduler;
 
 @ExtendWith(MockitoExtension.class)
@@ -63,6 +65,9 @@ class CharadesGameServiceTest {
     private static final Long TOPIC_ID = 7L;
     private static final int SESSION_SEQ = 1;
     private static final String ROOM_CODE = "CH4R4D";
+    // 예전엔 단일 라운드 정책으로 서비스 안에 고정돼 있었고, 지금은 코스가 정해 넘긴다.
+    // 기존 테스트들의 기대값(1라운드 = 전원 한 바퀴)을 유지하려고 1을 쓴다.
+    private static final int TOTAL_ROUNDS = 1;
 
     @Mock
     private RoomRepository roomRepository;
@@ -82,6 +87,8 @@ class CharadesGameServiceTest {
     private CharadesEventPublisher charadesEventPublisher;
     @Mock
     private TaskScheduler taskScheduler;
+    @Mock
+    private ApplicationEventPublisher applicationEventPublisher;
 
     private final CharadesAnswerMatcher answerMatcher =
         new CharadesAnswerMatcher();
@@ -101,7 +108,8 @@ class CharadesGameServiceTest {
             gameScoreService,
             gameEventPublisher,
             charadesEventPublisher,
-            taskScheduler
+            taskScheduler,
+            applicationEventPublisher
         );
         lenient().when(gameScoreService.saveRoundScores(
             any(), anyInt(), anyInt(), any()
@@ -130,7 +138,8 @@ class CharadesGameServiceTest {
         CharadesTurnStartedPayload result = service.startSession(
             roomId,
             GAME_ID,
-            TOPIC_ID
+            TOPIC_ID,
+            TOTAL_ROUNDS
         );
 
         ArgumentCaptor<List<UUID>> orderCaptor = ArgumentCaptor.forClass(List.class);
@@ -185,7 +194,7 @@ class CharadesGameServiceTest {
             .thenReturn(participants(2));
 
         assertBusinessError(
-            () -> service.startSession(roomId, GAME_ID, TOPIC_ID),
+            () -> service.startSession(roomId, GAME_ID, TOPIC_ID, TOTAL_ROUNDS),
             ErrorCode.CHARADES_NOT_ENOUGH_PLAYERS
         );
         verify(charadesRedis, never()).initialize(
@@ -203,7 +212,7 @@ class CharadesGameServiceTest {
             .thenReturn(false);
 
         assertBusinessError(
-            () -> service.startSession(roomId, GAME_ID, TOPIC_ID),
+            () -> service.startSession(roomId, GAME_ID, TOPIC_ID, TOTAL_ROUNDS),
             ErrorCode.CHARADES_TOPIC_NOT_FOUND
         );
     }
@@ -224,7 +233,7 @@ class CharadesGameServiceTest {
             )).thenReturn(missions(2));
 
         assertBusinessError(
-            () -> service.startSession(roomId, GAME_ID, TOPIC_ID),
+            () -> service.startSession(roomId, GAME_ID, TOPIC_ID, TOTAL_ROUNDS),
             ErrorCode.CHARADES_NOT_ENOUGH_MISSIONS
         );
         verify(charadesRedis, never()).initialize(
@@ -338,6 +347,55 @@ class CharadesGameServiceTest {
         verify(charadesRedis, never()).openTurn(
             any(), anyInt(), anyInt(), anyInt(),
             any(), any(Long.class), any(Instant.class)
+        );
+    }
+
+    @Test
+    void returnsCurrentStateWithoutRequiringPlayingTurn() {
+        UUID presenterId = UUID.randomUUID();
+        Instant expiresAt = Instant.now().minusSeconds(1);
+        CharadesGameState state = new CharadesGameState(
+            1,
+            1,
+            2,
+            3,
+            TOPIC_ID,
+            presenterId,
+            42L,
+            expiresAt,
+            CharadesTurnStatus.TIMEOUT
+        );
+        when(roomRepository.findById(roomId)).thenReturn(Optional.of(room));
+        when(charadesRedis.findState(ROOM_CODE, SESSION_SEQ))
+            .thenReturn(Optional.of(state));
+        when(missionTopicRepository
+            .existsByTopicIdAndGameGameIdAndIsActiveTrue(TOPIC_ID, GAME_ID))
+            .thenReturn(true);
+
+        CharadesStateResponse response = service.getState(roomId, GAME_ID);
+
+        assertThat(response.round()).isEqualTo(1);
+        assertThat(response.totalRounds()).isEqualTo(1);
+        assertThat(response.turn()).isEqualTo(2);
+        assertThat(response.totalTurnsInRound()).isEqualTo(3);
+        assertThat(response.presenterId()).isEqualTo(presenterId);
+        assertThat(response.expiresAt()).isEqualTo(expiresAt);
+        assertThat(response.status()).isEqualTo(CharadesTurnStatus.TIMEOUT);
+        verify(missionRepository, never())
+            .findByMissionIdAndGameGameIdAndTopicTopicIdAndMissionTypeAndIsActiveTrue(
+                any(), any(), any(), any()
+            );
+    }
+
+    @Test
+    void rejectsStateRequestWhenSessionDoesNotExist() {
+        when(roomRepository.findById(roomId)).thenReturn(Optional.of(room));
+        when(charadesRedis.findState(ROOM_CODE, SESSION_SEQ))
+            .thenReturn(Optional.empty());
+
+        assertBusinessError(
+            () -> service.getState(roomId, GAME_ID),
+            ErrorCode.CHARADES_SESSION_NOT_FOUND
         );
     }
 

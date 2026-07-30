@@ -47,3 +47,16 @@
 .gesture-panel__error {
   color: #ff6b6b;
 }
+
+/* 오버레이 모드(variant="overlay") — 캠 타일 위에 스켈레톤만 얹는다.
+   캔버스 내부 해상도는 비디오 natural 크기라, LiveKit 비디오와 같은 object-fit: cover로
+   잘려야 스켈레톤이 영상과 어긋나지 않는다. */
+.gesture-skeleton {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  pointer-events: none;
+}

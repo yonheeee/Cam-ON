@@ -1,4 +1,5 @@
 import { Outlet, useNavigate } from 'react-router';
+import { BackgroundMusic } from '../../sound/components/BackgroundMusic';
 import './LandingPage.css';
 
 export function LandingPage() {
@@ -6,6 +7,11 @@ export function LandingPage() {
 
   return (
     <main className="landing" aria-label="CAM, ON! 메인">
+      <BackgroundMusic
+        source="/assets/sounds/party-lobby-pixel.mp3"
+        className="landing__music-toggle"
+      />
+
       <div className="landing__hero">
         <div className="landing__brand">
           <img

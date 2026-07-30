@@ -127,6 +127,24 @@ public class RedisGameResultRepository implements GameResultRepository {
         return findScores(roomId, RedisGameResultKeys::courseTotals);
     }
 
+    @Override
+    public void clearCourseResults(UUID roomId) {
+        Room room = roomRepository.findById(roomId).orElse(null);
+        if (room == null) {
+            return;
+        }
+        // session:{seq} 아래에는 게임 도메인들이 만드는 키(라운드 마커, :results, :totals,
+        // 닌자/물건 전용 키 등)가 섞여 있고 개수를 여기서 알 수 없어 패턴으로 지운다.
+        // 방 하나 범위의 소량 키라 KEYS로 충분하다(코스 종료 후 방장이 누를 때 한 번 실행).
+        var sessionKeys = redisTemplate.keys(
+            RedisGameResultKeys.sessionPrefix(room.roomCode()) + "*"
+        );
+        if (sessionKeys != null && !sessionKeys.isEmpty()) {
+            redisTemplate.delete(sessionKeys);
+        }
+        redisTemplate.delete(RedisGameResultKeys.courseTotals(room.roomCode()));
+    }
+
     private Map<UUID, Long> findScores(
         UUID roomId,
         KeyFactory keyFactory
