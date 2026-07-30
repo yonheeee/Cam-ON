@@ -2,6 +2,7 @@ plugins {
 	id 'java'
 	id 'org.springframework.boot' version '3.5.16'
 	id 'io.spring.dependency-management' version '1.1.7'
+	id 'jacoco'
 }
 
 group = 'com.camon'
@@ -43,4 +44,27 @@ dependencies {
 
 tasks.named('test') {
 	useJUnitPlatform()
+	// 커버리지 리포트는 별도 태스크로 뽑는다: ./gradlew test jacocoTestReport
+	// (build/reports/jacoco/test/html/index.html)
+	finalizedBy 'jacocoTestReport'
+}
+
+jacoco {
+	toolVersion = '0.8.12'
+}
+
+tasks.named('jacocoTestReport') {
+	dependsOn 'test'
+	reports {
+		html.required = true
+		xml.required = true // 수치 집계/CI 연동용
+	}
+	// 측정에서 제외: 앱 부팅 시 한 번 도는 시드(dev)와 배관 설정(global/config) —
+	// "테스트가 실행했는지"가 품질 신호가 아닌 코드라 수치만 왜곡한다.
+	classDirectories.setFrom(
+		sourceSets.main.output.asFileTree.matching {
+			exclude 'com/camon/dev/**'
+			exclude 'com/camon/global/config/**'
+		}
+	)
 }
