@@ -272,6 +272,7 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
           gameId={session.gameId}
           accessToken={accessToken}
           onActiveChange={(active) => setBetweenGames(!active)}
+          onLeave={onLeave}
         />
       )}
       {/* 카탈로그 조회가 실패해 이름을 모를 때도 게임 화면은 띄워야 하므로 닌자를 기본으로 둔다
@@ -287,6 +288,7 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
           gameId={session.gameId}
           accessToken={accessToken}
           onActiveChange={(active) => setBetweenGames(!active)}
+          onLeave={onLeave}
         />
       )}
 

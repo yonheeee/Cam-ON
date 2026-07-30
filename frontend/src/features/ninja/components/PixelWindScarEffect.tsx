@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { Application, Container, Graphics } from 'pixi.js';
 
-const DURATION_MS = 1950;
+export const DURATION_MS = 1950;
 const IMPACT_AT_MS = 650;
 const BLADE_COUNT = 5;
 const PARTICLE_COUNT = 120;

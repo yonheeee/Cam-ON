@@ -56,16 +56,13 @@ export function NinjaEffectOverlay({ effect }: { effect: EffectDto }) {
     };
 
     let raf = 0;
-    let frame = 0;
     let running = true;
+    // 버스트는 한 번만. 예전엔 서버 이펙트 창(5초)을 채우려고 24프레임마다 다시 방출했는데,
+    // 이펙트 자체는 life 프레임이면 끝나는 연출이라 그 반복이 재생 시간을 억지로 늘리고 있었다.
     emitBurst();
 
     const tick = () => {
       if (!running) return;
-      frame += 1;
-      // 마운트돼 있는 동안 주기적으로 다시 방출해 이펙트 창(5초)을 채운다.
-      if (frame % 24 === 0) emitBurst();
-
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       for (let i = particles.length - 1; i >= 0; i -= 1) {
         const p = particles[i];

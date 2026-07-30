@@ -36,6 +36,7 @@
   height: 26px;
   width: auto;
   image-rendering: pixelated;
+  cursor: pointer;
 }
 
 /* 라운드 배너 — 점등된 골드 사인(마퀴 전광판 톤) */

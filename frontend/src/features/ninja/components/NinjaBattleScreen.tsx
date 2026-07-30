@@ -1,6 +1,5 @@
 import {
   ParticipantTile,
-  useDataChannel,
   useLocalParticipant,
   useParticipants,
   useTracks,
@@ -8,16 +7,52 @@ import {
 import { Track } from 'livekit-client';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { GesturePanel } from '../../gesture/components/GesturePanel';
-import { GESTURE_RESULT_TOPIC, type GestureResultPayload } from '../../gesture/lib/gestureBroadcast';
 import { useGestureBoardStore } from '../../gesture/store/gestureBoardStore';
 import { useNinjaRound } from '../hooks/useNinjaRound';
 import { gestureImage } from '../lib/gestureImages';
-import { skillEffect } from '../lib/skillEffects';
+import { skillEffect, skillShake } from '../lib/skillEffects';
+import { PixelConfirmModal } from '../../system/components/PixelConfirmModal';
 import { NinjaEffectOverlay } from './NinjaEffectOverlay';
 import './NinjaBattleScreen.css';
 
 const ATTACK_TARGET_TIMER_SECONDS = 30;
 const MAX_HP = 100;
+
+// 고정 디자인 캔버스. 이 화면의 모든 px 값은 1440×810 기준이고, 뷰포트에는 통째로 확대/축소해서
+// 맞춘다(웹게임 표준 방식). 이유: 캠 크기는 폭(열 30% × 16:9)에, 보드는 절대 px에 묶여 있어서
+// 뷰포트 비율이 바뀔 때마다 요소 간 비율이 따로 움직였다 — 큰 모니터에선 HUD가 상대적으로
+// 쪼그라들고 세로가 짧은 창에선 보드만 커 보였다. 캔버스를 고정하면 어느 화면에서도 비율이 같다.
+const STAGE_WIDTH = 1440;
+const STAGE_HEIGHT = 810;
+// ponytail: 연속 배율(스냅 없음). 픽셀 폰트/아트가 뭉개져 보이면 0.25로 바꿔 내림 스냅한다 —
+// 대신 배율이 한 칸 떨어지면서 화면을 최대 25% 못 쓴다. 지금은 화면을 다 쓰는 쪽을 택했다.
+const SCALE_SNAP = 0;
+
+function useStageScale() {
+  const [scale, setScale] = useState(1);
+  useEffect(() => {
+    const fit = () => {
+      const raw = Math.min(window.innerWidth / STAGE_WIDTH, window.innerHeight / STAGE_HEIGHT);
+      setScale(SCALE_SNAP ? Math.floor(raw / SCALE_SNAP) * SCALE_SNAP : raw);
+    };
+    fit();
+    window.addEventListener('resize', fit);
+    return () => window.removeEventListener('resize', fit);
+  }, []);
+  return scale;
+}
+
+// 상단 알림에 붙는 쿠나이(닌자의 상징). 12×12 격자 위 도형이라 crispEdges로 그리면 확대돼도
+// 안티에일리어싱 없이 계단 픽셀로 남는다 — 이 화면의 픽셀 아트 톤과 맞다.
+function KunaiIcon() {
+  return (
+    <svg className="ninja-toast__kunai" viewBox="0 0 12 12" shapeRendering="crispEdges" aria-hidden>
+      <path d="M9 0l3 3-5 5-3-3z" fill="#e6e2f2" />
+      <path d="M4 6l2 2-3 3-2-2z" fill="#9b8bc4" />
+      <path d="M0 9h3v3H0zM1 10h1v1H1z" fillRule="evenodd" fill="#9b8bc4" />
+    </svg>
+  );
+}
 
 // 닌자 전투 화면. 대기방(LobbyScreen)/몸으로말해요(CharadesGamePanel)와 같은 방식으로 이 화면이
 // 캠 타일까지 직접 그린다 — 그래서 HP·점수·공격권·이펙트를 "그 사람 타일 위"에 얹을 수 있다.
@@ -30,6 +65,8 @@ interface NinjaBattleScreenProps {
   gameId: number;
   accessToken: string;
   onActiveChange: (active: boolean) => void;
+  /** 로고 클릭 → 확인 팝업 → 방 나가기 (확정안: 방 안에서 로고는 항상 확인 팝업 경유) */
+  onLeave: () => void;
 }
 
 export function NinjaBattleScreen({
@@ -37,31 +74,20 @@ export function NinjaBattleScreen({
   gameId,
   accessToken,
   onActiveChange,
+  onLeave,
 }: NinjaBattleScreenProps) {
+  const [confirmLeave, setConfirmLeave] = useState(false);
   const { localParticipant } = useLocalParticipant();
   const participants = useParticipants();
   const myId = localParticipant.identity || null;
+  const stageScale = useStageScale();
 
   const comboEntry = useGestureBoardStore((state) => state.entries[localParticipant.identity]);
-  const entries = useGestureBoardStore((state) => state.entries);
-  const setEntry = useGestureBoardStore((state) => state.setEntry);
-
-  // 남의 손동작 판정 수신. 예전엔 GestureBoard(좌하단 고정 디버그 박스)가 이 구독을 들고 있었는데,
-  // 판정을 각 캠 타일에 표시하려고 보드를 없애면서 구독만 이리로 옮겼다.
-  useDataChannel(GESTURE_RESULT_TOPIC, (msg) => {
-    try {
-      const payload = JSON.parse(new TextDecoder().decode(msg.payload)) as GestureResultPayload;
-      setEntry(payload.identity, payload);
-    } catch {
-      // 잘못된 payload는 무시
-    }
-  });
 
   const {
     round,
     exchange,
     sessionTotals,
-    totalRounds,
     alivePlayers,
     hp,
     currentAttackerToken,
@@ -139,15 +165,20 @@ export function NinjaBattleScreen({
 
   // 이펙트는 맞은 사람 타일에서 재생한다 — 데미지가 "누구에게" 들어갔는지가 화면에서 바로 읽힌다.
   const effectTargetId = inEffectPlayback ? (lastAttack?.targetToken ?? null) : null;
-  const pixelEffect = effectTargetId ? skillEffect(lastAttack?.skillId ?? requiredSkill?.skillId) : null;
+  const effectSkillId = lastAttack?.skillId ?? requiredSkill?.skillId;
+  const pixelEffect = effectTargetId ? skillEffect(effectSkillId) : null;
+  // 진동은 스킬마다 다르다(단발 타격은 1회, 연발/굽이침은 이펙트가 끝날 때까지 반복).
+  const shake = skillShake(effectSkillId);
 
   const renderTile = (id: string, seat: number) => {
     const trackRef = trackByIdentity.get(id);
-    const value = hp[id] ?? MAX_HP;
-    const dead = !alivePlayers.includes(id);
+    // HP는 데미지가 남은 체력보다 크면 음수로 내려온다 — 화면엔 0 미만을 보여주지 않는다.
+    const value = Math.max(0, Math.min(MAX_HP, hp[id] ?? MAX_HP));
+    // 탈락 표시(회색 + "탈락")는 이펙트가 끝난 뒤에 켠다 — 서버는 attack-resolved 하나로 HP 0과
+    // 탈락을 같이 알려주므로, 그대로 그리면 맞는 순간 타일이 먼저 회색이 되고 그 위에서 이펙트가
+    // 재생돼 "죽은 사람을 때리는" 순서로 보였다. 이펙트 대상인 동안은 살아있는 모습을 유지한다.
+    const dead = !alivePlayers.includes(id) && effectTargetId !== id;
     const isMe = id === myId;
-    const attacker = currentAttackerToken === id;
-    const judged = entries[id];
     // 공격권이 내게 있고 상대가 둘 이상일 때만 타일이 선택 버튼이 된다(한 명이면 자동 공격).
     const pickable =
       isMyAttack && !isMe && !dead && !isIntermission &&
@@ -155,9 +186,7 @@ export function NinjaBattleScreen({
     return (
       <div
         key={id}
-        className={`ninja-tile ninja-tile--p${(seat % 4) + 1}${dead ? ' ninja-tile--dead' : ''}${
-          attacker ? ' ninja-tile--attacker' : ''
-        }`}
+        className={`ninja-tile ninja-tile--p${(seat % 4) + 1}${dead ? ' ninja-tile--dead' : ''}`}
       >
         <div className="ninja-tile__cam">
           {trackRef ? (
@@ -176,26 +205,10 @@ export function NinjaBattleScreen({
           <span className={`ninja-tile__badge ninja-tile__badge--name${isMe ? ' ninja-tile__badge--me' : ''}`}>
             {nicknameOf(id)}
           </span>
-          {attacker && <span className="ninja-tile__badge ninja-tile__badge--attack">공격권</span>}
           {dead && (
             <div className="ninja-tile__dead">
               <span className="pap-pixel-title">탈락</span>
             </div>
-          )}
-          {/* 지금 무슨 손동작이 잡혔는지 — 판정 라벨(gesture.name)을 그 손모양 이미지로 보여준다 */}
-          {judged?.comboLabel && !dead && (
-            <span className="ninja-tile__combo">
-              {gestureImage(judged.comboLabel) ? (
-                <img
-                  className="ninja-mini-seal"
-                  src={gestureImage(judged.comboLabel)!}
-                  alt={judged.comboLabel}
-                  title={judged.comboLabel}
-                />
-              ) : (
-                judged.comboLabel
-              )}
-            </span>
           )}
           {pickable && (
             <button type="button" className="ninja-tile__pick" onClick={() => void submitTarget(id)}>
@@ -209,7 +222,9 @@ export function NinjaBattleScreen({
             className={`ninja-hp__fill${value <= 30 ? ' ninja-hp__fill--low' : ''}`}
             style={{ width: `${Math.max(0, Math.min(100, value))}%` }}
           />
-          <span className="ninja-hp__num pap-pixel-title">
+          {/* 픽셀 폰트(Galmuri11)는 11의 정수배에서만 선명한데 그 크기로는 영상 위에서 안 읽힌다 —
+              이 숫자만 본문 폰트 16px로 간다. */}
+          <span className="ninja-hp__num">
             {value} / {MAX_HP}
           </span>
         </div>
@@ -225,19 +240,32 @@ export function NinjaBattleScreen({
     currentAttackerToken !== myId &&
     alivePlayers.filter((t) => t !== currentAttackerToken).length > 1;
 
+  // 처치 알림 — 마지막 공격으로 HP가 0이 된 순간부터 인터미션이 끝날 때까지만 띄운다
+  // (lastAttack은 다음 교환 시작 시 서버 이벤트가 null로 지운다).
+  const killed = isIntermission && lastAttack?.targetEliminated ? lastAttack : null;
+
   return (
     <div className="ninja-screen">
       {/* 배경을 별도 레이어로 뺀 이유: 피격 진동을 이 레이어의 transform으로만 돌린다. 화면 전체를
           흔들면 캠 비디오·pixi 캔버스까지 매 프레임 재합성돼 무겁고, 영상이 같이 떨려서 어지럽다.
           이 레이어는 자식이 없어서 합성만 다시 하면 되고, scale로 살짝 키워둬서 흔들려도 여백이
-          드러나지 않는다. -a/-b를 번갈아 붙이는 이유는 위 shakeTick 주석 참고. */}
+          드러나지 않는다. key=shakeTick으로 매 피격마다 리마운트해 애니메이션을 재시작시킨다
+          (같은 클래스를 다시 붙이는 것만으로는 재생되지 않는다 — 위 shakeTick 주석 참고). */}
       <div
-        className={`ninja-screen__bg${
-          inEffectPlayback ? (shakeTick % 2 ? ' ninja-screen__bg--shake-a' : ' ninja-screen__bg--shake-b') : ''
-        }`}
+        key={shakeTick}
+        className={`ninja-screen__bg${inEffectPlayback ? ` ${shake.className}` : ''}`}
+        style={inEffectPlayback ? { animationIterationCount: shake.iterations } : undefined}
       />
+      {/* 여기서부터가 1440×810 고정 캔버스. 배경은 이 밖(뷰포트 전체)에 있어서 비율이 안 맞는
+          화면에서도 레터박스 검은 띠 대신 야경 배경이 그대로 보인다. */}
+      <div className="ninja-stage" style={{ '--ninja-scale': stageScale } as React.CSSProperties}>
       <header className="ninja-screen__topbar">
-        <img className="ninja-screen__logo pap-pixel-img" src="/assets/cam-on-logo.png" alt="CAM, ON!" />
+        <img
+          className="ninja-screen__logo pap-pixel-img"
+          src="/assets/cam-on-logo.png"
+          alt="CAM, ON!"
+          onClick={() => setConfirmLeave(true)}
+        />
       </header>
 
       <div className="ninja-screen__body">
@@ -245,13 +273,10 @@ export function NinjaBattleScreen({
           {leftSeats.map((p) => renderTile(p.identity, seats.indexOf(p)))}
         </section>
 
-        {/* 중앙 — 라운드/타이머 + 따라할 인술. 게임 중 시선이 머무는 곳이라 여기만 보면 된다. */}
+        {/* 중앙 — 타이머 + 따라할 인술. 게임 중 시선이 머무는 곳이라 여기만 보면 된다. */}
         <section className="ninja-screen__center">
           <div className="ninja-board">
             <div className="ninja-board__head">
-              <p className="ninja-board__round">
-                ROUND <strong>{round}</strong> / {totalRounds}
-              </p>
               <p
                 className={`ninja-board__timer pap-pixel-title${
                   !isIntermission && roundTimerSeconds !== null && roundTimerSeconds <= 5
@@ -269,7 +294,7 @@ export function NinjaBattleScreen({
 
             {isIntermission ? (
               <div className="ninja-board__body ninja-board__body--intermission">
-                {roundResult && roundResult.length > 0 ? (
+                {roundResult && roundResult.length > 0 && (
                   <>
                     <p className="ninja-board__label">ROUND {round} 결과</p>
                     <ol className="ninja-result">
@@ -282,21 +307,7 @@ export function NinjaBattleScreen({
                       ))}
                     </ol>
                   </>
-                ) : (
-                  <>
-                    <p className="ninja-board__label">교환 종료</p>
-                    {lastAttack ? (
-                      <p className="ninja-board__hit">
-                        {nicknameOf(lastAttack.attackerToken)} → {nicknameOf(lastAttack.targetToken)}
-                        <strong> -{lastAttack.damage}</strong>
-                        {lastAttack.targetEliminated && <span className="ninja-board__ko">탈락!</span>}
-                      </p>
-                    ) : (
-                      <p className="ninja-board__hint">정리 중...</p>
-                    )}
-                  </>
                 )}
-                {inCountdown && <p className="ninja-board__hint">다음 교환을 준비하세요</p>}
               </div>
             ) : (
               requiredSkill && (
@@ -319,12 +330,15 @@ export function NinjaBattleScreen({
                       >
                         <span className="ninja-seal__ring">
                           {gestureImage(step.gestureName) ? (
-                            <img
-                              className="ninja-seal__img"
-                              src={gestureImage(step.gestureName)!}
-                              alt={step.gestureLabelKr}
-                              title={step.gestureLabelKr}
-                            />
+                            <>
+                              <img
+                                className="ninja-seal__img"
+                                src={gestureImage(step.gestureName)!}
+                                alt={step.gestureLabelKr}
+                                title={step.gestureLabelKr}
+                              />
+                              <span className="ninja-seal__caption">{step.gestureLabelKr}</span>
+                            </>
                           ) : (
                             /* girl_V 등 이미지가 없는 손동작은 한글 라벨로 */
                             <span className="ninja-seal__kr">{step.gestureLabelKr}</span>
@@ -387,32 +401,6 @@ export function NinjaBattleScreen({
                       </p>
                     </div>
                   )}
-
-                  {requiredSkill.nextSkill && (
-                    <div className="ninja-board__next">
-                      <p>
-                        다음 예고 · <strong>{requiredSkill.nextSkill.skillName}</strong>
-                      </p>
-                      <span className="ninja-board__next-seals">
-                        {requiredSkill.nextSkill.gestures.map((g) => {
-                          const src = gestureImage(g.gestureName);
-                          return src ? (
-                            <img
-                              key={g.seq}
-                              className="ninja-mini-seal"
-                              src={src}
-                              alt={g.gestureLabelKr}
-                              title={g.gestureLabelKr}
-                            />
-                          ) : (
-                            <em key={g.seq} className="ninja-mini-seal ninja-mini-seal--text">
-                              {g.gestureLabelKr}
-                            </em>
-                          );
-                        })}
-                      </span>
-                    </div>
-                  )}
                 </div>
               )
             )}
@@ -425,15 +413,27 @@ export function NinjaBattleScreen({
       </div>
 
       {/* 공격권을 놓친 쪽은 지금까지 화면에 아무 변화가 없어서 "왜 멈췄지" 싶었다 —
-          화면을 어둡게 덮어 지금이 남의 차례라는 것과 누가 고르고 있는지를 알린다. */}
-      {someoneElsePicking && (
-        <div className="ninja-waiting">
-          <p className="ninja-waiting__text">
-            <strong>{nicknameOf(currentAttackerToken)}</strong> 님이 공격할 대상을 고르는 중입니다
-            <span className="ninja-waiting__dots" aria-hidden>
-              ...
+          화면을 어둡게 덮어 지금이 남의 차례임을 알린다(누가 고르는지는 상단 알림이 말해준다). */}
+      {someoneElsePicking && <div className="ninja-waiting" />}
+
+      {/* 상단 알림 — 대기방 토스트와 같은 위치·크기, 색만 어둡게 하고 쿠나이를 달았다.
+          처치 알림과 대상 지정 알림은 동시에 뜨지 않는다(전자는 인터미션, 후자는 라운드 중). */}
+      {(killed || someoneElsePicking) && (
+        <div className="ninja-toast">
+          <KunaiIcon />
+          {killed ? (
+            <span>
+              <strong>{nicknameOf(killed.attackerToken)}</strong> 님이{' '}
+              <strong>{nicknameOf(killed.targetToken)}</strong> 님을 처치했어요
             </span>
-          </p>
+          ) : (
+            <span>
+              <strong>{nicknameOf(currentAttackerToken)}</strong> 님이 대상을 고르는 중
+              <span className="ninja-waiting__dots" aria-hidden>
+                ...
+              </span>
+            </span>
+          )}
         </div>
       )}
 
@@ -454,7 +454,20 @@ export function NinjaBattleScreen({
         </div>
       )}
 
-      {error && <p className="ninja-screen__error">{error}</p>}
+        {error && <p className="ninja-screen__error">{error}</p>}
+      </div>
+      {/* 스테이지 밖에 둔다 — 안에 넣으면 --ninja-scale 확대/축소를 같이 받는다 */}
+      {confirmLeave && (
+        <PixelConfirmModal
+          title="방을 나가시겠습니까?"
+          message="게임 중에 나가면 이번 게임 기록은 사라져요."
+          confirmLabel="예"
+          cancelLabel="아니오"
+          tone="danger"
+          onConfirm={onLeave}
+          onCancel={() => setConfirmLeave(false)}
+        />
+      )}
     </div>
   );
 }
