@@ -9,6 +9,7 @@ import com.camon.domain.game.ninja.repository.EffectRepository;
 import com.camon.domain.game.ninja.repository.GestureRepository;
 import com.camon.domain.game.ninja.repository.SkillGestureRepository;
 import com.camon.domain.game.ninja.repository.SkillRepository;
+import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -57,10 +58,15 @@ public class DevNinjaDataSeeder implements ApplicationRunner {
         seedSkill(gestures, effect, "수룡탄의 술", 30, "sailor_moon", "cow", "rabbit");
         seedSkill(gestures, effect, "냥냥펀치", 15, "rabbit", "cat");
         seedSkill(gestures, effect, "바람의 상처", 45, "spider", "Horse", "mouse", "sailor_moon");
-        // 테스트용 — 콤보가 2개뿐이고 데미지가 INITIAL_HP(100)와 같아서 한 방에 탈락시킨다.
-        // 닌자 판(round)은 "최후 1인"이 남아야 끝나는데, 아무도 탈락하지 않으면 교환 상한(50회 x 30초)에
-        // 닿을 때까지 25분씩 걸려 진행 확인이 사실상 불가능하다. 이 스킬로 판을 즉시 끝낼 수 있다.
-        seedSkill(gestures, effect, "아마테라스", 100, "Horse", "mouse");
+        // 최고난도 콤보(6단, 손동작 9종 중 6종을 안 겹치게 사용) + 한 방 탈락(데미지 = INITIAL_HP).
+        // 30초 교환 안에 6단을 다 잡으려면 손동작 하나당 유지(0.7초)와 전환을 거의 실수 없이
+        // 붙여야 해서, 성공하면 판이 즉시 끝나는 보상이 성립한다.
+        //
+        // 주의: 예전엔 콤보가 2개(말→쥐)뿐이라 "판을 빨리 끝내는 테스트용"으로 쓰였다. 6단이 된
+        // 지금은 그 용도로 쓰기 어렵다 — 진행 확인이 급하면 아마테라스 대신 냥냥펀치(2단)의
+        // damage를 임시로 올리는 편이 낫다.
+        seedSkill(gestures, effect, "아마테라스", 100,
+            "spider", "sailor_moon", "cow", "girl_V", "Horse", "snake");
         // 콤보 4개짜리 고데미지 — 바람의 상처(45)와 같은 길이지만 손동작 구성이 겹치지 않게 잡았다.
         seedSkill(gestures, effect, "나선환", 50, "cat", "girl_V", "rabbit", "snake");
     }
@@ -92,14 +98,40 @@ public class DevNinjaDataSeeder implements ApplicationRunner {
     }
 
     // 스킬 단위로 멱등하다 — 예전엔 skill 테이블이 비어있을 때만 통째로 돌려서, 스킬을 새로
-    // 추가해도 이미 데이터가 있는 DB(로컬/배포)엔 영원히 들어가지 않았다. 이름이 같은 스킬이
-    // 있으면 데미지/콤보를 덮어쓰지 않고 그대로 둔다(운영에서 밸런스를 조정해 뒀을 수 있다).
+    // 추가해도 이미 데이터가 있는 DB(로컬/배포)엔 영원히 들어가지 않았다.
+    //
+    // 이미 있는 스킬은 damage를 덮어쓰지 않는다(운영에서 밸런스를 조정해 뒀을 수 있다). 반면
+    // 콤보는 여기 선언과 다르면 맞춘다 — 콤보는 "무슨 손동작을 해야 하는가"라는 게임 콘텐츠라
+    // 코드와 DB가 갈라지면 아무도 모르게 다른 게임이 되고, 마이그레이션 도구가 없는 지금은
+    // 코드를 고쳐도 반영될 경로가 없다.
     private void seedSkill(Map<String, Gesture> gestures, Effect effect, String name, int damage, String... sequence) {
-        if (skillRepository.findByName(name).isPresent()) {
+        Skill existing = skillRepository.findByName(name).orElse(null);
+        if (existing != null) {
+            reconcileCombo(existing, gestures, sequence);
             return;
         }
-        log.info("[Seed] skill : '{}' 없음 → 추가 (damage={}, 콤보 {}개)", name, damage, sequence.length);
+        log.info("[Seed] skill : '{}' 없음 → 추가 (damage={}, 콤보 {}단)", name, damage, sequence.length);
         Skill skill = skillRepository.save(Skill.builder().name(name).damage(damage).effect(effect).build());
+        saveCombo(skill, gestures, sequence);
+    }
+
+    private void reconcileCombo(Skill skill, Map<String, Gesture> gestures, String[] sequence) {
+        List<String> current = skill.getGestures().stream()
+            .map(skillGesture -> skillGesture.getGesture().getName())
+            .toList();
+        if (current.equals(List.of(sequence))) {
+            return;
+        }
+        log.info("[Seed] skill : '{}' 콤보가 선언과 다름 {} → {} — 맞춤",
+            skill.getName(), current, List.of(sequence));
+        skillGestureRepository.deleteAll(skill.getGestures());
+        // 지운 행이 flush되기 전에 같은 (skill_id, seq) PK로 insert하면 충돌한다.
+        skillGestureRepository.flush();
+        skill.getGestures().clear();
+        saveCombo(skill, gestures, sequence);
+    }
+
+    private void saveCombo(Skill skill, Map<String, Gesture> gestures, String[] sequence) {
         int seq = 1;
         for (String gestureName : sequence) {
             skillGestureRepository.save(SkillGesture.builder()
