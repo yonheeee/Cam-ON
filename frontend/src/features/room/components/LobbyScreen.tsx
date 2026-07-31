@@ -125,14 +125,23 @@ export function LobbyScreen({
   const joinOrderByIdentity = new Map(
     (room?.participants ?? []).map((p, index) => [p.participantId, index]),
   );
-  const orderedTracks = [...tracks].sort(
-    (a, b) =>
-      (joinOrderByIdentity.get(a.participant.identity) ?? Number.MAX_SAFE_INTEGER) -
-      (joinOrderByIdentity.get(b.participant.identity) ?? Number.MAX_SAFE_INTEGER),
-  );
+  const maxPlayers = room?.maxPlayers ?? 0;
+  // 타일은 방 정원(maxPlayers)을 절대 넘지 않아야 한다. LiveKit 트랙(미디어 실제)과 서버
+  // 스냅샷(room.participants)은 입·퇴장 순간 잠깐 어긋날 수 있는데, 스냅샷에 아직 없는
+  // 트랙은 정렬에서 뒤로 밀리므로 정원만큼 잘라내면 유령/미반영 트랙이 제거된다.
+  const orderedTracks = [...tracks]
+    .sort(
+      (a, b) =>
+        (joinOrderByIdentity.get(a.participant.identity) ?? Number.MAX_SAFE_INTEGER) -
+        (joinOrderByIdentity.get(b.participant.identity) ?? Number.MAX_SAFE_INTEGER),
+    )
+    .slice(0, maxPlayers || undefined);
 
   const joinedCount = room?.participants.length ?? 0;
-  const emptySlots = Math.max(0, (room?.maxPlayers ?? 0) - joinedCount);
+  // 빈 슬롯은 스냅샷 인원이 아니라 "실제로 그리는 타일 수" 기준으로 채운다. 예전엔
+  // (정원 - 스냅샷 인원)개를 그려서, 트랙과 스냅샷이 어긋나면 정원보다 많은 칸이 떴다
+  // (스냅샷 1명 + 트랙 2개 → 2 + (4-1) = 5칸). 이제 항상 정확히 정원만큼만 나온다.
+  const emptySlots = Math.max(0, maxPlayers - orderedTracks.length);
 
   // 채팅 닉네임에 입힐 플레이어 대표색 (데이터 채널 payload에는 닉네임만 있어서 닉네임 기준 매핑)
   const colorByNickname = new Map(
@@ -374,7 +383,7 @@ export function LobbyScreen({
             {Array.from({ length: emptySlots }, (_, i) => (
               <div key={`empty-${i}`} className="lobby-tile lobby-tile--empty">
                 <span className="lobby-tile__empty-slot pap-pixel-title">
-                  P{joinedCount + i + 1}
+                  P{orderedTracks.length + i + 1}
                 </span>
                 <span className="lobby-tile__empty-hint">친구 소환 대기 중...</span>
               </div>

@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { Application, Container, Graphics } from 'pixi.js';
 
-const DURATION_MS = 1900;
+export const DURATION_MS = 1900;
 const SHOT_COUNT = 5;
 const SHOT_GAP_MS = 95;
 const FLIGHT_MS = 470;

@@ -1,51 +1,19 @@
-.gesture-panel {
-  position: fixed;
-  right: 1rem;
-  bottom: 1rem;
-  width: 320px;
-  background: rgba(20, 20, 20, 0.9);
-  color: #fff;
-  padding: 0.75rem;
-  border-radius: 8px;
-  z-index: 50;
-  font-size: 0.85rem;
-}
-
-.gesture-panel h2 {
-  margin: 0 0 0.5rem;
-  font-size: 0.95rem;
-}
-
+/* NinjaGamePanel의 "내 캠" 칸(.ninja-battle__cam, position:relative) 안에 꽉 채워지는
+   오버레이. mirrorCanvas(실제 카메라 화면)가 먼저 깔리고 그 위에 스켈레톤 캔버스가 겹친다. */
 .gesture-panel__stage {
-  position: relative;
-  width: 100%;
-  aspect-ratio: 4 / 3;
-  background: #000;
-  border-radius: 6px;
-  overflow: hidden;
+  position: absolute;
+  inset: 0;
 }
 
+/* contain — 캠을 확대/크롭하지 않는다. 스켈레톤 캔버스와 미러 캔버스가 같은 규칙이라야
+   좌표가 어긋나지 않으므로 둘 다 동일하게 맞춘다. */
 .gesture-panel__stage video,
 .gesture-panel__stage canvas {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: cover;
-}
-
-.gesture-panel__results {
-  list-style: none;
-  margin: 0.5rem 0 0;
-  padding: 0;
-}
-
-.gesture-panel__skill {
-  color: #ffd400;
-}
-
-.gesture-panel__error {
-  color: #ff6b6b;
+  object-fit: contain;
 }
 
 /* 오버레이 모드(variant="overlay") — 캠 타일 위에 스켈레톤만 얹는다.

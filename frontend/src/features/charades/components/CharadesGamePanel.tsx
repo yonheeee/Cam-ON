@@ -2,6 +2,9 @@ import { ParticipantTile, useLocalParticipant, useParticipants, useTracks } from
 import { Track } from 'livekit-client';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { roomApi } from '../../room/api/roomApi';
+import { BackgroundMusic } from '../../sound/components/BackgroundMusic';
+import { useCountdownSound } from '../../sound/hooks/useCountdownSound';
+import { PixelConfirmModal } from '../../system/components/PixelConfirmModal';
 import { useCharadesRound } from '../hooks/useCharadesRound';
 import './CharadesGamePanel.css';
 
@@ -10,6 +13,8 @@ interface CharadesGamePanelProps {
   gameId: number;
   accessToken: string;
   onActiveChange: (active: boolean) => void;
+  /** 로고 클릭 → 확인 팝업 → 방 나가기 (확정안: 방 안에서 로고는 항상 확인 팝업 경유) */
+  onLeave: () => void;
 }
 
 type TrackRef = ReturnType<typeof useTracks>[number];
@@ -22,7 +27,14 @@ const SCREEN_PADDING_PX = 28;
 
 // 몸으로 말해요 화면 — 메인 스테이지는 항상 "지금 설명 중인 사람"(표현자, 나여도 마찬가지)이 크게,
 // 나머지 참가자는 사이드바에 나열한다. 제시어/정답 입력은 상단 카드 하나에 role에 따라 다른 내용을 채운다.
-export function CharadesGamePanel({ roomId, gameId, accessToken, onActiveChange }: CharadesGamePanelProps) {
+export function CharadesGamePanel({
+  roomId,
+  gameId,
+  accessToken,
+  onActiveChange,
+  onLeave,
+}: CharadesGamePanelProps) {
+  const [confirmLeave, setConfirmLeave] = useState(false);
   const { localParticipant } = useLocalParticipant();
   const participants = useParticipants();
   const myParticipantId = localParticipant.identity || null;
@@ -141,7 +153,17 @@ export function CharadesGamePanel({ roomId, gameId, accessToken, onActiveChange 
   return (
     <div className="charades-screen">
       <div className="charades-topbar">
-        <img className="charades-topbar__logo" src="/assets/cam-on-logo.png" alt="CAM, ON!" />
+        {/* 확정안: 방 안에서 로고 클릭 = 바로 이동이 아니라 나가기 확인 팝업 */}
+        <img
+          className="charades-topbar__logo"
+          src="/assets/cam-on-logo.png"
+          alt="CAM, ON!"
+          onClick={() => setConfirmLeave(true)}
+        />
+        <BackgroundMusic
+          source="/assets/sounds/silent-charades.mp3"
+          className="charades-topbar__music-toggle"
+        />
         {/* 단일 라운드 정책(참가자 전원이 한 번씩 표현하면 게임 종료)이라 라운드가 아니라
             "몇 번째 표현자인지"가 진행도다 — 서버가 turn/totalTurnsInRound로 내려준다. */}
         <div className="charades-header__badge">
@@ -272,6 +294,17 @@ export function CharadesGamePanel({ roomId, gameId, accessToken, onActiveChange 
       </div>
 
       {error && <p className="charades-error">{error}</p>}
+      {confirmLeave && (
+        <PixelConfirmModal
+          title="방을 나가시겠습니까?"
+          message="게임 중에 나가면 이번 게임 기록은 사라져요."
+          confirmLabel="예"
+          cancelLabel="아니오"
+          tone="danger"
+          onConfirm={onLeave}
+          onCancel={() => setConfirmLeave(false)}
+        />
+      )}
     </div>
   );
 }
@@ -330,6 +363,11 @@ function CharadesCorrectBanner({
   answererName: string;
 }) {
   const [countdown, setCountdown] = useState(CORRECT_BANNER_SECONDS);
+  useCountdownSound(
+    countdown <= 3,
+    'charades:next-prompt',
+    Math.max(0, 3 - countdown),
+  );
 
   useEffect(() => {
     if (countdown <= 1) return;

@@ -117,9 +117,29 @@ pipeline {
                     docker build \
                         --tag "${BACKEND_IMAGE}" \
                         backend
+
+                    # 프론트는 LiveKit 서버 URL을 빌드 시점에 번들에 굽는다. 백엔드가 토큰을
+                    # 서명하는 프로젝트와 반드시 같아야 하므로, 배포 .env의 LIVEKIT_URL을 단일
+                    # 출처로 삼아 여기서 읽어 넘긴다(값을 두 곳에 적으면 갈라진다).
+                    livekit_url=""
+                    if [ -f "${DEPLOY_DIR}/.env" ]; then
+                        livekit_url=$(sed -n 's/^LIVEKIT_URL=//p' \
+                            "${DEPLOY_DIR}/.env" | tail -n 1)
+                    fi
+                    if [ -z "${livekit_url}" ]; then
+                        # main은 이 이미지를 실제로 배포하므로, 빈 값으로 나가면 방 화면이
+                        # 통째로 깨진다 — 배포 전에 실패시키는 게 낫다.
+                        if [ "${BRANCH_NAME:-}" = "main" ]; then
+                            echo "LIVEKIT_URL is missing in ${DEPLOY_DIR}/.env" >&2
+                            exit 1
+                        fi
+                        echo "WARNING: LIVEKIT_URL not found in ${DEPLOY_DIR}/.env — frontend image will have no LiveKit URL." >&2
+                    fi
+
                     docker build \
                         --build-arg "VITE_API_BASE_URL=https://${DEPLOY_DOMAIN}" \
                         --build-arg "VITE_WS_BASE_URL=wss://${DEPLOY_DOMAIN}" \
+                        --build-arg "VITE_LIVEKIT_URL=${livekit_url}" \
                         --tag "${FRONTEND_IMAGE}" \
                         frontend
                     BACKEND_IMAGE="${BACKEND_IMAGE}" \

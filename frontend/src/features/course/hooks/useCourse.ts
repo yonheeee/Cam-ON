@@ -1,4 +1,5 @@
 import { Client } from '@stomp/stompjs';
+import { handleExpiredSession } from '../../session/lib/sessionExpiry';
 import { useCallback, useEffect, useState } from 'react';
 import {
   courseApi,
@@ -52,6 +53,9 @@ export function useCourse(roomId: string, accessToken: string) {
       brokerURL: `${baseUrl}/ws/rooms/${roomId}`,
       connectHeaders: { Authorization: `Bearer ${accessToken}` },
       reconnectDelay: 3000,
+      // STOMP는 인증 실패에도 reconnectDelay로 재연결을 계속 시도한다 — 죽은 토큰으로는
+      // 영원히 실패하므로, 세션을 정리하고 첫 화면으로 되돌려 루프를 끊는다.
+      onStompError: () => handleExpiredSession(),
       onConnect: () => {
         client.subscribe(`/topic/rooms/${roomId}`, (message) => {
           const event = JSON.parse(message.body) as RoomEvent<unknown>;

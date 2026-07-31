@@ -1,27 +1,132 @@
-/* 전체 화면/배경은 theme.css의 .pap-plaza-screen 공용 클래스가 담당 */
 .landing {
-  gap: 48px;
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: #fff8e8 url('/assets/pixel-arcade-plaza-bg.png') center center / cover no-repeat;
+  color: var(--camon-color-ink);
   image-rendering: pixelated;
 }
 
+.landing__hero {
+  position: absolute;
+  top: 34.9609375%;
+  left: 50%;
+  width: min(1080px, 75vw);
+  height: 303px;
+  transform: translateX(-50%);
+}
+
+.landing__brand {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 530px;
+  height: 178px;
+  overflow: hidden;
+  transform: translateX(-50%);
+}
+
 .landing__logo {
-  width: min(640px, 82vw);
-  height: auto;
-  /* 하늘 위에서 살짝 떠 보이게 — 배경과 붙지 않도록 은은한 드롭섀도 */
-  filter: drop-shadow(0 6px 0 rgb(43 24 51 / 0.25));
+  display: block;
+  width: 530px;
+  height: 200px;
+  object-fit: contain;
+  image-rendering: pixelated;
+  user-select: none;
+}
+
+.landing__supporting-copy {
+  position: absolute;
+  top: 178px;
+  left: 50%;
+  width: 268px;
+  height: 18px;
+  margin: 0;
+  transform: translateX(-50%);
+  overflow: hidden;
+  color: #472e45;
+  font-family: var(--camon-font);
+  font-size: 15px;
+  font-weight: 400;
+  line-height: normal;
+  letter-spacing: 0.15px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+/* 세션 만료 안내. 히어로 안의 다른 요소들처럼 절대 배치라, 안내가 떠도 버튼 위치가 밀리지 않는다
+   (supporting-copy 196px 끝 ~ actions 252px 시작 사이의 빈 구간에 넣는다). */
+.landing__notice {
+  position: absolute;
+  top: 204px;
+  left: 50%;
+  width: min(420px, 88vw);
+  margin: 0;
+  transform: translateX(-50%);
+  color: #8a3b2f;
+  font-family: var(--camon-font);
+  font-size: 13px;
+  line-height: 1.35;
+  text-align: center;
 }
 
 .landing__actions {
+  position: absolute;
+  top: 252px;
+  left: 50%;
   display: flex;
-  gap: 24px;
-  flex-wrap: wrap;
+  align-items: center;
   justify-content: center;
+  width: 370px;
+  height: 51px;
+  gap: 12px;
+  transform: translateX(-50%);
 }
 
-.landing__cta {
-  font-size: 24px;
-  padding: 18px 36px;
-  min-width: 240px;
+.landing__button {
+  box-sizing: border-box;
+  width: 179px;
+  height: 51px;
+  padding: 0 18px;
+  border: var(--camon-stroke-2) solid var(--camon-color-ink);
+  border-radius: var(--camon-radius-6);
+  color: var(--camon-color-ink);
+  font-family: var(--camon-font);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+  text-align: center;
+  box-shadow: var(--camon-shadow-hard);
+  cursor: pointer;
+  transition:
+    transform 80ms ease-out,
+    box-shadow 80ms ease-out,
+    filter 80ms ease-out;
+}
+
+.landing__button--primary {
+  background: var(--camon-color-action-orange);
+  font-size: 16px;
+}
+
+.landing__button--secondary {
+  background: var(--camon-color-input-cream);
+}
+
+.landing__button:hover {
+  filter: brightness(1.03);
+  transform: translate(-1px, -1px);
+  box-shadow: 6px 6px 0 rgb(41 33 58 / 52%);
+}
+
+.landing__button:active {
+  transform: translate(5px, 5px);
+  box-shadow: none;
+}
+
+.landing__button:focus-visible {
+  outline: 3px solid var(--camon-color-arcade-blue);
+  outline-offset: 4px;
 }
 
 .landing__music-toggle {
@@ -37,9 +142,17 @@
   font-size: 14px;
 }
 
-@media (max-width: 640px) {
-  .landing {
-    gap: 32px;
+@media (max-width: 760px), (max-height: 680px) {
+  .landing__hero {
+    top: 32%;
+    transform: translateX(-50%) scale(0.78);
+  }
+}
+
+@media (max-width: 520px) {
+  .landing__hero {
+    top: 28%;
+    transform: translateX(-50%) scale(0.62);
   }
 
   .landing__music-toggle {
@@ -49,9 +162,10 @@
     padding: 8px 10px;
     font-size: 12px;
   }
+}
 
-  .landing__cta {
-    font-size: 20px;
-    min-width: 200px;
+@media (prefers-reduced-motion: reduce) {
+  .landing__button {
+    transition: none;
   }
 }

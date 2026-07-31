@@ -5,9 +5,11 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.ZSetOperations;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Repository;
 
@@ -282,7 +284,18 @@ public class FetchObjectRedisRepository {
         int sessionSeq,
         int round
     ) {
-        Set<String> values = redis.opsForZSet().range(
+        return getSubmissions(roomCode, sessionSeq, round).stream()
+            .map(FetchObjectSubmissionRecord::participantId)
+            .toList();
+    }
+
+    public List<FetchObjectSubmissionRecord> getSubmissions(
+        String roomCode,
+        int sessionSeq,
+        int round
+    ) {
+        Set<ZSetOperations.TypedTuple<String>> values =
+            redis.opsForZSet().rangeWithScores(
             FetchObjectRedisKeys.submissions(roomCode, sessionSeq, round),
             0,
             -1
@@ -290,7 +303,58 @@ public class FetchObjectRedisRepository {
         if (values == null || values.isEmpty()) {
             return List.of();
         }
-        return values.stream().map(UUID::fromString).toList();
+        List<FetchObjectSubmissionRecord> submissions = new ArrayList<>();
+        int rank = 1;
+        for (ZSetOperations.TypedTuple<String> value : values) {
+            if (value.getValue() == null || value.getScore() == null) {
+                continue;
+            }
+            // claim Lua의 score = epochMillis * 10 + rank. epochMillis는 JS/Redis double의
+            // 안전 정수 범위 안이며, 나머지 한 자리는 같은 밀리초 내 도착 순서를 보존한다.
+            long submittedAt = ((long) Math.floor(value.getScore())) / 10L;
+            submissions.add(new FetchObjectSubmissionRecord(
+                UUID.fromString(value.getValue()),
+                rank++,
+                Instant.ofEpochMilli(submittedAt)
+            ));
+        }
+        return List.copyOf(submissions);
+    }
+
+    public Optional<FetchObjectRoundState> findCurrentRoundState(
+        String roomCode,
+        int sessionSeq
+    ) {
+        Map<Object, Object> session = redis.opsForHash().entries(
+            FetchObjectRedisKeys.session(roomCode, sessionSeq)
+        );
+        Object currentRoundValue = session.get(CURRENT_ROUND_FIELD);
+        Object totalRoundsValue = session.get("total_rounds");
+        if (currentRoundValue == null || totalRoundsValue == null) {
+            return Optional.empty();
+        }
+
+        int round = Integer.parseInt(currentRoundValue.toString());
+        Map<Object, Object> roundState = redis.opsForHash().entries(
+            FetchObjectRedisKeys.round(roomCode, sessionSeq, round)
+        );
+        Object target = roundState.get("target");
+        Object startedAt = roundState.get("started_at");
+        Object deadlineAt = roundState.get("deadline_at");
+        Object status = roundState.get("status");
+        if (target == null || startedAt == null || deadlineAt == null || status == null) {
+            return Optional.empty();
+        }
+
+        return Optional.of(new FetchObjectRoundState(
+            round,
+            Integer.parseInt(totalRoundsValue.toString()),
+            target.toString(),
+            Instant.ofEpochMilli(Long.parseLong(startedAt.toString())),
+            Instant.ofEpochMilli(Long.parseLong(deadlineAt.toString())),
+            status.toString(),
+            getSubmissions(roomCode, sessionSeq, round)
+        ));
     }
 
     public long scoreForRank(int rank) {

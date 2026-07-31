@@ -10,8 +10,12 @@ COPY . .
 # Vite는 빌드 시점에 VITE_* 값을 번들에 굽는다 — 런타임 env로는 못 바꾼다.
 ARG VITE_API_BASE_URL
 ARG VITE_WS_BASE_URL
+# 백엔드가 토큰을 서명할 때 쓰는 LiveKit 프로젝트와 같은 URL이어야 한다(운영에서는 deploy .env의
+# LIVEKIT_URL을 그대로 넘긴다). 어긋나면 토큰은 정상인데 연결만 거부돼서 원인을 찾기 어렵다.
+ARG VITE_LIVEKIT_URL
 ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
 ENV VITE_WS_BASE_URL=${VITE_WS_BASE_URL}
+ENV VITE_LIVEKIT_URL=${VITE_LIVEKIT_URL}
 
 RUN npm run build
 

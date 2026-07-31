@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -55,6 +56,7 @@ class RoomServiceTest {
     private RoomInviteLinkGenerator inviteLinkGenerator;
     private RoomEventPublisher roomEventPublisher;
     private LiveKitTokenService liveKitTokenService;
+    private RoomConnectionService roomConnectionService;
     private ApplicationEventPublisher applicationEventPublisher;
     private AnalyticsExitContextResolver analyticsExitContextResolver;
     private RoomService roomService;
@@ -68,6 +70,7 @@ class RoomServiceTest {
         inviteLinkGenerator = mock(RoomInviteLinkGenerator.class);
         roomEventPublisher = mock(RoomEventPublisher.class);
         liveKitTokenService = mock(LiveKitTokenService.class);
+        roomConnectionService = mock(RoomConnectionService.class);
         applicationEventPublisher = mock(ApplicationEventPublisher.class);
         analyticsExitContextResolver = mock(AnalyticsExitContextResolver.class);
         roomService = new RoomService(
@@ -78,6 +81,7 @@ class RoomServiceTest {
             inviteLinkGenerator,
             roomEventPublisher,
             liveKitTokenService,
+            roomConnectionService,
             Clock.fixed(NOW, ZoneOffset.UTC),
             applicationEventPublisher,
             analyticsExitContextResolver
@@ -239,6 +243,113 @@ class RoomServiceTest {
         )).isInstanceOfSatisfying(BusinessException.class, exception ->
             assertThat(exception.errorCode()).isEqualTo(ErrorCode.ROOM_FULL)
         );
+    }
+
+    // 창을 그냥 닫고 나간 사람의 자리는 하트비트 TTL이 만료될 때까지 남아 정원을 채운다.
+    // 그 상태로 거절하면 "아무도 없는 방인데 꽉 찼다"가 되므로, 죽은 자리를 회수하고 다시 시도한다.
+    @Test
+    void retriesJoinAfterSweepingParticipantsThatLeftWithoutNotice() {
+        UUID participantId = UUID.randomUUID();
+        UUID hostId = UUID.randomUUID();
+        Room room = room(hostId);
+        when(sessionRepository.findByParticipantId(participantId)).thenReturn(
+            Optional.of(new GuestSession(participantId, "guest", NOW))
+        );
+        when(roomRepository.findByCode(room.roomCode())).thenReturn(Optional.of(room));
+        when(roomRepository.findById(room.roomId())).thenReturn(Optional.of(room));
+        when(participantRepository.tryAdd(any(UUID.class), any(Participant.class)))
+            .thenReturn(
+                JoinParticipantResult.ROOM_FULL,
+                JoinParticipantResult.SUCCESS
+            );
+        when(roomConnectionService.sweepExpired(room.roomId())).thenReturn(1);
+        when(participantRepository.findAll(room.roomId())).thenReturn(List.of(
+            participant(hostId, "host", NOW.minusSeconds(1)),
+            participant(participantId, "guest", NOW)
+        ));
+
+        JoinRoomResponse response = roomService.joinRoom(
+            participantId,
+            new JoinRoomRequest(room.roomCode())
+        );
+
+        assertThat(response.room().roomId()).isEqualTo(room.roomId());
+        verify(participantRepository, times(2))
+            .tryAdd(any(UUID.class), any(Participant.class));
+    }
+
+    // 스윕이 아무도 치우지 못했다면 정말로 정원이 찬 것이다 — 재시도 없이 그대로 거절한다.
+    @Test
+    void doesNotRetryJoinWhenSweepFreedNothing() {
+        UUID participantId = UUID.randomUUID();
+        Room room = room(UUID.randomUUID());
+        when(sessionRepository.findByParticipantId(participantId)).thenReturn(
+            Optional.of(new GuestSession(participantId, "guest", NOW))
+        );
+        when(roomRepository.findByCode(room.roomCode())).thenReturn(Optional.of(room));
+        when(participantRepository.tryAdd(any(UUID.class), any(Participant.class)))
+            .thenReturn(JoinParticipantResult.ROOM_FULL);
+        when(roomConnectionService.sweepExpired(room.roomId())).thenReturn(0);
+
+        assertThatThrownBy(() -> roomService.joinRoom(
+            participantId,
+            new JoinRoomRequest(room.roomCode())
+        )).isInstanceOfSatisfying(BusinessException.class, exception ->
+            assertThat(exception.errorCode()).isEqualTo(ErrorCode.ROOM_FULL)
+        );
+        verify(participantRepository, times(1))
+            .tryAdd(any(UUID.class), any(Participant.class));
+    }
+
+    // 떠난 사람이 점유하고 있던 닉네임도 같은 이유로 막힌다(정원 판정보다 뒤에서 걸린다).
+    @Test
+    void retriesJoinWhenStaleParticipantStillHoldsNickname() {
+        UUID participantId = UUID.randomUUID();
+        UUID hostId = UUID.randomUUID();
+        Room room = room(hostId);
+        when(sessionRepository.findByParticipantId(participantId)).thenReturn(
+            Optional.of(new GuestSession(participantId, "guest", NOW))
+        );
+        when(roomRepository.findByCode(room.roomCode())).thenReturn(Optional.of(room));
+        when(roomRepository.findById(room.roomId())).thenReturn(Optional.of(room));
+        when(participantRepository.tryAdd(any(UUID.class), any(Participant.class)))
+            .thenReturn(
+                JoinParticipantResult.NICKNAME_DUPLICATED,
+                JoinParticipantResult.SUCCESS
+            );
+        when(roomConnectionService.sweepExpired(room.roomId())).thenReturn(1);
+        when(participantRepository.findAll(room.roomId())).thenReturn(List.of(
+            participant(hostId, "host", NOW.minusSeconds(1)),
+            participant(participantId, "guest", NOW)
+        ));
+
+        JoinRoomResponse response = roomService.joinRoom(
+            participantId,
+            new JoinRoomRequest(room.roomCode())
+        );
+
+        assertThat(response.room().roomId()).isEqualTo(room.roomId());
+        verify(participantRepository, times(2))
+            .tryAdd(any(UUID.class), any(Participant.class));
+    }
+
+    // 방 없음·이미 시작함 등은 죽은 참가자를 치워도 결과가 달라지지 않으므로 스윕 자체를 하지 않는다.
+    @Test
+    void doesNotSweepForFailuresUnrelatedToStaleParticipants() {
+        UUID participantId = UUID.randomUUID();
+        Room room = room(UUID.randomUUID());
+        when(sessionRepository.findByParticipantId(participantId)).thenReturn(
+            Optional.of(new GuestSession(participantId, "guest", NOW))
+        );
+        when(roomRepository.findByCode(room.roomCode())).thenReturn(Optional.of(room));
+        when(participantRepository.tryAdd(any(UUID.class), any(Participant.class)))
+            .thenReturn(JoinParticipantResult.ROOM_ALREADY_STARTED);
+
+        assertThatThrownBy(() -> roomService.joinRoom(
+            participantId,
+            new JoinRoomRequest(room.roomCode())
+        )).isInstanceOf(BusinessException.class);
+        verify(roomConnectionService, never()).sweepExpired(any(UUID.class));
     }
 
     @Test

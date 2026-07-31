@@ -49,6 +49,7 @@ public class RoomService {
     private final RoomInviteLinkGenerator inviteLinkGenerator;
     private final RoomEventPublisher roomEventPublisher;
     private final LiveKitTokenService liveKitTokenService;
+    private final RoomConnectionService roomConnectionService;
     private final Clock clock;
     private final ApplicationEventPublisher applicationEventPublisher;
     private final AnalyticsExitContextResolver analyticsExitContextResolver;
@@ -61,6 +62,7 @@ public class RoomService {
         RoomInviteLinkGenerator inviteLinkGenerator,
         RoomEventPublisher roomEventPublisher,
         LiveKitTokenService liveKitTokenService,
+        RoomConnectionService roomConnectionService,
         Clock jwtClock,
         ApplicationEventPublisher applicationEventPublisher,
         AnalyticsExitContextResolver analyticsExitContextResolver
@@ -72,6 +74,7 @@ public class RoomService {
         this.inviteLinkGenerator = inviteLinkGenerator;
         this.roomEventPublisher = roomEventPublisher;
         this.liveKitTokenService = liveKitTokenService;
+        this.roomConnectionService = roomConnectionService;
         this.clock = jwtClock;
         this.applicationEventPublisher = applicationEventPublisher;
         this.analyticsExitContextResolver = analyticsExitContextResolver;
@@ -148,6 +151,15 @@ public class RoomService {
             room.roomId(),
             participant
         );
+        // 창을 그냥 닫고 사라진 사람은 하트비트가 만료될 때까지(TTL 15초) participants 집합에
+        // 남아 있어서, 그 자리가 정원을 채운 것으로 계산되고 닉네임도 계속 점유한다. 둘 다 남은
+        // 사람이나 재입장하려는 사람 입장에선 "왜 안 되는지 알 수 없는" 거절이므로, 거절을 확정하기
+        // 전에 죽은 자리를 회수하고 한 번만 다시 시도한다. 하트비트가 살아 있는 참가자는 스윕
+        // 대상이 아니라서, 정말 정원이 찼거나 정말 닉네임이 겹치는 경우엔 그대로 거절된다.
+        if (isRecoverableBySweep(result)
+            && roomConnectionService.sweepExpired(room.roomId()) > 0) {
+            result = participantRepository.tryAdd(room.roomId(), participant);
+        }
         if (result != JoinParticipantResult.SUCCESS) {
             throw new BusinessException(toErrorCode(result));
         }
@@ -351,6 +363,13 @@ public class RoomService {
             room.hostParticipantId(),
             participantResponses
         );
+    }
+
+    // 떠난 사람의 잔여 상태(집합 자리·점유 닉네임)만이 원인일 수 있는 거절들. 나머지(방 없음,
+    // 이미 시작함, 이미 참가 중, 강퇴됨)는 죽은 참가자를 치워도 결과가 바뀌지 않으므로 재시도하지 않는다.
+    private boolean isRecoverableBySweep(JoinParticipantResult result) {
+        return result == JoinParticipantResult.ROOM_FULL
+            || result == JoinParticipantResult.NICKNAME_DUPLICATED;
     }
 
     private ErrorCode toErrorCode(JoinParticipantResult result) {

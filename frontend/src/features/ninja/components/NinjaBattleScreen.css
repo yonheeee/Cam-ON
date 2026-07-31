@@ -1,78 +1,185 @@
 /* 닌자 전투 화면 — Pixel Arcade Plaza 테마의 야간(닌자) 변형.
    배치: [좌 캠 열 30%] [중앙 인술 보드] [우 캠 열 30%]. 중앙 : 좌우합 ≈ 0.62 : 1 (황금비).
-   전체화면 골격(fixed / 헤더 / 본문)은 LobbyScreen.css의 검증된 수치를 따랐다. */
+
+   좌표계: 이 파일의 모든 px는 1440×810 고정 캔버스(.ninja-stage) 기준이고, 뷰포트에는
+   transform: scale로 통째로 맞춘다(배율은 JS가 --ninja-scale로 넣는다). 그래서 뷰포트 크기·비율이
+   뭐든 요소 간 비율은 절대 안 변한다 — 반대로 말하면 여기에 vw/vh나 미디어쿼리를 섞으면
+   캔버스 안에서만 따로 움직여서 비율이 깨진다(넣지 말 것).
+
+   타입 스케일 6단계: 본문 폰트 14 / 16 / 20, 픽셀 폰트 22 / 33 / 44.
+   픽셀 쪽이 11의 배수인 이유는 Galmuri11이 11px 설계 비트맵 폰트라 정수배에서만 선명하기 때문이다. */
 .ninja-screen {
   position: fixed;
   inset: 0;
+  background: #1b1230;
+  z-index: 40;
+  overflow: hidden; /* 진동으로 밀린 배경 레이어가 화면 밖으로 넘치지 않게 */
+}
+
+.ninja-stage {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 1440px;
+  height: 810px;
+  transform: translate(-50%, -50%) scale(var(--ninja-scale, 1));
+  transform-origin: center;
   display: flex;
   flex-direction: column;
   gap: 12px;
   padding: 16px 20px;
   box-sizing: border-box;
-  background: #1b1230;
   font-family: var(--pap-font-body);
   color: var(--pap-white);
-  z-index: 40;
   text-align: left; /* #root의 text-align: center 상속 차단 */
-  overflow: hidden; /* 진동으로 밀린 배경 레이어가 화면 밖으로 넘치지 않게 */
+  z-index: 1;
 }
 
 /* 배경 레이어 — 피격 진동을 여기서만 돌린다(자식이 없어서 transform 합성만 다시 하면 된다).
-   scale(1.06)으로 미리 키워둬서 최대 진폭(약 10px)만큼 밀려도 가장자리에 여백이 안 생긴다. */
+   scale(var(--ninja-bg-scale))으로 미리 키워둬서 최대 진폭(약 10px)만큼 밀려도 가장자리에 여백이 안 생긴다. */
 .ninja-screen__bg {
   position: absolute;
   inset: 0;
-  background: #1b1230 url('/assets/ninja-background-v2-test.png') center bottom / cover no-repeat;
-  transform: scale(1.06);
+  /* 좌우 장지문·아래 다다미로 액자처럼 짜인 그림이라 center 앵커로 둔다(위아래·좌우 어느 쪽이
+     잘려도 대칭으로 잘려서 액자가 안 틀어진다). 원본 1672×941 = 16:9라 1440×810 캔버스에서는
+     애초에 잘리는 부분도 없다. */
+  background: #1b1230 url('/assets/ninja-background-v6.png') center center / cover no-repeat;
+  /* 확대 배율은 여기 한 곳에서만 정한다 — 진동 키프레임이 전부 이 변수를 쓴다. 예전엔 키프레임에
+     1.06이 하드코딩돼 있어서 진동이 시작되는 순간 배경이 뒤로 물러났다가 끝나면 다시 커졌다. */
+  --ninja-bg-scale: 1.12;
+  transform: scale(var(--ninja-bg-scale));
   transform-origin: center;
   will-change: transform;
   pointer-events: none;
   z-index: 0;
 }
 
-/* 배경 위에 UI를 얹으면 픽셀 야경의 밝은 달·창문 때문에 글자가 묻힌다 — 잉크 베일을 한 겹 깐다 */
+/* 가운데만 어둡게 — 중앙 인술 보드/타이머가 밝은 배경에 묻혀서. 좌우 캠 열 뒤쪽은 그림이
+   그대로 보이도록 타원 베일로 중앙만 덮는다. */
 .ninja-screen__bg::after {
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(180deg, rgb(27 18 48 / 0.72) 0%, rgb(27 18 48 / 0.52) 45%, rgb(27 18 48 / 0.8) 100%);
+  background: radial-gradient(
+    ellipse 34% 60% at 50% 50%,
+    rgb(27 18 48 / 0.62) 0%,
+    rgb(27 18 48 / 0.45) 55%,
+    rgb(27 18 48 / 0) 100%
+  );
 }
 
-/* UI를 배경 레이어 위로 올리는 방법: 예전엔 `.ninja-screen > *:not(.ninja-screen__bg)`에
-   position: relative를 걸었는데, 그 선택자(특이성 0,2,0)가 .ninja-waiting/.ninja-final의
-   position: fixed(0,1,0)를 이겨버려서 오버레이가 흐름 안의 블록이 됐다 — 화면 아래에 쌓이면서
-   캠을 38px 밀어올렸다. z-index만 쓴다: .ninja-screen이 flex 컨테이너라 자식들은 flex 아이템이고,
-   flex 아이템은 position 없이도 z-index가 적용된다. */
-.ninja-screen__topbar,
-.ninja-screen__body {
-  z-index: 1;
+/* 피격 진동. 스킬별로 다른 키프레임을 쓴다(매핑·반복 횟수는 lib/skillEffects.tsx의 skillShake).
+   animation-duration은 그쪽 cycleMs와 반드시 같은 값이어야 한다. 반복 횟수는 인라인 스타일로
+   들어오고, 재시작은 호출부가 key로 리마운트해서 처리한다.
+   대부분 steps(1, end)로 끊어 픽셀 톤을 지키고, 물처럼 부드러워야 하는 것만 linear로 둔다. */
+.ninja-screen__bg--shake-base {
+  animation: ninja-shake-base 420ms steps(1, end) 1;
 }
 
-/* 피격 진동. 같은 클래스를 다시 붙여도 애니메이션이 재생되지 않아서, 호출부가 교환 홀짝으로
-   -a/-b를 번갈아 붙인다(키프레임은 동일). steps로 끊어 픽셀 톤을 지킨다. */
-.ninja-screen__bg--shake-a {
-  animation: ninja-shake 420ms steps(1, end) 1;
+/* 뇌절 — 진폭은 작고 주파수만 극단적으로 높게. 전기가 파팟 튀는 감각 */
+.ninja-screen__bg--shake-zap {
+  animation: ninja-shake-zap 260ms steps(1, end) 1;
 }
 
-.ninja-screen__bg--shake-b {
-  animation: ninja-shake 420ms steps(1, end) 1;
+/* 봉선화의 술 — 한 바퀴 = 탄 한 발. 강한 임팩트 뒤 쉼 구간을 둬서 반복하면 연타로 읽힌다 */
+.ninja-screen__bg--shake-volley {
+  animation: ninja-shake-volley 520ms steps(1, end) 1;
 }
 
-@keyframes ninja-shake {
-  0%   { transform: scale(1.06) translate(0, 0); }
-  8%   { transform: scale(1.06) translate(-9px, 4px); }
-  18%  { transform: scale(1.06) translate(8px, -6px); }
-  28%  { transform: scale(1.06) translate(-7px, -3px); }
-  40%  { transform: scale(1.06) translate(6px, 5px); }
-  52%  { transform: scale(1.06) translate(-4px, -4px); }
-  66%  { transform: scale(1.06) translate(3px, 2px); }
-  80%  { transform: scale(1.06) translate(-2px, 1px); }
-  100% { transform: scale(1.06) translate(0, 0); }
+/* 수룡탄의 술 — 크고 느린 좌우 굽이침. 물결이라 계단 없이 흐르게(linear) */
+.ninja-screen__bg--shake-roll {
+  animation: ninja-shake-roll 900ms linear 1;
+}
+
+/* 냥냥펀치 — 스윙 두 번. 한쪽으로 밀렸다 돌아오고, 반대쪽으로 한 번 더 */
+.ninja-screen__bg--shake-punch {
+  animation: ninja-shake-punch 460ms steps(1, end) 1;
+}
+
+/* 바람의 상처 — 대각으로 베인 방향으로 확 밀리고 미세하게 기울어진다 */
+.ninja-screen__bg--shake-slash {
+  animation: ninja-shake-slash 340ms steps(1, end) 1;
+}
+
+@keyframes ninja-shake-base {
+  0%   { transform: scale(var(--ninja-bg-scale)) translate(0, 0); }
+  8%   { transform: scale(var(--ninja-bg-scale)) translate(-9px, 4px); }
+  18%  { transform: scale(var(--ninja-bg-scale)) translate(8px, -6px); }
+  28%  { transform: scale(var(--ninja-bg-scale)) translate(-7px, -3px); }
+  40%  { transform: scale(var(--ninja-bg-scale)) translate(6px, 5px); }
+  52%  { transform: scale(var(--ninja-bg-scale)) translate(-4px, -4px); }
+  66%  { transform: scale(var(--ninja-bg-scale)) translate(3px, 2px); }
+  80%  { transform: scale(var(--ninja-bg-scale)) translate(-2px, 1px); }
+  100% { transform: scale(var(--ninja-bg-scale)) translate(0, 0); }
+}
+
+@keyframes ninja-shake-zap {
+  0%   { transform: scale(var(--ninja-bg-scale)) translate(0, 0); }
+  5%   { transform: scale(var(--ninja-bg-scale)) translate(-5px, 2px); }
+  10%  { transform: scale(var(--ninja-bg-scale)) translate(5px, -3px); }
+  15%  { transform: scale(var(--ninja-bg-scale)) translate(-4px, 3px); }
+  20%  { transform: scale(var(--ninja-bg-scale)) translate(4px, -2px); }
+  27%  { transform: scale(var(--ninja-bg-scale)) translate(-3px, 1px); }
+  34%  { transform: scale(var(--ninja-bg-scale)) translate(3px, -1px); }
+  42%  { transform: scale(var(--ninja-bg-scale)) translate(-2px, 1px); }
+  52%  { transform: scale(var(--ninja-bg-scale)) translate(2px, 0); }
+  64%  { transform: scale(var(--ninja-bg-scale)) translate(-1px, 1px); }
+  76%  { transform: scale(var(--ninja-bg-scale)) translate(1px, 0); }
+  100% { transform: scale(var(--ninja-bg-scale)) translate(0, 0); }
+}
+
+@keyframes ninja-shake-volley {
+  0%   { transform: scale(var(--ninja-bg-scale)) translate(0, 0); }
+  6%   { transform: scale(calc(var(--ninja-bg-scale) + 0.01)) translate(-8px, 5px); }
+  14%  { transform: scale(var(--ninja-bg-scale)) translate(6px, -4px); }
+  22%  { transform: scale(var(--ninja-bg-scale)) translate(-4px, 3px); }
+  30%  { transform: scale(var(--ninja-bg-scale)) translate(3px, -2px); }
+  38%  { transform: scale(var(--ninja-bg-scale)) translate(-2px, 1px); }
+  46%  { transform: scale(var(--ninja-bg-scale)) translate(1px, 0); }
+  55%  { transform: scale(var(--ninja-bg-scale)) translate(0, 0); } /* 다음 발까지의 쉼 */
+  100% { transform: scale(var(--ninja-bg-scale)) translate(0, 0); }
+}
+
+@keyframes ninja-shake-roll {
+  0%   { transform: scale(var(--ninja-bg-scale)) translate(0, 0); }
+  12%  { transform: scale(var(--ninja-bg-scale)) translate(-12px, 3px); }
+  25%  { transform: scale(var(--ninja-bg-scale)) translate(0, -2px); }
+  37%  { transform: scale(var(--ninja-bg-scale)) translate(12px, 4px); }
+  50%  { transform: scale(var(--ninja-bg-scale)) translate(0, -3px); }
+  62%  { transform: scale(var(--ninja-bg-scale)) translate(-9px, 2px); }
+  75%  { transform: scale(var(--ninja-bg-scale)) translate(0, -2px); }
+  87%  { transform: scale(var(--ninja-bg-scale)) translate(7px, 3px); }
+  100% { transform: scale(var(--ninja-bg-scale)) translate(0, 0); }
+}
+
+@keyframes ninja-shake-punch {
+  0%   { transform: scale(var(--ninja-bg-scale)) translate(0, 0); }
+  6%   { transform: scale(calc(var(--ninja-bg-scale) + 0.03)) translate(14px, -6px); } /* 1타 */
+  18%  { transform: scale(var(--ninja-bg-scale)) translate(-3px, 2px); }
+  28%  { transform: scale(var(--ninja-bg-scale)) translate(0, 0); }
+  36%  { transform: scale(calc(var(--ninja-bg-scale) + 0.03)) translate(-14px, 6px); } /* 2타(반대 방향) */
+  48%  { transform: scale(var(--ninja-bg-scale)) translate(3px, -2px); }
+  60%  { transform: scale(var(--ninja-bg-scale)) translate(-1px, 1px); }
+  100% { transform: scale(var(--ninja-bg-scale)) translate(0, 0); }
+}
+
+@keyframes ninja-shake-slash {
+  0%   { transform: scale(var(--ninja-bg-scale)) rotate(0deg) translate(0, 0); }
+  8%   { transform: scale(calc(var(--ninja-bg-scale) + 0.01)) rotate(-0.6deg) translate(-13px, -9px); }
+  20%  { transform: scale(var(--ninja-bg-scale)) rotate(0.4deg) translate(9px, 6px); }
+  34%  { transform: scale(var(--ninja-bg-scale)) rotate(-0.3deg) translate(-6px, -4px); }
+  50%  { transform: scale(var(--ninja-bg-scale)) rotate(0.2deg) translate(4px, 3px); }
+  70%  { transform: scale(var(--ninja-bg-scale)) rotate(0deg) translate(-2px, -1px); }
+  100% { transform: scale(var(--ninja-bg-scale)) rotate(0deg) translate(0, 0); }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .ninja-screen__bg--shake-a,
-  .ninja-screen__bg--shake-b {
+  .ninja-screen__bg--shake-base,
+  .ninja-screen__bg--shake-zap,
+  .ninja-screen__bg--shake-volley,
+  .ninja-screen__bg--shake-roll,
+  .ninja-screen__bg--shake-punch,
+  .ninja-screen__bg--shake-slash {
     animation: none;
   }
 }
@@ -88,13 +195,17 @@
 .ninja-screen__logo {
   height: 30px;
   width: auto;
+  cursor: pointer;
 }
 
-.ninja-screen__title {
-  margin: 0;
-  font-size: 16px;
-  color: var(--pap-play-yellow);
-  text-shadow: 0 2px 0 rgb(0 0 0 / 0.5);
+.ninja-screen__music-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 110px;
+  padding: 8px 12px;
+  font-size: 13px;
+  flex-shrink: 0;
 }
 
 /* ---- 본문: 좌 캠 / 중앙 보드 / 우 캠 ---- */
@@ -150,10 +261,8 @@
   border-color: var(--ninja-seat-color, var(--pap-ink));
 }
 
-/* 공격권 보유자 — 테두리는 플레이어 색을 유지하고 노란 글로우만 덧댄다 */
-.ninja-tile--attacker {
-  box-shadow: 0 0 0 3px var(--pap-play-yellow), 5px 5px 0 0 rgb(0 0 0 / 0.35);
-}
+/* 공격권 보유자에게 노란 글로우를 덧대던 규칙은 뺐다 — 플레이어 색 테두리 위에 다른 색 테두리가
+   겹쳐서 "이 사람 색이 뭔지"가 흐려졌다. 누가 공격권을 가졌는지는 상단 알림이 말해준다. */
 
 /* 캠은 항상 16:9. 타일이 세로로 늘어나 캠이 확대·잘리면 자기 손이 프레임에 들어왔는지 알 수 없다
    (인식 자체는 원본 프레임 전체를 읽으므로 영향받지 않지만, 사용자가 손 위치를 못 맞춘다). */
@@ -186,7 +295,7 @@
 }
 
 .ninja-tile__avatar {
-  font-size: 34px;
+  font-size: 44px;
   color: rgb(255 253 245 / 0.35);
 }
 
@@ -215,7 +324,7 @@
   top: 8px;
   z-index: 4;
   font-family: var(--pap-font-pixel);
-  font-size: 11px;
+  font-size: 22px;
   color: var(--pap-ink);
   border: 2px solid var(--pap-ink);
   border-radius: 5px;
@@ -226,7 +335,7 @@
    글자가 읽힌다. */
 .ninja-tile__badge--name {
   left: 8px;
-  max-width: calc(100% - 90px); /* 우측 상단 공격권 배지와 겹치지 않게 */
+  max-width: calc(100% - 16px); /* 좌우 8px 여백만 남기고 캠 폭을 다 쓴다 */
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -239,32 +348,6 @@
    노란색으로 덮어버리면 3P의 색과 충돌해서 "노랑 = 나"인지 "노랑 = 3P"인지 알 수 없다. */
 .ninja-tile__badge--me {
   box-shadow: 0 0 0 2px var(--pap-white);
-}
-
-.ninja-tile__badge--attack {
-  right: 8px;
-  background: var(--pap-festival-coral);
-  color: var(--pap-white);
-  transform: rotate(3deg);
-}
-
-/* 지금 잡힌 손동작 — 예전 GestureBoard(좌하단 UUID 목록)를 대체한다 */
-/* 손모양 이미지가 screen 블렌드로 그려지므로 칩 배경은 어두워야 한다(라임 배경이면 선이 날아간다).
-   상태 색은 테두리가 맡는다. */
-.ninja-tile__combo {
-  position: absolute;
-  bottom: 8px;
-  left: 8px;
-  z-index: 4;
-  display: inline-flex;
-  align-items: center;
-  font-family: var(--pap-font-pixel);
-  font-size: 11px;
-  color: var(--pap-success-lime);
-  background: rgb(18 12 34 / 0.85);
-  border: 2px solid var(--pap-success-lime);
-  border-radius: 5px;
-  padding: 2px 6px;
 }
 
 .ninja-tile--dead .ninja-tile__cam .lk-participant-tile {
@@ -283,7 +366,7 @@
 }
 
 .ninja-tile__dead span {
-  font-size: 24px;
+  font-size: 33px;
   color: var(--pap-festival-coral);
   text-shadow: 0 3px 0 rgb(0 0 0 / 0.6);
 }
@@ -302,7 +385,7 @@
 }
 
 .ninja-tile__pick span {
-  font-size: 20px;
+  font-size: 22px;
   color: var(--pap-white);
   background: var(--pap-festival-coral);
   border: 3px solid var(--pap-ink);
@@ -320,7 +403,7 @@
    바꾸고, 빈 구간을 어두운 적색으로 깔아 "깎여 나간 자리"가 보이게 한다. */
 .ninja-hp {
   position: relative;
-  height: 16px;
+  height: 22px; /* 안에 들어가는 11px 픽셀폰트 숫자 + 위아래 여백 — 바가 글자보다 얇으면 숫자가 잘려 보인다 */
   background: #3a0f18;
   border-top: 2px solid var(--pap-ink);
   overflow: hidden;
@@ -332,18 +415,6 @@
   /* 위쪽이 밝은 하이라이트 — 납작한 단색보다 게임 HP 게이지처럼 읽힌다 */
   background: linear-gradient(180deg, #ff6b7f 0%, #e8253f 45%, #b3122a 100%);
   transition: width 220ms steps(6, end); /* 픽셀 톤 유지를 위해 계단식 전환 */
-}
-
-/* 눈금 — 픽셀 게이지 느낌. 채워진 부분 위에만 얹혀서 남은 칸이 세어진다 */
-.ninja-hp__fill::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: repeating-linear-gradient(
-    90deg,
-    rgb(0 0 0 / 0.28) 0 1px,
-    transparent 1px 10px
-  );
 }
 
 /* 위험 구간(30 이하) — 어두운 적색으로 떨어지고 깜빡인다 */
@@ -362,7 +433,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 10px;
+  font-family: var(--pap-font-pixel);
+  font-size: 11px; /* Galmuri11 설계 크기 그대로 */
   color: var(--pap-white);
   text-shadow: 0 1px 0 rgb(0 0 0 / 0.7);
 }
@@ -386,30 +458,9 @@
   border-bottom: 2px dashed rgb(255 253 245 / 0.22);
 }
 
-.ninja-board__round {
-  margin: 0;
-  font-size: 12px;
-  letter-spacing: 0.1em;
-  color: rgb(255 253 245 / 0.72);
-}
-
-.ninja-board__round strong {
-  font-size: 14px;
-  color: var(--pap-white);
-}
-
-.ninja-board__exchange {
-  margin-left: 8px;
-  padding: 2px 7px;
-  font-size: 11px;
-  letter-spacing: 0;
-  background: rgb(255 253 245 / 0.14);
-  border-radius: 4px;
-}
-
 .ninja-board__timer {
-  margin: 6px 0 0;
-  font-size: 40px;
+  margin: 0;
+  font-size: 44px;
   line-height: 1;
   color: var(--pap-white);
 }
@@ -423,10 +474,12 @@
   50% { opacity: 0.55; }
 }
 
+/* "현재 술법" 같은 작은 라벨은 본문 폰트로 간다 — 픽셀 폰트를 11의 배수가 아닌 14px로 쓰면
+   안티에일리어싱으로 뭉개져서 픽셀 톤도 못 살리고 가독성도 잃는다. 픽셀 폰트는 22 이상만. */
 .ninja-board__label {
   margin: 0 0 6px;
-  font-family: var(--pap-font-pixel);
-  font-size: 11px;
+  font-family: var(--pap-font-body);
+  font-size: 14px;
   letter-spacing: 0.1em;
   color: rgb(255 253 245 / 0.6);
 }
@@ -437,7 +490,7 @@
 
 .ninja-board__skill {
   margin: 0;
-  font-size: 32px;
+  font-size: 33px;
   line-height: 1.1;
   color: var(--pap-play-yellow);
   text-shadow: 0 3px 0 rgb(0 0 0 / 0.45);
@@ -445,7 +498,7 @@
 
 .ninja-board__hint {
   margin: 6px 0 0;
-  font-size: 12px;
+  font-size: 14px;
   color: rgb(255 253 245 / 0.62);
 }
 
@@ -459,6 +512,7 @@
   justify-content: center;
   flex-wrap: wrap;
   gap: 2px;
+  margin-bottom: 24px; /* 원 아래 absolute 캡션(11px 픽셀폰트 + 위 여백)이 앉을 자리 */
 }
 
 .ninja-seal {
@@ -484,8 +538,7 @@
 
 /* 손모양 라인아트는 "검정 선 + 흰 배경"이라 어두운 UI에 그냥 얹으면 흰 사각형이 된다.
    invert로 선을 흰색으로 만든 뒤 screen 블렌드로 검게 바뀐 배경을 떨어뜨려 선만 남긴다. */
-.ninja-seal__img,
-.ninja-mini-seal {
+.ninja-seal__img {
   object-fit: contain;
   filter: invert(1);
   mix-blend-mode: screen;
@@ -498,25 +551,32 @@
   height: 92%;
 }
 
-/* 다음 예고 / 타일 판정 칩에 들어가는 작은 손모양 */
-.ninja-mini-seal {
-  width: 46px;
-  height: 34px;
-  vertical-align: middle;
-}
-
-.ninja-mini-seal--text {
-  width: auto;
-  height: auto;
-  font-style: normal;
-  filter: none;
-  mix-blend-mode: normal;
-}
-
 .ninja-seal__kr {
-  font-size: 13px;
+  font-size: 16px;
   font-weight: 800;
   color: rgb(255 253 245 / 0.55);
+}
+
+/* 손동작 이름("말", "소"…)을 원 바로 아래에. absolute라 원 크기 계산(위 429행 주석의 폭 상한)에
+   영향을 안 주고, 화살표도 원 중심에 그대로 맞는다. 대신 자리는 .ninja-seals의 아래 여백으로 낸다. */
+.ninja-seal__caption {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-top: 9px;
+  font-family: var(--pap-font-pixel);
+  font-size: 11px; /* Galmuri11 설계 크기 그대로 */
+  white-space: nowrap;
+  color: rgb(255 253 245 / 0.6);
+}
+
+.ninja-seal--done .ninja-seal__caption {
+  color: var(--pap-success-lime);
+}
+
+.ninja-seal--active .ninja-seal__caption {
+  color: var(--pap-play-yellow);
 }
 
 .ninja-seal--done .ninja-seal__ring {
@@ -561,7 +621,7 @@
 }
 
 .ninja-seal__arrow {
-  font-size: 18px;
+  font-size: 20px;
   color: rgb(255 253 245 / 0.4);
 }
 
@@ -585,19 +645,45 @@
   to { opacity: 1; }
 }
 
-.ninja-waiting__text {
-  margin: 0;
-  padding: 16px 26px;
-  font-size: 17px;
+/* ---- 상단 알림(처치 / 대상 지정 중) ----
+   대기방 토스트와 같은 위치·크기(상단 중앙, 픽셀 폰트 22px)에 색만 어둡게 맞췄다. 스테이지
+   안에 있으므로 --ninja-scale 배율을 함께 받아 다른 요소와 비율이 어긋나지 않는다. */
+.ninja-toast {
+  position: absolute;
+  top: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 60; /* .ninja-waiting 딤(55) 위 */
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 22px;
+  white-space: nowrap;
+  font-family: var(--pap-font-pixel);
+  font-size: 22px;
+  line-height: 1;
   color: var(--pap-white);
-  background: rgb(27 18 48 / 0.9);
-  border: 3px solid var(--pap-festival-coral);
+  background: rgb(18 11 33 / 0.95);
+  border: 3px solid rgb(255 253 245 / 0.28);
   border-radius: var(--pap-radius);
-  box-shadow: 5px 5px 0 0 rgb(0 0 0 / 0.45);
+  box-shadow: 5px 5px 0 0 rgb(0 0 0 / 0.5);
+  pointer-events: none;
+  animation: ninja-toast-in 140ms ease-out;
 }
 
-.ninja-waiting__text strong {
+.ninja-toast strong {
   color: var(--pap-festival-coral);
+}
+
+.ninja-toast__kunai {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+@keyframes ninja-toast-in {
+  from { transform: translate(-50%, -8px); opacity: 0; }
+  to { transform: translate(-50%, 0); opacity: 1; }
 }
 
 /* 말줄임이 순서대로 켜지며 "기다리는 중"이 정지 화면이 아님을 알린다 */
@@ -616,6 +702,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .ninja-waiting,
+  .ninja-toast,
   .ninja-waiting__dots {
     animation: none;
   }
@@ -624,7 +711,7 @@
 .ninja-board__flash {
   margin: 16px 0 0;
   font-family: var(--pap-font-pixel);
-  font-size: 14px;
+  font-size: 22px;
   color: var(--pap-play-yellow);
 }
 
@@ -656,32 +743,6 @@
   transition: width 900ms linear;
 }
 
-/* ---- 다음 예고 ---- */
-.ninja-board__next {
-  margin: 18px 0 0;
-  padding-top: 12px;
-  border-top: 2px dashed rgb(255 253 245 / 0.18);
-  font-size: 12px;
-  color: rgb(255 253 245 / 0.6);
-}
-
-.ninja-board__next p {
-  margin: 0;
-}
-
-.ninja-board__next strong {
-  color: rgb(255 253 245 / 0.85);
-}
-
-.ninja-board__next-seals {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  margin-top: 5px;
-  font-size: 11px;
-}
-
 /* ---- 인터미션 ---- */
 .ninja-board__body--intermission {
   min-height: 168px; /* 인술 원형이 있던 높이 — 보드가 급격히 줄었다 늘지 않게 */
@@ -689,23 +750,6 @@
   flex-direction: column;
   justify-content: center;
   gap: 6px;
-}
-
-.ninja-board__hit {
-  margin: 0;
-  font-size: 15px;
-}
-
-.ninja-board__hit strong {
-  color: var(--pap-festival-coral);
-  font-size: 19px;
-}
-
-.ninja-board__ko {
-  margin-left: 6px;
-  font-family: var(--pap-font-pixel);
-  font-size: 12px;
-  color: var(--pap-festival-coral);
 }
 
 .ninja-result {
@@ -733,17 +777,17 @@
 
 .ninja-result__rank {
   width: 18px;
-  font-size: 13px;
+  font-size: 22px;
   color: var(--pap-play-yellow);
 }
 
 .ninja-result__name {
-  font-size: 13px;
+  font-size: 16px;
 }
 
 .ninja-result__pt {
   margin-left: auto;
-  font-size: 13px;
+  font-size: 22px;
   color: var(--pap-success-lime);
 }
 
@@ -769,7 +813,7 @@
 
 .ninja-final__title {
   margin: 0 0 16px;
-  font-size: 24px;
+  font-size: 33px;
   color: var(--pap-play-yellow);
   text-align: center;
 }
@@ -798,18 +842,18 @@
 
 .ninja-final__rank {
   width: 24px;
-  font-size: 18px;
+  font-size: 22px;
   color: var(--pap-play-yellow);
 }
 
 .ninja-final__name {
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 700;
 }
 
 .ninja-final__pt {
   margin-left: auto;
-  font-size: 15px;
+  font-size: 22px;
   color: var(--pap-success-lime);
 }
 
@@ -820,30 +864,13 @@
   transform: translateX(-50%);
   margin: 0;
   padding: 6px 14px;
-  font-size: 12px;
+  font-size: 14px;
   color: var(--pap-white);
   background: rgb(240 100 120 / 0.9);
   border-radius: var(--pap-radius);
 }
 
 /* 좁은 화면 — 세로로 쌓고, 캠 열은 나란히 두 장씩 */
-@media (max-width: 1000px) {
-  .ninja-screen__body {
-    flex-direction: column;
-    overflow-y: auto;
-  }
-
-  .ninja-screen__col {
-    flex: none;
-    flex-direction: row;
-  }
-
-  .ninja-screen__col > .ninja-tile {
-    flex: 1;
-    min-width: 0;
-  }
-
-  .ninja-board {
-    max-width: none;
-  }
-}
+/* 좁은 화면용 미디어쿼리는 없다 — 캔버스가 항상 1440×810이라 뷰포트 폭으로 분기하면 캔버스 안
+   레이아웃만 따로 바뀌어서 비율이 깨진다. 좁은 화면은 배율이 내려가면서 통째로 작아지는 것으로
+   대응한다. */
