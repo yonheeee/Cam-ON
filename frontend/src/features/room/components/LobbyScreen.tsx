@@ -116,7 +116,9 @@ export function LobbyScreen({
   // 이전 코스 결과 화면에 아직 남아 있는 사람. 방을 떠난 게 아니라 자리를 지키고 있을 뿐이라
   // 타일에 "게임 중"으로 표시되고, 전원이 돌아오기 전엔 다음 코스를 시작할 수 없다
   // (서버도 ROOM_NOT_ALL_RETURNED로 거부한다).
-  const stillInResult = room?.participants.filter((p) => !p.inLobby) ?? [];
+  // inLobby가 명시적으로 false일 때만 "게임 중"으로 본다 — 필드를 안 내려주는 구버전
+  // 백엔드(undefined)에서 !p.inLobby로 판정하면 방금 만든 방의 전원이 "게임 중"으로 굳는다.
+  const stillInResult = room?.participants.filter((p) => p.inLobby === false) ?? [];
   const allReturned = stillInResult.length === 0;
   // 타일 map 안에서 isHost가 "이 타일 주인이 방장인가"로 섀도잉되므로, "내가 방장인가"는 별칭으로 들고 간다.
   const amHost = isHost;
@@ -129,7 +131,7 @@ export function LobbyScreen({
         ready: p.ready,
         isHost: p.participantId === room?.hostParticipantId,
         offline: p.connectionStatus === 'DISCONNECTED',
-        inResult: !p.inLobby,
+        inResult: p.inLobby === false,
         colorIndex: (index % 4) + 1,
       },
     ]),
