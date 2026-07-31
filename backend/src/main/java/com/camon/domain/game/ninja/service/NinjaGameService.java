@@ -10,7 +10,6 @@ import com.camon.domain.game.ninja.dto.AttackRequest;
 import com.camon.domain.game.ninja.dto.AttackResponse;
 import com.camon.domain.game.ninja.dto.RoundResultEntry;
 import com.camon.domain.game.ninja.dto.LastAttackResponse;
-import com.camon.domain.game.ninja.dto.NextSkillPreview;
 import com.camon.domain.game.ninja.dto.NinjaStateResponse;
 import com.camon.domain.game.ninja.dto.RankingEntry;
 import com.camon.domain.game.ninja.dto.RoundSkillResponse;
@@ -172,16 +171,7 @@ public class NinjaGameService {
             throw new BusinessException(ErrorCode.NINJA_ROUND_NOT_FOUND);
         }
         Skill skill = findExchangeSkill(roomCode, seq, currentRound, exchange);
-        return RoundSkillResponse.of(round, exchange, skill, findNextSkillPreview(roomCode, seq));
-    }
-
-    // 바로 다음 교환에 나올 스킬 예고(셔플 순서에서 커서가 가리키는 다음 스킬). 없으면 null.
-    private NextSkillPreview findNextSkillPreview(String roomCode, int seq) {
-        Long nextSkillId = ninjaRedis.peekNextSkill(roomCode, seq);
-        if (nextSkillId == null) {
-            return null;
-        }
-        return skillRepository.findById(nextSkillId).map(NextSkillPreview::of).orElse(null);
+        return RoundSkillResponse.of(round, exchange, skill);
     }
 
     @Transactional(readOnly = true)

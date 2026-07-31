@@ -9,6 +9,12 @@ export interface ParticipantResponse {
   role: 'HOST' | 'MEMBER';
   ready: boolean;
   connectionStatus: string;
+  /**
+   * 대기방 화면에 있는가. false면 코스 종합 결과에 아직 남아 있는 사람이다 — 복귀는 각자
+   * 누르는 개별 행동이라 방을 떠난 게 아니므로, 대기방 타일에 자리를 지킨 채 "게임 중"으로
+   * 표시한다.
+   */
+  inLobby: boolean;
 }
 
 export interface RoomSnapshotResponse {
@@ -146,8 +152,10 @@ export const roomApi = {
       method: 'POST',
     }),
 
-  // [방장 전용] 코스 종합 결과에서 대기방으로 복귀. 서버가 점수 기록을 초기화하고 방을
-  // WAITING으로 되돌린 뒤 course:reset을 브로드캐스트한다 — 화면 전환은 그 이벤트가 담당.
+  // 코스 종합 결과에서 대기방으로 복귀. 방장 전용이 아니라 참가자 각자가 부르며, 부른 사람만
+  // 돌아간다(한 번에 전원이 들어오지 않는다). 가장 먼저 부른 요청이 점수 기록을 초기화하고 방을
+  // WAITING으로 되돌린다. 서버는 course:member-returned를 브로드캐스트하고 화면 전환은 그
+  // 이벤트가 담당한다 — 당사자는 결과 화면을 접고, 나머지는 그 사람 타일의 "게임 중"만 뗀다.
   // leaveRoom과 같은 이유(204 No Content)로 request()를 쓰지 않는다.
   returnToLobby: async (roomId: string, accessToken: string): Promise<void> => {
     const response = await fetch(`${BASE_URL}/api/rooms/${roomId}/return`, {

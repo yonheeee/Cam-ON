@@ -92,6 +92,33 @@ export const courseApi = {
       method: 'PUT',
       body: JSON.stringify({ items }),
     }),
+
+  // [방장 전용] 게임 사이 대기를 건너뛰고 다음 게임을 즉시 연다. finishedSessionSeq는
+  // course:intermission으로 받은 값을 그대로 돌려보낸다 — 타이머가 이미 다음 게임을 열어버린
+  // 뒤의 늦은 클릭을 서버가 걸러낼 수 있게(그냥 "넘겨"로 만들면 방금 시작한 게임이 날아간다).
+  // 화면 전환은 평소와 같은 game:started가 담당하므로 응답 본문이 없다(204).
+  skipIntermission: async (
+    roomId: string,
+    finishedSessionSeq: number,
+    accessToken: string,
+  ): Promise<void> => {
+    const response = await fetch(`${BASE_URL}/api/rooms/${roomId}/course/skip-intermission`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ finishedSessionSeq }),
+    });
+    if (!response.ok) {
+      if (isSessionDead(response.status)) handleExpiredSession();
+      const body = await response.json().catch(() => null);
+      throw new CourseApiError(
+        body?.message ?? `요청 실패 (HTTP ${response.status})`,
+        body?.code,
+      );
+    }
+  },
 };
 
 // 게임 이름 → 화면 표시용 한글명. 서버의 description과 별개로 UI에서 쓰는 정식 게임 타이틀이다.

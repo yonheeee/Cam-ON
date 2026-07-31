@@ -85,6 +85,10 @@ services:
         # 백엔드에 주는 LIVEKIT_URL을 그대로 재사용한다 — 프론트가 접속할 프로젝트와 백엔드가
         # 토큰을 서명하는 프로젝트가 갈라지면 연결만 거부되는 형태로 조용히 깨진다.
         VITE_LIVEKIT_URL: ${LIVEKIT_URL}
+        # AI 서버(물건 가져오기 인식). 반드시 https여야 한다 — 이 사이트는 HTTPS라 http 주소는
+        # 브라우저가 mixed content로 차단한다. 비워두면 번들이 http://<접속호스트>:8100 폴백을
+        # 쓰게 되고, 그게 정확히 차단되는 형태다(배포 사이트에서 인식이 통째로 안 됨).
+        VITE_AI_BASE_URL: ${AI_BASE_URL:?AI_BASE_URL 미설정 — deploy/.env에 AI 서버 https 주소를 넣어야 한다}
     volumes:
       - frontend-dist:/output
     restart: "no"

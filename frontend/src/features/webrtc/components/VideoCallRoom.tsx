@@ -6,7 +6,8 @@ import { CharadesMicrophoneController } from '../../charades/components/Charades
 import { CharadesGamePanel } from '../../charades/components/CharadesGamePanel';
 import { NinjaBattleScreen } from '../../ninja/components/NinjaBattleScreen';
 import { CourseResultScreen } from '../../course/components/CourseResultScreen';
-import { courseApi } from '../../course/api/courseApi';
+import { IntermissionScreen } from '../../course/components/IntermissionScreen';
+import { courseApi, CourseApiError } from '../../course/api/courseApi';
 import { useCourseProgress, type GameStartedData } from '../../course/hooks/useCourseProgress';
 import { useGameCatalog } from '../../course/hooks/useGameCatalog';
 import { LobbyScreen } from '../../room/components/LobbyScreen';
@@ -164,17 +165,18 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
   const { messages, sendMessage } = useRoomChat();
   const { gameNameOf } = useGameCatalog(accessToken);
 
-  const { activeSession, finished, skipped, clearSkipped } = useCourseProgress(
+  const { activeSession, finished, intermission, skipped, clearSkipped } = useCourseProgress(
     roomId,
     accessToken,
+    participantId,
   );
   // 이벤트로 받은 세션이 우선이고, 놓친 경우(늦은 접속/재접속)엔 아래 복구 경로가 채운다.
   const [recoveredSession, setRecoveredSession] = useState<GameStartedData | null>(null);
   const session = activeSession ?? recoveredSession;
   // 종합 결과 payload에는 participantId만 있어서 이름을 붙이려면 방 스냅샷이 필요하다.
   const [participants, setParticipants] = useState<ParticipantResponse[]>([]);
-  // 종합 결과의 "방으로 돌아가기"는 방장 전용 — 게임 도중 방장이 바뀔 수 있어(연쇄 위임)
-  // 마운트 시점 값이 아니라 course:finished 도착 시점에 스냅샷을 다시 읽어 갱신한다.
+  // 인터미션의 "바로 시작"은 방장 전용 — 게임 도중 방장이 바뀔 수 있어(연쇄 위임) 스냅샷을
+  // 새로 읽어 갱신한다.
   const [hostParticipantId, setHostParticipantId] = useState<string | null>(null);
   const nicknameById = useMemo(
     () => new Map(participants.map((p) => [p.participantId, p.nickname])),
@@ -239,14 +241,13 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
   const [returning, setReturning] = useState(false);
   const [returnError, setReturnError] = useState<string | null>(null);
 
-  // 종합 결과가 뜨는 순간 방장/참가자 스냅샷을 다시 읽는다 — 게임 도중의 방장 위임·퇴장이
-  // 반영된 최신 값으로 "방으로 돌아가기" 버튼 노출 여부와 닉네임 표를 그리기 위함.
+  // 종합 결과가 뜨는 순간, 그리고 인터미션이 시작될 때 참가자 스냅샷을 다시 읽는다 —
+  // 결과 화면은 최신 닉네임 표가 필요하고(payload에는 participantId만 있다), 인터미션은
+  // "바로 시작" 버튼을 지금의 방장에게만 띄우기 위해 최신 방장 id가 필요하다(게임 도중
+  // 연쇄 위임으로 바뀔 수 있다).
+  const snapshotTrigger = finished ? 'finished' : intermission ? 'intermission' : null;
   useEffect(() => {
-    // 결과 화면이 뜨거나 접힐 때 복귀 요청 상태를 초기화 — 두 번째 코스의 결과에서
-    // 이전 코스의 "돌아가는 중..."이 남아 버튼이 죽은 것처럼 보이지 않게.
-    setReturning(false);
-    setReturnError(null);
-    if (!finished) return;
+    if (!snapshotTrigger) return;
     let cancelled = false;
     roomApi
       .getRoom(roomId, accessToken)
@@ -261,10 +262,18 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
     return () => {
       cancelled = true;
     };
-  }, [finished, roomId, accessToken]);
+  }, [snapshotTrigger, roomId, accessToken]);
 
-  // [방장 전용] 종합 결과 → 대기방 복귀. 성공 시 화면 전환은 서버의 course:reset이 담당하므로
-  // 여기선 요청만 보낸다(전원이 같은 이벤트로 함께 돌아간다).
+  // 결과 화면이 뜨거나 접힐 때 복귀 요청 상태를 초기화 — 두 번째 코스의 결과에서
+  // 이전 코스의 "돌아가는 중..."이 남아 버튼이 죽은 것처럼 보이지 않게.
+  useEffect(() => {
+    setReturning(false);
+    setReturnError(null);
+  }, [finished]);
+
+  // 종합 결과 → 대기방 복귀. 방장 전용이 아니라 전원이 각자 누른다. 성공 시 화면 전환은 서버가
+  // 쏘는 course:member-returned가 내 id로 돌아올 때 이뤄지므로 여기선 요청만 보낸다 — 남이
+  // 눌러도 내 화면은 그대로다(한 번에 전원이 들어오지 않는다).
   const returnToLobby = useCallback(async () => {
     setReturning(true);
     setReturnError(null);
@@ -274,11 +283,39 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
       setReturnError(err instanceof RoomApiError ? err.message : '대기방 복귀 실패');
       setReturning(false);
     }
-    // 성공 시 returning을 유지한다 — course:reset이 오면 이 화면 자체가 사라진다.
+    // 성공 시 returning을 유지한다 — 내 복귀 이벤트가 오면 이 화면 자체가 사라진다.
   }, [roomId, accessToken]);
+
+  const [skipping, setSkipping] = useState(false);
+  const [skipError, setSkipError] = useState<string | null>(null);
+
+  // 인터미션이 바뀌면(다음 게임 사이로 넘어감) 스킵 요청 상태를 초기화 — 지난 인터미션의
+  // "시작하는 중..."이 남아 버튼이 죽은 것처럼 보이지 않게.
+  useEffect(() => {
+    setSkipping(false);
+    setSkipError(null);
+  }, [intermission?.finishedSessionSeq]);
+
+  // [방장 전용] 남은 대기를 건너뛴다. 어느 인터미션인지 서버가 특정할 수 있도록 받은
+  // finishedSessionSeq를 그대로 돌려보낸다. 화면 전환은 평소와 같은 game:started가 담당한다.
+  const skipIntermission = useCallback(async () => {
+    if (!intermission) return;
+    setSkipping(true);
+    setSkipError(null);
+    try {
+      await courseApi.skipIntermission(roomId, intermission.finishedSessionSeq, accessToken);
+    } catch (err) {
+      setSkipError(err instanceof CourseApiError ? err.message : '바로 시작 실패');
+      setSkipping(false);
+    }
+  }, [roomId, accessToken, intermission]);
 
   const activeGameName = gameNameOf(session?.gameId);
   const inGame = !!session && !finished;
+  // 게임이 열리기 전 대기(코스 첫 게임 앞) 또는 게임 사이 대기. 이 동안엔 대기방을 그리지 않고
+  // 룰 설명 화면이 자리를 차지한다 — 첫 게임 앞에는 아직 열린 세션이 없어(inGame=false) 이
+  // 조건이 없으면 대기방이 그대로 보인다.
+  const showIntermission = !!intermission && !finished;
 
   return (
     <>
@@ -288,7 +325,9 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
         participantId={participantId}
         onPresenterChange={setIsCharadesPresenter}
       />
-      {!inGame && !finished && (
+      {/* develop이 /dev/fetch 목업(fetchActive)을 제거했으므로 그 조건은 빠졌다.
+          showIntermission은 룰 설명 화면이 대기방 대신 자리를 차지하게 하는 조건이다. */}
+      {!inGame && !finished && !showIntermission && (
         <LobbyScreen
           roomId={roomId}
           accessToken={accessToken}
@@ -340,8 +379,21 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
         />
       )}
 
-      {/* 게임과 게임 사이 — 서버가 다음 세션을 열 때까지의 빈 화면을 덮는다 */}
-      {inGame && betweenGames && (
+      {/* 게임이 열리기 전 대기 — 코스 첫 게임 앞이든 게임 사이든 같은 화면을 쓴다.
+          다음 게임 룰 설명(서버가 MySQL games.description에서 읽어 보낸 값)과 방장용
+          "바로 시작"이 들어 있다. */}
+      {showIntermission && intermission && (
+        <IntermissionScreen
+          intermission={intermission}
+          isHost={hostParticipantId === participantId}
+          onSkip={() => void skipIntermission()}
+          skipping={skipping}
+          skipError={skipError}
+        />
+      )}
+      {/* course:intermission을 놓친 클라이언트(늦은 접속 등)용 폴백 — 게임 패널이 자기 종료
+          화면을 접은 뒤 빈 화면이 보이는 것만 막는다. */}
+      {inGame && betweenGames && !showIntermission && (
         <div className="video-call-room__intermission">
           <p className="pap-pixel-title">다음 게임을 준비하고 있어요...</p>
         </div>
@@ -363,7 +415,6 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
           totalSessions={finished.totalSessions}
           nicknameById={nicknameById}
           participantId={participantId}
-          isHost={hostParticipantId === participantId}
           onReturnToLobby={() => void returnToLobby()}
           returning={returning}
           returnError={returnError}
