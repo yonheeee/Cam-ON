@@ -58,7 +58,7 @@ public class DevNinjaDataSeeder implements ApplicationRunner {
         seedSkill(gestures, effect, "수룡탄의 술", 30, "sailor_moon", "cow", "rabbit");
         seedSkill(gestures, effect, "냥냥펀치", 15, "rabbit", "cat");
         seedSkill(gestures, effect, "바람의 상처", 45, "spider", "Horse", "mouse", "sailor_moon");
-        // 최고난도 콤보(6단, 손동작 9종 중 6종을 안 겹치게 사용) + 한 방 탈락(데미지 = INITIAL_HP).
+        // 최고난도 콤보(6단, 안 겹치는 손동작 6종) + 한 방 탈락(데미지 = INITIAL_HP).
         // 30초 교환 안에 6단을 다 잡으려면 손동작 하나당 유지(0.7초)와 전환을 거의 실수 없이
         // 붙여야 해서, 성공하면 판이 즉시 끝나는 보상이 성립한다.
         //
@@ -66,12 +66,16 @@ public class DevNinjaDataSeeder implements ApplicationRunner {
         // 지금은 그 용도로 쓰기 어렵다 — 진행 확인이 급하면 아마테라스 대신 냥냥펀치(2단)의
         // damage를 임시로 올리는 편이 낫다.
         seedSkill(gestures, effect, "아마테라스", 100,
-            "spider", "sailor_moon", "cow", "girl_V", "Horse", "snake");
+            "spider", "sailor_moon", "cow", "rabbit", "Horse", "snake");
         // 콤보 4개짜리 고데미지 — 바람의 상처(45)와 같은 길이지만 손동작 구성이 겹치지 않게 잡았다.
-        seedSkill(gestures, effect, "나선환", 50, "cat", "girl_V", "rabbit", "snake");
+        seedSkill(gestures, effect, "나선환", 50, "cat", "mouse", "rabbit", "snake");
     }
 
     // 손동작은 name이 곧 분류기 라벨과의 문자열 계약이라 그 값으로 존재 여부를 본다.
+    //
+    // girl_V(브이)는 분류기는 인식하지만 어떤 스킬 콤보에도 넣지 않는다 — 손모양 이미지가 없어서
+    // (프론트 gestureImages.FILE_BY_GESTURE에 항목 없음) 인술 카드에 그림 대신 한글 글자만 뜬다.
+    // 나머지 8종과 섞이면 그 칸만 튀어서 따라하기 어렵다. 이미지가 생기면 콤보에 넣어도 된다.
     private Map<String, Gesture> seedGestures() {
         Map<String, Gesture> existing = gestureRepository.findAll().stream()
             .collect(Collectors.toMap(Gesture::getName, g -> g));
