@@ -1,9 +1,10 @@
 import { Navigate, Route, Routes, useSearchParams } from 'react-router';
 import { LandingPage } from './features/landing/components/LandingPage';
+import { SetResultPreview } from './features/course/components/SetResultPreview';
+import { CourseResultPreview } from './features/course/components/CourseResultPreview';
 import { NinjaEffectPreview } from './features/ninja/components/NinjaEffectPreview';
 import { JoinRoomPage } from './features/room/pages/JoinRoomPage';
 import { NicknamePage } from './features/room/pages/NicknamePage';
-import { PlayerCountPage } from './features/room/pages/PlayerCountPage';
 import { RoomPage } from './features/room/pages/RoomPage';
 import { ButtonSounds } from './features/sound/components/ButtonSounds';
 
@@ -24,10 +25,16 @@ function App() {
         {/* 랜딩이 레이아웃을 겸한다 — /join, /nickname은 랜딩 위에 모달(팝업)로 렌더링 */}
         <Route path="/" element={<LandingPage />}>
           <Route path="join" element={<JoinRoomPage />} />
-          <Route path="players" element={<PlayerCountPage />} />
+          {/* 확정: 인원 선택 폐지(전 방 4인 고정). 북마크·뒤로가기로 진입하면 닉네임으로 보낸다. */}
+          <Route path="players" element={<Navigate to="/nickname?mode=create&players=4" replace />} />
           <Route path="nickname" element={<NicknamePage />} />
         </Route>
-        {/* 개발 전용: 원클릭으로 방 생성 + 물건 가져오기 게임 자동 시작 (프로드 빌드엔 없음) */}
+        {/* 개발 전용: 세트 중간 결과 화면 배치 확인 */}
+        {import.meta.env.DEV && <Route path="/dev/set-result" element={<SetResultPreview />} />}
+        {/* 개발 전용: 코스 최종 결과 화면 배치 확인 */}
+        {import.meta.env.DEV && (
+          <Route path="/dev/course-result" element={<CourseResultPreview />} />
+        )}
         {/* 정적 세그먼트가 :roomId보다 우선 매칭되므로 /rooms/join이 RoomPage에 잡히지 않는다 */}
         <Route path="/rooms/join" element={<InviteRedirect />} />
         <Route path="/rooms/:roomId" element={<RoomPage />} />

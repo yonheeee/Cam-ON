@@ -1,14 +1,21 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { LiveKitRoom } from '@livekit/components-react';
+import { LiveKitRoom, useParticipants } from '@livekit/components-react';
 import { VideoPresets, type RoomOptions } from 'livekit-client';
 import { CharadesMicrophoneController } from '../../charades/components/CharadesMicrophoneController';
 import { CharadesGamePanel } from '../../charades/components/CharadesGamePanel';
 import { NinjaBattleScreen } from '../../ninja/components/NinjaBattleScreen';
 import { CourseResultScreen } from '../../course/components/CourseResultScreen';
+import { SetResultScreen } from '../../course/components/SetResultScreen';
 import { IntermissionScreen } from '../../course/components/IntermissionScreen';
-import { courseApi, CourseApiError } from '../../course/api/courseApi';
+import {
+  courseApi,
+  CourseApiError,
+  GAME_LABELS,
+  type CourseItem,
+} from '../../course/api/courseApi';
 import { useCourseProgress, type GameStartedData } from '../../course/hooks/useCourseProgress';
+import { useSetResult } from '../../course/hooks/useSetResult';
 import { useGameCatalog } from '../../course/hooks/useGameCatalog';
 import { LobbyScreen } from '../../room/components/LobbyScreen';
 import { useRoomChat } from '../../chat/hooks/useRoomChat';
@@ -45,6 +52,11 @@ const roomOptions: RoomOptions = {
 // 원인을 찾기 어렵다. 키를 새로 발급받는 일이 반복되므로 코드에 박지 않고 frontend/.env에서 읽는다
 // (기본값은 커밋된 .env, 개인 환경만 다르게 하려면 .env.local에서 덮어쓴다).
 const LIVEKIT_SERVER_URL = import.meta.env.VITE_LIVEKIT_URL ?? '';
+
+// 세트가 끝나고 다음 게임 룰 설명 구간이 열리기까지의 시간(CourseRunner.SET_RESULT_DURATION).
+// 중간 결과 화면 카운트다운 기준 — 백엔드 값이 바뀌면 같이 고친다.
+// 그 뒤 룰 설명 구간(SESSION_INTERMISSION)이 이어지고 나서 다음 게임이 열린다.
+const SET_RESULT_DURATION_MS = 8000;
 
 interface VideoCallRoomProps {
   // 방 생성/입장 플로우를 마치고 들어오는 화면이라, 여기 도달한 시점엔 넷 다 이미 확보돼 있다.
@@ -175,13 +187,34 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
   const session = activeSession ?? recoveredSession;
   // 종합 결과 payload에는 participantId만 있어서 이름을 붙이려면 방 스냅샷이 필요하다.
   const [participants, setParticipants] = useState<ParticipantResponse[]>([]);
+  // 중간 결과의 "다음 세트가 무슨 게임인지"와 "SET n / 총 세트"를 그리려면 코스 구성이 필요하다.
+  const [courseItems, setCourseItems] = useState<CourseItem[]>([]);
   // 인터미션의 "바로 시작"은 방장 전용 — 게임 도중 방장이 바뀔 수 있어(연쇄 위임) 스냅샷을
-  // 새로 읽어 갱신한다.
+  // 새로 읽어 갱신한다. (결과 화면의 대기방 복귀는 이제 전원이 각자 누르므로 방장 여부를 안 본다)
   const [hostParticipantId, setHostParticipantId] = useState<string | null>(null);
-  const nicknameById = useMemo(
-    () => new Map(participants.map((p) => [p.participantId, p.nickname])),
-    [participants],
-  );
+  // 한 번 본 닉네임은 잊지 않고 쌓아 둔다. 방 스냅샷에는 "지금 방에 있는 사람"만 들어 있는데,
+  // 게임 도중 나간 사람도 그 세트의 순위표에는 (대개 0점으로) 남아 있어서 스냅샷만 보면
+  // "알 수 없음 0점" 줄이 생긴다. LiveKit 참가자 이름도 같이 넣어 늦게 들어온 사람까지 덮는다.
+  const livekitParticipants = useParticipants();
+  const [nicknameById, setNicknameById] = useState<Map<string, string>>(new Map());
+  useEffect(() => {
+    setNicknameById((prev) => {
+      let next: Map<string, string> | null = null;
+      const upsert = (id: string, nickname: string | undefined) => {
+        if (!nickname || prev.get(id) === nickname) return;
+        next ??= new Map(prev);
+        next.set(id, nickname);
+      };
+      for (const participant of participants) {
+        upsert(participant.participantId, participant.nickname);
+      }
+      for (const participant of livekitParticipants) {
+        upsert(participant.identity, participant.name);
+      }
+      // 바뀐 게 없으면 같은 Map을 돌려줘 불필요한 리렌더를 막는다.
+      return next ?? prev;
+    });
+  }, [participants, livekitParticipants]);
 
   // 새 게임이 열리면 인터미션 표시를 내린다.
   useEffect(() => {
@@ -205,6 +238,7 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
         if (cancelled) return;
         setParticipants(room.participants);
         setHostParticipantId(room.hostParticipantId);
+        setCourseItems(course.items);
         if (room.status !== 'PLAYING') return;
         const current = course.items.find((item) => item.idx === course.currentSessionSeq);
         if (current) {
@@ -238,6 +272,41 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
     }
   }, [roomId, accessToken]);
 
+  // 세트 하나가 끝나면(게임별 game-ended) 중간 결과 화면을 띄운다. 다음 세트가 열리면(game:started)
+  // 훅이 스스로 null로 돌아가며 화면이 접힌다.
+  const finishedSet = useSetResult(roomId, accessToken);
+  const [advancing, setAdvancing] = useState(false);
+  const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
+
+  useEffect(() => {
+    setAdvancing(false);
+    if (!finishedSet) {
+      setSecondsLeft(null);
+      return;
+    }
+    const deadline = finishedSet.endedAt + SET_RESULT_DURATION_MS;
+    const tick = () => setSecondsLeft(Math.max(0, Math.ceil((deadline - Date.now()) / 1000)));
+    tick();
+    const timer = setInterval(tick, 500);
+    return () => clearInterval(timer);
+  }, [finishedSet]);
+
+  // [방장 전용] 기다리지 않고 바로 다음 세트로. 세트 결과 구간과 룰 설명 구간을 한 번에 건너뛴다.
+  //
+  // 인터미션 "바로 시작"과 같은 엔드포인트를 쓴다 — 하는 일이 같고(대기를 건너뛰고 다음 게임을
+  // 연다), 서버가 "어느 대기를 건너뛰려는지"를 seq로 확인하는 가드도 그대로 필요하다. 이 브랜치가
+  // 원래 부르던 /api/rooms/{roomId}/course/next는 백엔드에 없어서 항상 404였다.
+  const startNextSet = useCallback(async () => {
+    if (!finishedSet) return;
+    setAdvancing(true);
+    try {
+      await courseApi.skipIntermission(roomId, finishedSet.sessionSeq, accessToken);
+      // 화면 전환은 game:started가 담당한다 — 그때까지 버튼은 "준비 중..."으로 둔다.
+    } catch {
+      setAdvancing(false);
+    }
+  }, [roomId, accessToken, finishedSet]);
+
   const [returning, setReturning] = useState(false);
   const [returnError, setReturnError] = useState<string | null>(null);
 
@@ -245,16 +314,29 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
   // 결과 화면은 최신 닉네임 표가 필요하고(payload에는 participantId만 있다), 인터미션은
   // "바로 시작" 버튼을 지금의 방장에게만 띄우기 위해 최신 방장 id가 필요하다(게임 도중
   // 연쇄 위임으로 바뀔 수 있다).
-  const snapshotTrigger = finished ? 'finished' : intermission ? 'intermission' : null;
+  // 세 화면 모두 최신 방장 id가 필요하다: 종합 결과(닉네임 표), 세트 중간 결과("다음 세트
+  // 시작하기"가 방장 전용), 인터미션("바로 시작"이 방장 전용).
+  const snapshotTrigger = finished
+    ? 'finished'
+    : finishedSet
+      ? `set:${finishedSet.sessionSeq}`
+      : intermission
+        ? 'intermission'
+        : null;
   useEffect(() => {
     if (!snapshotTrigger) return;
     let cancelled = false;
-    roomApi
-      .getRoom(roomId, accessToken)
-      .then((room) => {
+    // 코스도 같이 다시 읽는다 — 마운트 시점(방 생성 직후)엔 코스가 비어 있고 대기방에서 짜므로,
+    // 한 번만 읽으면 "다음 세트"를 못 찾아 마지막 세트인 것처럼 보인다.
+    Promise.all([
+      roomApi.getRoom(roomId, accessToken),
+      courseApi.getCourse(roomId, accessToken),
+    ])
+      .then(([room, course]) => {
         if (cancelled) return;
         setParticipants(room.participants);
         setHostParticipantId(room.hostParticipantId);
+        setCourseItems(course.items);
       })
       .catch(() => {
         // 실패해도 마운트 시점 스냅샷으로 그린다.
@@ -312,10 +394,18 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
 
   const activeGameName = gameNameOf(session?.gameId);
   const inGame = !!session && !finished;
+  // 중간 결과에 띄울 "다음 세트" 게임. 마지막 세트였으면 없다(그땐 곧 종합 결과가 온다).
+  const nextItem = finishedSet
+    ? courseItems.find((item) => item.idx === finishedSet.sessionSeq + 1)
+    : undefined;
   // 게임이 열리기 전 대기(코스 첫 게임 앞) 또는 게임 사이 대기. 이 동안엔 대기방을 그리지 않고
   // 룰 설명 화면이 자리를 차지한다 — 첫 게임 앞에는 아직 열린 세션이 없어(inGame=false) 이
   // 조건이 없으면 대기방이 그대로 보인다.
   const showIntermission = !!intermission && !finished;
+  // 세트 중간 결과는 룰 설명이 오기 전까지만 보여준다. 서버가 두 구간을 순서대로 주므로
+  // (세트 결과 8초 → course:intermission 도착 → 룰 설명 8초) 그 이벤트가 곧 인계 신호다 —
+  // 프론트에서 따로 타이머를 재면 사람마다 전환 시점이 어긋난다.
+  const showSetResult = !!finishedSet && !finished && !intermission;
 
   return (
     <>
@@ -379,9 +469,26 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
         />
       )}
 
+      {/* 세트 중간 결과 — 게임 하나가 끝나고 룰 설명 구간이 열리기 전까지 */}
+      {showSetResult && finishedSet && (
+        <SetResultScreen
+          setIndex={finishedSet.sessionSeq}
+          totalSets={courseItems.length || finishedSet.sessionSeq}
+          setResult={finishedSet.setResult}
+          courseRanking={finishedSet.courseRanking}
+          nicknameById={nicknameById}
+          nextGameLabel={nextItem ? GAME_LABELS[nextItem.gameName] : null}
+          participantId={participantId}
+          isHost={hostParticipantId === participantId}
+          secondsLeft={secondsLeft}
+          onNext={() => void startNextSet()}
+          starting={advancing}
+        />
+      )}
+
       {/* 게임이 열리기 전 대기 — 코스 첫 게임 앞이든 게임 사이든 같은 화면을 쓴다.
           다음 게임 룰 설명(서버가 MySQL games.description에서 읽어 보낸 값)과 방장용
-          "바로 시작"이 들어 있다. */}
+          "바로 시작"이 들어 있다. 게임 사이에서는 세트 결과 구간이 끝난 뒤에 온다. */}
       {showIntermission && intermission && (
         <IntermissionScreen
           intermission={intermission}
@@ -392,8 +499,8 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
         />
       )}
       {/* course:intermission을 놓친 클라이언트(늦은 접속 등)용 폴백 — 게임 패널이 자기 종료
-          화면을 접은 뒤 빈 화면이 보이는 것만 막는다. */}
-      {inGame && betweenGames && !showIntermission && (
+          화면을 접은 뒤 빈 화면이 보이는 것만 막는다. 중간 결과가 떠 있으면 그쪽이 덮는다. */}
+      {inGame && betweenGames && !showIntermission && !finishedSet && (
         <div className="video-call-room__intermission">
           <p className="pap-pixel-title">다음 게임을 준비하고 있어요...</p>
         </div>

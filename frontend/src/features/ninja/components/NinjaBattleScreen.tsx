@@ -21,6 +21,8 @@ import './NinjaBattleScreen.css';
 
 const ATTACK_TARGET_TIMER_SECONDS = 30;
 const MAX_HP = 100;
+// 다음 교환 카운트다운이 세는 숫자 개수(3 → 2 → 1). useNinjaRound.COUNTDOWN_STEPS와 같은 값.
+const NINJA_COUNTDOWN_STEPS = 3;
 
 // 고정 디자인 캔버스. 이 화면의 모든 px 값은 1440×810 기준이고, 뷰포트에는 통째로 확대/축소해서
 // 맞춘다(웹게임 표준 방식). 이유: 캠 크기는 폭(열 30% × 16:9)에, 보드는 절대 px에 묶여 있어서
@@ -91,7 +93,6 @@ export function NinjaBattleScreen({
   const {
     round,
     exchange,
-    sessionTotals,
     alivePlayers,
     hp,
     currentAttackerToken,
@@ -116,10 +117,13 @@ export function NinjaBattleScreen({
     roundResult,
   } = useNinjaRound(roomId, gameId, accessToken, myId, comboEntry?.comboLabel ?? null, comboEntry?.confidence ?? 0);
 
+  // 카운트다운이 한 칸 0.5초라(총 1.5초) 음원을 2배속으로 돌려 "3, 2, 1" 비트를 화면과 맞춘다.
+  // seek 위치는 파일 시간 기준이라 그대로 초 단위로 계산한다(파일은 1초에 숫자 하나).
   useCountdownSound(
     inCountdown,
     `ninja:${round}:${exchange}`,
-    Math.max(0, 3 - (countdownSeconds ?? 3)),
+    Math.max(0, NINJA_COUNTDOWN_STEPS - (countdownSeconds ?? NINJA_COUNTDOWN_STEPS)),
+    2,
   );
   useNinjaEffectSound(
     inEffectPlayback,
@@ -482,22 +486,8 @@ export function NinjaBattleScreen({
         </div>
       )}
 
-      {gameEnded && (
-        <div className="ninja-final">
-          <div className="ninja-final__card">
-            <p className="ninja-final__title pap-pixel-title">최종 순위</p>
-            <ol className="ninja-final__list">
-              {ranking.map((entry) => (
-                <li key={entry.token} className={entry.token === myId ? 'ninja-final--me' : ''}>
-                  <span className="ninja-final__rank pap-pixel-title">{entry.rank}</span>
-                  <span className="ninja-final__name">{nicknameOf(entry.token)}</span>
-                  <span className="ninja-final__pt pap-pixel-title">{sessionTotals[entry.token] ?? 0}점</span>
-                </li>
-              ))}
-            </ol>
-          </div>
-        </div>
-      )}
+      {/* 세트가 끝난 뒤의 순위 발표는 이 화면이 하지 않는다 — 코스 공통 중간 결과 화면
+          (SetResultScreen)이 게임 위에 덮어 그린다. 여기서 또 띄우면 두 겹으로 겹친다. */}
 
         {error && <p className="ninja-screen__error">{error}</p>}
       </div>

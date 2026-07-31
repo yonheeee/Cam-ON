@@ -315,7 +315,7 @@ class CourseRunnerTest {
         );
         givenGame(CHARADES_ID, "CHARADES", 3, 4, "표현자가 말없이 몸으로 설명합니다.");
 
-        runner.scheduleAdvance(roomId, 1);
+        runner.beginRuleIntermission(roomId, 1);
 
         ArgumentCaptor<CourseIntermissionPayload> captor = ArgumentCaptor.captor();
         verify(courseEventPublisher).publishIntermission(eq(roomId), captor.capture());
@@ -330,19 +330,45 @@ class CourseRunnerTest {
     }
 
     @Test
-    void announcesIntermissionWithoutNextGameWhenCourseIsAboutToEnd() {
-        // 마지막 게임 뒤의 인터미션 — 건너뛸 다음 게임이 없으므로 스킵도 막아야 한다.
+    void skipsRuleIntermissionAfterTheLastSet() {
+        // 마지막 세트 뒤에는 설명할 다음 게임이 없다 — 빈 룰 설명 화면을 8초 더 보여주지 않고
+        // 곧바로 종합 결과로 넘어간다.
         givenRoom(RoomStatus.PLAYING, 1);
         givenConnected(2);
         givenCourse(new CourseItem(1, NINJA_ID, 3, null));
 
+        runner.beginRuleIntermission(roomId, 1);
+
+        verify(courseEventPublisher, never()).publishIntermission(any(), any());
+        verify(courseEventPublisher).publishCourseFinished(eq(roomId), any());
+    }
+
+    @Test
+    void setResultComesFirstAndRuleIntermissionOnlyAfterIt() {
+        // 세트 결과와 룰 설명은 겹치면 안 된다 — 겹쳐 띄우면 룰 설명이 결과를 덮는다.
+        // scheduleAdvance는 세트 결과 구간만 예약하고, 룰 설명은 그 뒤에 열린다.
+        // (코스를 읽는 것도 그때 하므로 여기선 코스 stub이 필요하지 않다)
+        givenRoom(RoomStatus.PLAYING, 1);
+
         runner.scheduleAdvance(roomId, 1);
 
-        ArgumentCaptor<CourseIntermissionPayload> captor = ArgumentCaptor.captor();
-        verify(courseEventPublisher).publishIntermission(eq(roomId), captor.capture());
-        assertThat(captor.getValue().nextSessionSeq()).isNull();
-        assertThat(captor.getValue().nextGameDescription()).isNull();
-        assertThat(captor.getValue().skippable()).isFalse();
+        // 이 시점엔 아직 룰 설명을 알리지 않는다(세트 결과를 읽는 시간).
+        verify(courseEventPublisher, never()).publishIntermission(any(), any());
+        // 다음 게임도 아직 열리지 않는다.
+        assertThat(charadesStarter.specs).isEmpty();
+        verify(roomRepository, never()).updateCurrentSessionSeq(any(), anyInt());
+    }
+
+    @Test
+    void doesNotOpenRuleIntermissionWhenHostAlreadyStartedNextSet() {
+        // 방장이 세트 결과 화면에서 "다음 세트 시작하기"를 눌러 이미 넘어간 뒤, 예약돼 있던
+        // 세트 결과 타이머가 늦게 깨는 경우 — 지난 인터미션을 다시 열면 안 된다.
+        givenRoom(RoomStatus.PLAYING, 2);
+
+        runner.beginRuleIntermission(roomId, 1);
+
+        verify(courseEventPublisher, never()).publishIntermission(any(), any());
+        verify(courseEventPublisher, never()).publishCourseFinished(any(), any());
     }
 
     @Test
@@ -359,7 +385,7 @@ class CourseRunnerTest {
         givenGame(CHARADES_ID, "CHARADES", 3, 4);
         givenGame(NINJA_ID, "NINJA", 2, 4, "손동작 콤보를 가장 빨리 완성하세요.");
 
-        runner.scheduleAdvance(roomId, 1);
+        runner.beginRuleIntermission(roomId, 1);
 
         ArgumentCaptor<CourseIntermissionPayload> captor = ArgumentCaptor.captor();
         verify(courseEventPublisher).publishIntermission(eq(roomId), captor.capture());

@@ -354,24 +354,8 @@ export function FetchObjectGame({
         </div>
       )}
 
-      {/* 최종 결과 팝업 */}
-      {state.phase === 'ended' && (
-        <div className="pap-modal-backdrop">
-          <div className="pap-modal">
-            <div className="fetch-game__result pap-pixel-card">
-              <h2 className="pap-pixel-title">🏆 최종 결과</h2>
-              <ol>
-                {ranking.map(([nickname, score], i) => (
-                  <li key={nickname} className={i === 0 ? 'fetch-game__winner' : ''}>
-                    {i + 1}위 — {nickname} ({score}점)
-                  </li>
-                ))}
-              </ol>
-              <p className="fetch-game__wait">잠시 후 다음 게임으로 넘어가요...</p>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* 세트가 끝난 뒤 순위 발표는 코스 공통 중간 결과 화면(SetResultScreen)이 한다 —
+          여기서 팝업을 또 띄우면 두 겹으로 겹친다(닌자도 같은 이유로 자체 종료 화면을 없앴다). */}
 
       {/* 3·2·1 카운트다운 → GO! (제시어 읽는 시간 + 인식 팁) */}
       {inCountdown && (
