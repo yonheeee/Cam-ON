@@ -1,3 +1,4 @@
+import { handleExpiredSession, isSessionDead } from '../../session/lib/sessionExpiry';
 // Spring 백엔드 domain/game/ninja REST 클라이언트.
 // 대기방/방장 도메인이 아직 없어서 roomId(=gameId)는 backend의 DevRoomRepository가
 // 들고 있는 고정 테스트 방 id를 그대로 하드코딩한다 — 방 도메인이 완성되면
@@ -196,6 +197,8 @@ async function request<T>(path: string, accessToken: string, init?: RequestInit)
   });
   const body = await response.json().catch(() => null);
   if (!response.ok) {
+    // 토큰이 죽었으면 이 화면에서 할 수 있는 게 없다 — 세션을 정리하고 첫 화면으로 되돌린다.
+    if (isSessionDead(response.status)) handleExpiredSession();
     throw new NinjaApiError(body?.message ?? `요청 실패 (HTTP ${response.status})`, body?.code);
   }
   return body.data as T;

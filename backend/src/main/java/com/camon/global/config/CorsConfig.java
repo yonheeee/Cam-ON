@@ -8,23 +8,17 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 // 프론트(Vite dev 서버, 기본 5173)가 다른 오리진에서 REST를 호출하므로 필요.
-// setAllowedOriginPatterns를 쓰는 이유: 팀원들이 각자 다른 네트워크(와이파이 LAN, 휴대폰
-// 핫스팟 등)로 접속해서 테스트하는데, 핫스팟 사설망 대역이 통신사/기기마다 다 달라서
-// (예: 아이폰 핫스팟은 172.20.10.x, 안드로이드는 보통 192.168.43.x, Windows 모바일 핫스팟은
-// 192.168.137.x) 특정 대역만 허용하면 계속 두더지잡기가 된다. 실제 보안이 필요 없는 로컬
-// 개발용 서버라 포트(5173)만 고정하고 호스트는 통째로 허용한다.
-// app.frontend-base-url(배포 오리진)도 같이 허용 — 도메인이 바뀌어도 이 클래스는 안 건드리고
-// FRONTEND_BASE_URL 환경변수만 바꾸면 된다.
+// 허용 오리진 목록과 그 근거는 AllowedOrigins에 있다 — WS 핸드셰이크(WebSocketConfig)와 같은
+// 목록을 써야 하므로 여기에 따로 적지 않는다.
 @Configuration
 public class CorsConfig {
 
     @Bean
     UrlBasedCorsConfigurationSource corsConfigurationSource(RoomProperties roomProperties) {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOriginPatterns(List.of(
-            "http://*:5173",
-            roomProperties.frontendBaseUrl()
-        ));
+        configuration.setAllowedOriginPatterns(
+            AllowedOrigins.withDeployOrigin(roomProperties.frontendBaseUrl())
+        );
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
 

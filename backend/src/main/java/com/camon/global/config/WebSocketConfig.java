@@ -38,9 +38,15 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
+        // 허용 오리진은 REST(CorsConfig)와 같은 목록을 쓴다 — 갈라지면 REST만 통과하고 WS가
+        // 막혀서 상태 변경은 되는데 전파가 안 되는 형태로 깨진다(AllowedOrigins 주석 참고).
         registry.addEndpoint("/ws/rooms/{roomId}")
             .addInterceptors(roomHandshakeInterceptor)
-            .setAllowedOriginPatterns("http://localhost:*", roomProperties.frontendBaseUrl());
+            .setAllowedOriginPatterns(
+                AllowedOrigins
+                    .withDeployOrigin(roomProperties.frontendBaseUrl())
+                    .toArray(String[]::new)
+            );
     }
 
     @Override

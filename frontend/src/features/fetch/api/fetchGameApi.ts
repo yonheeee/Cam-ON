@@ -1,3 +1,4 @@
+import { handleExpiredSession, isSessionDead } from '../../session/lib/sessionExpiry';
 // Spring 물건 가져오기 REST 클라이언트 (제출 하나뿐 — 라운드 진행은 전부 서버가 STOMP로 밀어준다).
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? `http://${window.location.hostname}:8080`;
 
@@ -32,6 +33,8 @@ export const fetchGameApi = {
     });
     const body = await response.json().catch(() => null);
     if (!response.ok) {
+      // 토큰이 죽었으면 이 화면에서 할 수 있는 게 없다 — 세션을 정리하고 첫 화면으로 되돌린다.
+      if (isSessionDead(response.status)) handleExpiredSession();
       throw new FetchGameApiError(body?.message ?? `제출 실패 (HTTP ${response.status})`, body?.code);
     }
     return body.data as FetchSubmissionResponse;
