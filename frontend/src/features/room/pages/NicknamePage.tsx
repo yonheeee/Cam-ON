@@ -35,20 +35,16 @@ export function NicknamePage() {
   const mode: EnterMode | null =
     modeParam === 'create' || modeParam === 'join' ? modeParam : null;
   const roomCode = (searchParams.get('code') ?? '').toUpperCase();
-  const playersParam = Number(searchParams.get('players'));
-  const maxPlayers = playersParam === 2 || playersParam === 3 || playersParam === 4
-    ? playersParam
-    : null;
+  // 확정: 인원 선택 단계 폐지 — 모든 방은 4인 정원 고정.
+  // (players 파라미터가 남아 있어도 무시한다. 자리가 비어도 현재 인원 전원 준비면 시작 가능.)
+  const maxPlayers = 4;
 
   if (mode === null) return <Navigate to="/" replace />;
   if (mode === 'join' && !ROOM_CODE_PATTERN.test(roomCode)) {
     return <Navigate to="/join" replace />;
   }
-  if (mode === 'create' && maxPlayers === null) {
-    return <Navigate to="/players" replace />;
-  }
 
-  const backTo = mode === 'join' ? `/join?code=${roomCode}` : '/players';
+  const backTo = mode === 'join' ? `/join?code=${roomCode}` : '/';
 
   const submitNickname = async () => {
     if (submitting) return;
