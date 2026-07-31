@@ -306,7 +306,7 @@
 }
 
 /* 이펙트 오버레이를 타일 안에 가둔다 — Pixel*Effect는 .ninja-effect-overlay를 쓰고
-   NinjaGamePanel.css에서 position: fixed / 100vw로 전체화면에 깔리게 돼 있는데, 여기서는
+   NinjaEffectOverlay.css에서 position: fixed / 100vw로 전체화면에 깔리게 돼 있는데, 여기서는
    맞은 사람 타일에서만 재생하므로 absolute로 덮어쓴다(컴포넌트는 resizeTo: host라 알아서 맞춘다). */
 /* 이펙트는 캠보다 1.5배 크게 잡는다 — 타격감이 프레임 안에 얌전히 갇히지 않게. 컴포넌트가
    호스트 크기(resizeTo: host)에 맞춰 그리므로 호스트를 키우면 내용도 같이 커진다. 타일의

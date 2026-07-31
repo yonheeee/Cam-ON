@@ -7,7 +7,9 @@ import { PixelPhoenixFlowerEffect } from './PixelPhoenixFlowerEffect';
 import { PixelRasenganEffect } from './PixelRasenganEffect';
 import { PixelWaterDragonEffect } from './PixelWaterDragonEffect';
 import { PixelWindScarEffect } from './PixelWindScarEffect';
-import './NinjaGamePanel.css';
+// Pixel*Effect 들이 .ninja-effect-overlay(--pixel) 클래스를 쓴다. 예전엔 삭제된
+// NinjaGamePanel.css를 import해서 받아 썼다.
+import './NinjaEffectOverlay.css';
 
 export function NinjaEffectPreview() {
   const [playbackKey, setPlaybackKey] = useState(0);

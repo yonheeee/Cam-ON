@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type { EffectDto } from '../api/ninjaApi';
+import './NinjaEffectOverlay.css';
 
 interface Particle {
   x: number;
