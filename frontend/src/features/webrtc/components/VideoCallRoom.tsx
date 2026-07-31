@@ -24,6 +24,7 @@ import { useRoomHeartbeat } from '../../room/hooks/useRoomHeartbeat';
 import { clearRoom } from '../../room/lib/roomStorage';
 import { FetchCoursePanel } from '../../fetch/components/FetchCoursePanel';
 import { roomApi, RoomApiError, type ParticipantResponse } from '../../room/api/roomApi';
+import { analyticsApi } from '../../analytics/api/analyticsApi';
 import '@livekit/components-styles';
 import './VideoCallRoom.css';
 
@@ -53,9 +54,10 @@ const roomOptions: RoomOptions = {
 // (기본값은 커밋된 .env, 개인 환경만 다르게 하려면 .env.local에서 덮어쓴다).
 const LIVEKIT_SERVER_URL = import.meta.env.VITE_LIVEKIT_URL ?? '';
 
-// 세트가 끝나고 서버가 다음 세트를 여는 데 걸리는 시간(CourseRunner.SESSION_INTERMISSION).
-// 중간 결과 화면의 "N초 뒤 자동으로 시작돼요" 카운트다운 기준 — 백엔드 값이 바뀌면 같이 고친다.
-const SESSION_INTERMISSION_MS = 8000;
+// 세트가 끝나고 다음 게임 룰 설명 구간이 열리기까지의 시간(CourseRunner.SET_RESULT_DURATION).
+// 중간 결과 화면 카운트다운 기준 — 백엔드 값이 바뀌면 같이 고친다.
+// 그 뒤 룰 설명 구간(SESSION_INTERMISSION)이 이어지고 나서 다음 게임이 열린다.
+const SET_RESULT_DURATION_MS = 8000;
 
 interface VideoCallRoomProps {
   // 방 생성/입장 플로우를 마치고 들어오는 화면이라, 여기 도달한 시점엔 넷 다 이미 확보돼 있다.
@@ -181,6 +183,40 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
     accessToken,
     participantId,
   );
+  const recordedRoomEntryRef = useRef(false);
+  useEffect(() => {
+    if (recordedRoomEntryRef.current) return;
+    recordedRoomEntryRef.current = true;
+    void analyticsApi
+      .recordEvent(roomId, accessToken, {
+        eventName: 'ROOM_ENTERED',
+      })
+      .catch(() => {
+        // Analytics must never block or interrupt room entry.
+      });
+  }, [roomId, accessToken]);
+
+  const recordedResultIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!finished) {
+      recordedResultIdRef.current = null;
+      return;
+    }
+    const resultId = `${finished.totalSessions}:${finished.ranking
+      .map((entry) => `${entry.participantId}:${entry.totalScore}`)
+      .join(',')}`;
+    if (recordedResultIdRef.current === resultId) return;
+    recordedResultIdRef.current = resultId;
+    void analyticsApi
+      .recordEvent(roomId, accessToken, {
+        eventName: 'RESULT_SCREEN_VIEWED',
+        properties: { totalSessions: finished.totalSessions },
+      })
+      .catch(() => {
+        // Analytics must never block or interrupt the game result screen.
+      });
+  }, [finished, roomId, accessToken]);
+
   // 이벤트로 받은 세션이 우선이고, 놓친 경우(늦은 접속/재접속)엔 아래 복구 경로가 채운다.
   const [recoveredSession, setRecoveredSession] = useState<GameStartedData | null>(null);
   const session = activeSession ?? recoveredSession;
@@ -283,24 +319,28 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
       setSecondsLeft(null);
       return;
     }
-    const deadline = finishedSet.endedAt + SESSION_INTERMISSION_MS;
+    const deadline = finishedSet.endedAt + SET_RESULT_DURATION_MS;
     const tick = () => setSecondsLeft(Math.max(0, Math.ceil((deadline - Date.now()) / 1000)));
     tick();
     const timer = setInterval(tick, 500);
     return () => clearInterval(timer);
   }, [finishedSet]);
 
-  // [방장 전용] 기다리지 않고 바로 다음 세트로. 서버에 이 엔드포인트가 아직 없어서 지금은 실패하고
-  // 자동 진행을 그대로 기다리게 된다(백엔드가 붙으면 그때부터 즉시 넘어간다).
+  // [방장 전용] 기다리지 않고 바로 다음 세트로. 세트 결과 구간과 룰 설명 구간을 한 번에 건너뛴다.
+  //
+  // 인터미션 "바로 시작"과 같은 엔드포인트를 쓴다 — 하는 일이 같고(대기를 건너뛰고 다음 게임을
+  // 연다), 서버가 "어느 대기를 건너뛰려는지"를 seq로 확인하는 가드도 그대로 필요하다. 이 브랜치가
+  // 원래 부르던 /api/rooms/{roomId}/course/next는 백엔드에 없어서 항상 404였다.
   const startNextSet = useCallback(async () => {
+    if (!finishedSet) return;
     setAdvancing(true);
     try {
-      await courseApi.startNextSet(roomId, accessToken);
+      await courseApi.skipIntermission(roomId, finishedSet.sessionSeq, accessToken);
       // 화면 전환은 game:started가 담당한다 — 그때까지 버튼은 "준비 중..."으로 둔다.
     } catch {
       setAdvancing(false);
     }
-  }, [roomId, accessToken]);
+  }, [roomId, accessToken, finishedSet]);
 
   const [returning, setReturning] = useState(false);
   const [returnError, setReturnError] = useState<string | null>(null);
@@ -396,10 +436,11 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
   // 게임이 열리기 전 대기(코스 첫 게임 앞) 또는 게임 사이 대기. 이 동안엔 대기방을 그리지 않고
   // 룰 설명 화면이 자리를 차지한다 — 첫 게임 앞에는 아직 열린 세션이 없어(inGame=false) 이
   // 조건이 없으면 대기방이 그대로 보인다.
-  //
-  // 세트 중간 결과(finishedSet)가 떠 있는 동안은 그 화면이 우선이다 — 둘 다 8초 인터미션
-  // 구간에 뜨는데 겹쳐 그리면 룰 설명이 결과를 덮는다.
-  const showIntermission = !!intermission && !finished && !finishedSet;
+  const showIntermission = !!intermission && !finished;
+  // 세트 중간 결과는 룰 설명이 오기 전까지만 보여준다. 서버가 두 구간을 순서대로 주므로
+  // (세트 결과 8초 → course:intermission 도착 → 룰 설명 8초) 그 이벤트가 곧 인계 신호다 —
+  // 프론트에서 따로 타이머를 재면 사람마다 전환 시점이 어긋난다.
+  const showSetResult = !!finishedSet && !finished && !intermission;
 
   return (
     <>
@@ -463,8 +504,8 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
         />
       )}
 
-      {/* 세트 중간 결과 — 게임 하나가 끝나고 다음 세트가 열리기 전까지 */}
-      {finishedSet && !finished && (
+      {/* 세트 중간 결과 — 게임 하나가 끝나고 룰 설명 구간이 열리기 전까지 */}
+      {showSetResult && finishedSet && (
         <SetResultScreen
           setIndex={finishedSet.sessionSeq}
           totalSets={courseItems.length || finishedSet.sessionSeq}
@@ -482,8 +523,7 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
 
       {/* 게임이 열리기 전 대기 — 코스 첫 게임 앞이든 게임 사이든 같은 화면을 쓴다.
           다음 게임 룰 설명(서버가 MySQL games.description에서 읽어 보낸 값)과 방장용
-          "바로 시작"이 들어 있다. 세트 중간 결과가 떠 있는 동안엔 showIntermission이
-          false라 그쪽이 이 구간을 대신한다. */}
+          "바로 시작"이 들어 있다. 게임 사이에서는 세트 결과 구간이 끝난 뒤에 온다. */}
       {showIntermission && intermission && (
         <IntermissionScreen
           intermission={intermission}

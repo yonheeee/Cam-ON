@@ -34,7 +34,11 @@ interface SetResultScreenProps {
   participantId: string;
   /** 방장에게만 "다음 세트 시작하기" 버튼이 보인다 */
   isHost: boolean;
-  /** 자동 시작까지 남은 초. 방장이 안 눌러도 이 시간이 지나면 서버가 다음 세트를 연다 */
+  /**
+   * 다음 게임 소개 화면으로 넘어갈 때까지 남은 초. 방장이 안 눌러도 이 시간이 지나면 서버가
+   * 룰 설명 구간을 열고(그 뒤 8초) 다음 세트를 연다 — 즉 이 카운트다운이 0이 돼도 게임이
+   * 바로 시작하는 것은 아니다.
+   */
   secondsLeft: number | null;
   /** [방장 전용] 지금 바로 다음 세트로. 화면 전환은 game:started가 담당한다 */
   onNext: () => void;
@@ -170,7 +174,7 @@ export function SetResultScreen({
               <p className="set-result__next-wait">방장이 다음 세트를 시작할 수 있어요</p>
             )}
             {secondsLeft !== null && !starting && nextGameLabel !== null && (
-              <p className="set-result__next-timer">{secondsLeft}초 뒤 자동으로 시작돼요</p>
+              <p className="set-result__next-timer">{secondsLeft}초 뒤 게임 소개로 넘어가요</p>
             )}
           </div>
         </section>

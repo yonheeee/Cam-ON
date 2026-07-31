@@ -5,6 +5,7 @@ import { ChatPanel } from '../../chat/components/ChatPanel';
 import type { ChatMessage } from '../../chat/hooks/useRoomChat';
 import { PixelConfirmModal } from '../../system/components/PixelConfirmModal';
 import { roomApi, RoomApiError } from '../api/roomApi';
+import { SettingsModal } from './SettingsModal';
 import { StartPreflightModal } from './StartPreflightModal';
 import { useRoomLobby } from '../hooks/useRoomLobby';
 import { GameSetupScreen } from '../../course/components/GameSetupScreen';
@@ -78,6 +79,7 @@ export function LobbyScreen({
   const [toast, setToast] = useState<{ text: string; tone: 'check' | 'host' } | null>(null);
   const [courseCollapsed, setCourseCollapsed] = useState(false);
   const [confirmLeave, setConfirmLeave] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [readyPending, setReadyPending] = useState(false);
   // 강퇴 확인 팝업 대상. 닉네임은 팝업 문구용.
   const [kickTarget, setKickTarget] = useState<{ participantId: string; nickname: string } | null>(
@@ -603,8 +605,8 @@ export function LobbyScreen({
           <button
             type="button"
             className="pap-pixel-btn lobby-screen__settings-btn"
-            disabled
-            title="환경설정 — 카메라/마이크/인식 테스트 (준비 중)"
+            onClick={() => setSettingsOpen(true)}
+            title="환경설정 — 카메라/마이크/인식 테스트"
           >
             {GearIcon}
             환경설정
@@ -702,6 +704,7 @@ export function LobbyScreen({
           {toast.text}
         </div>
       )}
+      {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
       {/* 게임 구성 — 팝업이 아니라 대기방 위를 덮는 전체 화면 (라우트 이동 없이 연결 유지) */}
       {courseEditorOpen && (
         <GameSetupScreen

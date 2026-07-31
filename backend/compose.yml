@@ -68,9 +68,30 @@ services:
       - camon-network
     restart: unless-stopped
 
+  metabase:
+    image: metabase/metabase:v0.50.32
+    container_name: camon-metabase
+    profiles:
+      - analytics
+    environment:
+      MB_DB_FILE: /metabase-data/metabase.db
+      JAVA_TIMEZONE: Asia/Seoul
+    ports:
+      # Localhost-only by default. User-test participants cannot reach this port.
+      - "127.0.0.1:${METABASE_PORT:-3001}:3000"
+    volumes:
+      - metabase-data:/metabase-data
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - camon-network
+    restart: unless-stopped
+
 networks:
   camon-network:
     name: camon-network
 
 volumes:
   mysql-data:
+  metabase-data:
