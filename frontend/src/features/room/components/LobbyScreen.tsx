@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ParticipantTile, useLocalParticipant, useTracks } from '@livekit/components-react';
 import { Track } from 'livekit-client';
 import { ChatPanel } from '../../chat/components/ChatPanel';
@@ -13,20 +13,19 @@ import { useTopics } from '../../course/hooks/useTopics';
 import {
   CamOffIcon,
   CamOnIcon,
+  CheckCircleIcon,
   CheckIcon,
   ChevronDownIcon,
   ChevronUpIcon,
   CopyIcon,
-  DisconnectedIcon,
+  CrownIcon,
   GearIcon,
-  InfoIcon,
   KickIcon,
   LinkIcon,
   MicOffIcon,
   MicOnIcon,
   PlayIcon,
-  ReadyIcon,
-  WaitingIcon,
+  SpinnerIcon,
 } from './lobbyIcons';
 import './LobbyScreen.css';
 
@@ -63,7 +62,8 @@ export function LobbyScreen({
   onSendChat,
 }: LobbyScreenProps) {
   const { room, error, toggleReady, kicked } = useRoomLobby(roomId, accessToken, participantId);
-  const [toast, setToast] = useState<string | null>(null);
+  // 토스트는 Figma `Shared / Toast`의 Type에 대응한다 (code/link 복사 = 체크, 방장 위임 = 왕관)
+  const [toast, setToast] = useState<{ text: string; tone: 'check' | 'host' } | null>(null);
   const [courseCollapsed, setCourseCollapsed] = useState(false);
   const [confirmLeave, setConfirmLeave] = useState(false);
   const [readyPending, setReadyPending] = useState(false);
@@ -153,10 +153,28 @@ export function LobbyScreen({
     ]),
   );
 
-  const showToast = (text: string) => {
-    setToast(text);
-    setTimeout(() => setToast(null), 1500);
-  };
+  // 토스트 타이머는 ref로 들고 간다. effect의 cleanup에 걸면 room 스냅샷이 갱신될 때마다
+  // (하트비트·준비 상태 변경 등) 타이머가 취소돼서 토스트가 안 사라진다.
+  const toastTimerRef = useRef<number | null>(null);
+  const showToast = useCallback((text: string, tone: 'check' | 'host' = 'check') => {
+    if (toastTimerRef.current !== null) clearTimeout(toastTimerRef.current);
+    setToast({ text, tone });
+    toastTimerRef.current = window.setTimeout(
+      () => {
+        setToast(null);
+        toastTimerRef.current = null;
+      },
+      tone === 'host' ? 2600 : 1500,
+    );
+  }, []);
+
+  // 언마운트 시에만 정리
+  useEffect(
+    () => () => {
+      if (toastTimerRef.current !== null) clearTimeout(toastTimerRef.current);
+    },
+    [],
+  );
 
   const copy = async (kind: 'code' | 'link') => {
     if (!room) return;
@@ -198,6 +216,21 @@ export function LobbyScreen({
       setReadyPending(false);
     }
   };
+
+  // 방장 위임 알림 — 서버 host:changed로 room.hostParticipantId가 바뀌면 토스트를 띄운다.
+  // (Figma `Shared / Toast` Type=Host Transferred) 첫 진입 시에는 띄우지 않는다.
+  const prevHostRef = useRef<string | null>(null);
+  useEffect(() => {
+    const nextHost = room?.hostParticipantId ?? null;
+    if (!nextHost) return;
+    const prevHost = prevHostRef.current;
+    prevHostRef.current = nextHost;
+    // 첫 스냅샷(prevHost 없음)이나 변화 없음이면 알리지 않는다
+    if (!prevHost || prevHost === nextHost) return;
+    const nickname =
+      room?.participants.find((p) => p.participantId === nextHost)?.nickname ?? '알 수 없음';
+    showToast(`방장이 ${nickname}님으로 변경됐어요`, 'host');
+  }, [room, showToast]);
 
   // 스페이스바 단축키 — 방장은 게임 시작, 참가자는 준비 토글. 마우스 없이 대기방을 진행할 수
   // 있게 한다. 오작동 방지 가드:
@@ -291,10 +324,23 @@ export function LobbyScreen({
                     <span className="lobby-tile__avatar-initial">{[...nickname][0] ?? '?'}</span>
                   </span>
                   <ParticipantTile trackRef={trackRef} disableSpeakingIndicator />
+                  {/* 방장 표시 — 영상 우측 상단 왕관. 내 화면이든 게스트 화면이든 동일. */}
+                  {isHost && (
+                    <span className="lobby-tile__host-badge" title="방장" aria-label="방장">
+                      {CrownIcon}
+                    </span>
+                  )}
+                  {/* 준비 완료 — 영상 좌측 상단 스티커 배지 (하단 바 아이콘보다 눈에 잘 띄게) */}
+                  {showReady && (
+                    <span className="lobby-tile__ready-badge">
+                      {CheckIcon}
+                      READY!
+                    </span>
+                  )}
                   {/* Figma `Shared / User Card / Reconnecting Overlay` — 하트비트 재연결 유예(15초) */}
                   {offline && (
                     <div className="lobby-tile__offline">
-                      {DisconnectedIcon}
+                      {SpinnerIcon}
                       <span className="lobby-tile__offline-title">
                         연결을 다시 확인하고 있어요
                       </span>
@@ -310,6 +356,7 @@ export function LobbyScreen({
                       {info?.isHost ? '방장' : '참여자'}
                       {isMe ? ' · 나' : ''}
                     </span>
+                    {/* 내 캠/마이크 토글은 항상 노출 (28×28, 채팅 전송 버튼과 같은 규격) */}
                     {isMe && (
                       <span className="lobby-tile__controls">
                         <button
@@ -339,7 +386,7 @@ export function LobbyScreen({
                     {/* 방장에게만: 다른 참가자 타일에 강퇴 버튼. 대상이 방장 타일인 경우는
                         없다(방장=나, 내 타일엔 안 그림). 실제 실행은 확인 팝업을 거친다. */}
                     {amHost && !isMe && info && (
-                      <span className="lobby-tile__controls">
+                      <span className="lobby-tile__controls lobby-tile__controls--kick">
                         <button
                           type="button"
                           className="lobby-tile__control lobby-tile__control--kick"
@@ -353,15 +400,7 @@ export function LobbyScreen({
                         </button>
                       </span>
                     )}
-                    {/* Figma는 방장 타일에도 check_circle을 표시한다 (방장은 항상 준비 상태) */}
-                    <span
-                      className={`lobby-tile__status${
-                        ready || isHost ? ' lobby-tile__status--ready' : ''
-                      }`}
-                      title={ready || isHost ? '준비 완료' : '대기 중'}
-                    >
-                      {ready || isHost ? ReadyIcon : WaitingIcon}
-                    </span>
+                    {/* 준비 상태는 영상 좌측 상단 READY! 배지가 전담한다 — 하단 바에는 표시하지 않는다 */}
                   </div>
                 </div>
               );
@@ -443,12 +482,9 @@ export function LobbyScreen({
                 구성 변경
               </button>
             )}
-            {/* Figma는 3세트 기준(104×91, 간격 36). 4세트 이상은 --dense로 균등 분배한다. */}
-            <ol
-              className={`lobby-screen__sets${
-                courseItems.length > 3 ? ' lobby-screen__sets--dense' : ''
-              }`}
-            >
+            {/* Figma는 3세트 기준(104×91, 간격 36). 4세트 이상이면 카드를 줄이지 않고
+                좌우 스크롤로 넘긴다 (스크롤바는 마우스를 올릴 때만 보인다). */}
+            <ol className="lobby-screen__sets">
               {courseItems.map((item) => (
                 <li
                   key={item.idx}
@@ -460,7 +496,6 @@ export function LobbyScreen({
                   <span className="lobby-screen__set-number">
                     {String(item.idx).padStart(2, '0')}
                   </span>
-                  <span className="lobby-screen__set-icon">{InfoIcon}</span>
                   <strong className="lobby-screen__set-name">
                     {GAME_LABELS[item.gameName] ?? item.gameName}
                   </strong>
@@ -562,11 +597,11 @@ export function LobbyScreen({
         </aside>
       </div>
 
-      {/* Figma `Shared / Toast` — 화면 상단 중앙, 체크 아이콘 + 문구 */}
+      {/* Figma `Shared / Toast` — 화면 상단 중앙, 아이콘 + 문구. 자동으로 사라진다. */}
       {toast && (
-        <div className="pap-toast">
-          {CheckIcon}
-          {toast}
+        <div className={`pap-toast${toast.tone === 'host' ? ' pap-toast--host' : ''}`}>
+          {toast.tone === 'host' ? CrownIcon : CheckCircleIcon}
+          {toast.text}
         </div>
       )}
       {courseEditorOpen && (
@@ -584,6 +619,7 @@ export function LobbyScreen({
         {confirmLeave && (
           <PixelConfirmModal
             title="정말 방을 나갈까요?"
+            message="현재 방과 게임 결과에서 나가 메인 화면으로 이동해요."
             confirmLabel="방 나가기"
             cancelLabel="취소"
             tone="danger"

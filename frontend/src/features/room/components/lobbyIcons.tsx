@@ -16,20 +16,6 @@ export const LinkIcon = (
   </svg>
 );
 
-export const ReadyIcon = (
-  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-    <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.8" />
-    <path d="m5.2 8.2 2 2 3.6-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
-);
-
-export const WaitingIcon = (
-  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-    <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.8" />
-    <path d="M8 4.8V8l2.2 1.6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-  </svg>
-);
-
 export const CamOnIcon = (
   <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
     <rect x="1.5" y="4" width="9" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.8" />
@@ -67,12 +53,30 @@ export const GearIcon = (
   </svg>
 );
 
-// 게임 세트 카드 우상단 — Material "info" (아케이드 블루로 상속 색 사용)
-export const InfoIcon = (
-  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-    <circle cx="8" cy="8" r="6.4" stroke="currentColor" strokeWidth="1.5" />
-    <path d="M8 7.1v4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-    <circle cx="8" cy="4.9" r="0.95" fill="currentColor" />
+// 방장 표시 — 금색 채움 + 잉크 외곽선. 색은 currentColor(--pap-host-gold)로 제어한다.
+export const CrownIcon = (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path
+      d="M3 8v9.5h18V8l-4.5 3L12 5.5 7.5 11 3 8Z"
+      fill="currentColor"
+      stroke="var(--pap-ink, #2b1833)"
+      strokeWidth="1.8"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
+// 토스트 앞머리 — 초록 원형 채움 + 흰 체크 (Figma `Icon / check`)
+export const CheckCircleIcon = (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <circle cx="12" cy="12" r="10" fill="currentColor" />
+    <path
+      d="m7.2 12.4 3.2 3.2 6.4-7"
+      stroke="#fffdf5"
+      strokeWidth="2.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
   </svg>
 );
 
@@ -108,33 +112,6 @@ export const ChevronDownIcon = (
   </svg>
 );
 
-/* 게임 아이콘 — 랜딩 배경의 부스 간판(물병/손바닥) 모티프를 단순화 */
-
-export const FetchGameIcon = (
-  <svg width="18" height="18" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-    <path
-      d="M6.5 2h3M7 2v3l-2.2 2A2 2 0 0 0 4.3 8.5V12a2 2 0 0 0 2 2h3.4a2 2 0 0 0 2-2V8.5a2 2 0 0 0-.5-1.5L9 5V2"
-      stroke="currentColor"
-      strokeWidth="1.6"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-    <path d="M6 10h4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-  </svg>
-);
-
-export const HandGameIcon = (
-  <svg width="18" height="18" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-    <path
-      d="M5 8V3.8a1 1 0 0 1 2 0V7m0-3.9a1 1 0 0 1 2 0V7m0-2.6a1 1 0 0 1 2 0V8m0-1.2a1 1 0 0 1 2 0V10a4.5 4.5 0 0 1-4.5 4.5h-.8A4.2 4.2 0 0 1 4 12.6L2.6 10a1 1 0 0 1 1.7-1L5 10"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  </svg>
-);
-
 // 강퇴 버튼(방장 전용) — 캠/마이크 토글과 같은 크기의 X.
 export const KickIcon = (
   <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -142,25 +119,21 @@ export const KickIcon = (
   </svg>
 );
 
-// 연결 끊김(재접속 유예 중) 타일 오버레이용 — 다른 아이콘보다 크게 쓰므로 32px.
-export const DisconnectedIcon = (
-  <svg width="32" height="32" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-    <path d="M1.9 5.9a8.6 8.6 0 0 1 12.2 0" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-    <path d="M4.5 8.6a5 5 0 0 1 7 0" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-    <circle cx="8" cy="12.2" r="1.1" fill="currentColor" />
-    <path d="m2.2 2.2 11.6 11.6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+// 재접속 대기 로딩 — 원을 따라 8개 픽셀 블록이 돌아가는 아케이드형 스피너.
+// (CSS에서 steps(8)로 회전시켜 한 칸씩 딸깍 넘어가게 한다)
+export const SpinnerIcon = (
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    {[0, 45, 90, 135, 180, 225, 270, 315].map((deg, i) => (
+      <rect
+        key={deg}
+        x="10.6"
+        y="1.6"
+        width="2.8"
+        height="5.2"
+        opacity={0.16 + i * 0.12}
+        transform={`rotate(${deg} 12 12)`}
+      />
+    ))}
   </svg>
 );
 
-export const CharadesGameIcon = (
-  <svg width="18" height="18" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-    <circle cx="8" cy="3.5" r="2" stroke="currentColor" strokeWidth="1.6" />
-    <path
-      d="M8 5.5v4M8 7 4.5 5M8 7l3.5-2M8 9.5 5.5 14M8 9.5l2.5 4.5"
-      stroke="currentColor"
-      strokeWidth="1.6"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  </svg>
-);

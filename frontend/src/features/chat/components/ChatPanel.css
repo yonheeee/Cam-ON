@@ -50,8 +50,9 @@
   word-break: break-word;
 }
 
+/* Mona12는 400/700 두 종만 있어서 600은 실제로 700으로 렌더된다 — 값을 맞춰둔다 */
 .chat-panel__nickname {
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .chat-panel__form {

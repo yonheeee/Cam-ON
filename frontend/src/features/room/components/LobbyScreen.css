@@ -215,9 +215,15 @@
   width: 100%;
   min-height: 0;
   background: transparent;
+  /* LiveKit 기본 스타일이 타일에 radius를 넣어서 영상 네 모서리가 깎이고
+     그 자리에 카드 배경(크림)이 비쳤다. 영상은 각지게 꽉 채운다.
+     카드 바깥 모서리는 .lobby-tile의 radius 8 + overflow:hidden이 담당한다. */
+  border-radius: 0;
+  overflow: hidden;
 }
 
 .lobby-tile .lk-participant-media-video {
+  border-radius: 0;
   object-fit: cover;
 }
 
@@ -228,6 +234,68 @@
 
 .lobby-tile .lk-participant-metadata {
   display: none;
+}
+
+/* ---------- 영상 위 오버레이 배지 ---------- */
+
+/* 준비 완료 — 영상 좌측 상단에 아케이드 스티커처럼 얹는다.
+   색·외곽선·그림자는 Pixel Arcade Plaza 규격 (선택 상태 살구색 + 잉크 외곽선 2 + 그림자 2). */
+.lobby-tile__ready-badge {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  box-sizing: border-box;
+  height: 30px;
+  padding: 0 11px;
+  border: var(--pap-stroke-control) solid var(--pap-ink);
+  border-radius: var(--pap-radius);
+  background: var(--pap-selection-apricot);
+  color: var(--pap-ink);
+  box-shadow: var(--pap-shadow-icon) var(--pap-shadow-icon) 0 rgb(41 33 58 / 0.5);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1;
+  white-space: nowrap;
+  /* 살짝 기울여 붙인 스티커 느낌 (티켓 코드 타일과 같은 각도) */
+  transform: rotate(-2deg);
+  pointer-events: none;
+}
+
+.lobby-tile__ready-badge svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+
+/* 방장 — 영상 우측 상단 왕관 배지. 내 타일이든 남의 타일이든 방장이면 항상 표시. */
+.lobby-tile__host-badge {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 32px;
+  height: 32px;
+  border: var(--pap-stroke-control) solid var(--pap-ink);
+  border-radius: var(--pap-radius);
+  background: var(--pap-white);
+  color: var(--pap-host-gold);
+  box-shadow: var(--pap-shadow-icon) var(--pap-shadow-icon) 0 var(--pap-shadow-color);
+  transform: rotate(2deg);
+  pointer-events: none;
+}
+
+.lobby-tile__host-badge svg {
+  width: 20px;
+  height: 20px;
 }
 
 /* ---------- 타일 하단 정보 바 (높이 고정) ---------- */
@@ -247,6 +315,7 @@
   position: absolute;
   top: 11px; /* Figma 13 */
   left: 16px; /* Figma 18 */
+  /* 우측 캠·마이크 버튼(28+6+28) + 여백 16 + 간격까지 비워둔다 */
   max-width: calc(100% - 110px);
   overflow: hidden;
   font-size: 15px;
@@ -267,65 +336,65 @@
   white-space: nowrap;
 }
 
-/* 준비 상태 아이콘 — Figma `Ready Status / check_circle | schedule` 24×24, 우측 16 */
-.lobby-tile__status {
-  position: absolute;
-  top: 16px; /* Figma 18 */
-  right: 16px;
-  display: inline-flex;
-  width: 24px;
-  height: 24px;
-  color: var(--pap-festival-coral);
-}
+/* 준비 상태는 영상 좌측 상단 READY! 배지가 전담한다 — 하단 바의 체크/시계 아이콘은 제거했다. */
 
-.lobby-tile__status svg {
-  width: 100%;
-  height: 100%;
-}
-
-.lobby-tile__status--ready {
-  color: var(--pap-arcade-teal);
-}
-
-/* 캠/마이크 토글·강퇴 — Figma 목업에는 없는 실기능 컨트롤이라 기본 상태에서는 숨기고,
-   타일에 마우스를 올리거나 키보드 포커스가 들어올 때만 상태 아이콘 왼쪽에 나타낸다. */
+/* 캠/마이크 토글 — 내 타일에 항상 보인다. 크기·외곽선·그림자를 채팅 전송 버튼과
+   같은 규격(28×28 · 외곽선 2 · radius 6 · 그림자 2 · 아이콘 16)으로 통일했다. */
 .lobby-tile__controls {
   position: absolute;
-  top: 17px;
-  right: 48px;
+  top: 14px;
+  right: 16px; /* 상태 아이콘이 빠진 자리까지 당김 (Figma 우측 여백 16) */
   display: inline-flex;
   gap: 6px;
+}
+
+/* 강퇴만 오조작 위험이 있어 hover/포커스 때만 노출한다 */
+.lobby-tile__controls--kick {
   opacity: 0;
   transition: opacity 100ms ease-out;
   pointer-events: none;
 }
 
-.lobby-tile:hover .lobby-tile__controls,
-.lobby-tile:focus-within .lobby-tile__controls {
+.lobby-tile:hover .lobby-tile__controls--kick,
+.lobby-tile:focus-within .lobby-tile__controls--kick {
   opacity: 1;
   pointer-events: auto;
 }
 
 .lobby-tile__control {
   display: inline-flex;
+  flex: none;
   align-items: center;
   justify-content: center;
   box-sizing: border-box;
-  width: 22px;
-  height: 22px;
+  width: 28px;
+  height: 28px;
   padding: 0;
   border: var(--pap-stroke-control) solid var(--pap-ink);
-  border-radius: 5px;
+  border-radius: var(--pap-radius);
   background: var(--pap-white);
   color: var(--pap-ink);
+  box-shadow: var(--pap-shadow-icon) var(--pap-shadow-icon) 0 rgb(41 33 58 / 0.5);
   cursor: pointer;
+  transition: transform 60ms ease-out, box-shadow 60ms ease-out;
 }
 
 .lobby-tile__control svg {
-  width: 68%;
-  height: 68%;
+  width: 16px;
+  height: 16px;
 }
 
+.lobby-tile__control:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 3px 3px 0 rgb(41 33 58 / 0.5);
+}
+
+.lobby-tile__control:active {
+  transform: translate(2px, 2px);
+  box-shadow: 0 0 0 rgb(41 33 58 / 0.5);
+}
+
+/* 꺼진 상태 / 강퇴 hover — 코랄 배경 + 흰 아이콘 */
 .lobby-tile__control--off,
 .lobby-tile__control--kick:hover {
   background: var(--pap-festival-coral);
@@ -504,22 +573,30 @@
   transform: rotate(-2deg);
 }
 
+/* 티켓 우측 청록 스텁 안에 코드/링크 복사 버튼.
+   스텁 중심을 배경 이미지에서 실측: code-area 기준 x 328.7 / y 43.2.
+   버튼 36 + 간격 6 + 버튼 36 = 78 → top = 43.2 - 39 */
 .lobby-screen__ticket-actions {
   position: absolute;
-  top: 10.64px;
-  left: 314.42px;
+  top: 4.2px;
+  left: 310.7px;
   display: flex;
   flex-direction: column;
-  gap: 4.84px; /* 46.44 - 10.64 - 30.96 */
+  gap: 6px;
 }
 
 .lobby-screen__ticket-actions .lobby-screen__icon-btn {
-  width: 30.96px;
-  height: 30.96px;
-  border-width: 1.94px;
-  border-radius: 5.81px;
+  width: 36px;
+  height: 36px;
+  border-width: var(--pap-stroke-control);
+  border-radius: var(--pap-radius);
   background: var(--pap-ticket-cream);
-  box-shadow: 1.94px 1.94px 0 rgb(43 24 51 / 0.5);
+  box-shadow: var(--pap-shadow-icon) var(--pap-shadow-icon) 0 rgb(43 24 51 / 0.5);
+}
+
+.lobby-screen__ticket-actions .lobby-screen__icon-btn svg {
+  width: 20px;
+  height: 20px;
 }
 
 /* ---------- 공용 작은 아이콘 버튼 ---------- */
@@ -636,7 +713,9 @@
   box-shadow: 0 0 0 rgb(43 24 51 / 0.5);
 }
 
-/* 세트 카드 줄 — Figma 3장 기준 (14/154/294, 104×91 → gap 36) */
+/* 세트 카드 줄 — Figma 3장 기준(14/154/294, 104×91 → gap 36).
+ * 4세트 이상이면 카드를 줄이지 않고 좌우 스크롤로 넘긴다. 카드 크기는 항상 104×91 고정.
+ * 높이 104 = 카드 91 + 그림자 4 + 여유 3 + 스크롤바 6 (카드 아래 그림자가 잘리지 않게) */
 .lobby-screen__sets {
   position: absolute;
   top: 62px;
@@ -644,9 +723,40 @@
   display: flex;
   gap: 36px;
   width: 384px;
+  height: 104px;
   margin: 0;
   padding: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
   list-style: none;
+  /* 스크롤바는 평소 안 보이고, 목록에 마우스를 올리거나 포커스가 들어올 때만 나타난다 */
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+}
+
+.lobby-screen__sets:hover,
+.lobby-screen__sets:focus-within {
+  scrollbar-color: rgb(43 24 51 / 0.35) transparent;
+}
+
+.lobby-screen__sets::-webkit-scrollbar {
+  height: 6px;
+}
+
+.lobby-screen__sets::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.lobby-screen__sets::-webkit-scrollbar-thumb {
+  border-radius: 3px;
+  background: transparent;
+}
+
+.lobby-screen__sets:hover::-webkit-scrollbar-thumb,
+.lobby-screen__sets:focus-within::-webkit-scrollbar-thumb {
+  background: rgb(43 24 51 / 0.35);
 }
 
 .lobby-screen__set {
@@ -659,68 +769,50 @@
   border: var(--pap-stroke-control) solid var(--pap-arcade-blue);
   border-radius: var(--pap-radius);
   background: var(--pap-plaza-cream);
+  /* 다른 카드들처럼 단단한 픽셀 그림자. 작은 카드라 4px로 둔다 */
+  box-shadow: 4px 4px 0 rgb(43 24 51 / 0.28);
+  scroll-snap-align: start;
 }
 
-/* 4세트 이상은 Figma 간격(36)으로 384px에 안 들어가므로 균등 분배로 접는다 */
-.lobby-screen__sets--dense {
-  gap: 8px;
-}
-
-.lobby-screen__sets--dense .lobby-screen__set {
-  flex: 1 1 0;
-  width: auto;
-  min-width: 0;
-}
-
+/* 세트 순서는 카드 좌상단 모서리에 얹는 배지로 뺐다.
+   이름/라운드가 쓸 수 있는 폭·높이를 확보해서 글자를 키우기 위함. */
 .lobby-screen__set-number {
   position: absolute;
-  top: 7px;
-  left: 8px;
-  color: var(--pap-arcade-blue);
+  top: 0;
+  left: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 28px;
+  height: 19px;
+  border-bottom-right-radius: var(--pap-radius);
+  background: var(--pap-arcade-blue);
+  color: var(--pap-white);
   font-size: 11px;
   font-weight: 700;
   line-height: 1;
 }
 
-.lobby-screen__set-icon {
-  position: absolute;
-  top: 6px;
-  right: 8px;
-  display: inline-flex;
-  width: 16px;
-  height: 16px;
-  color: var(--pap-arcade-blue);
-}
-
-.lobby-screen__set-icon svg {
-  width: 100%;
-  height: 100%;
-}
-
 .lobby-screen__set-name {
   position: absolute;
-  top: 29px;
+  top: 24px;
   left: 8px;
   display: block;
   width: 84px;
-  height: 32px;
+  height: 45px; /* 3줄 */
   overflow: hidden;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
-  line-height: 13px;
-}
-
-.lobby-screen__sets--dense .lobby-screen__set-name {
-  right: 8px;
-  width: auto;
+  line-height: 15px;
 }
 
 .lobby-screen__set-rounds {
   position: absolute;
-  top: 66px;
+  top: 71px;
   left: 8px;
   color: var(--pap-text-muted);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 400;
   line-height: 1;
 }
@@ -831,19 +923,21 @@
   font-size: 14px;
 }
 
-/* 주 액션(게임 시작 / 준비) — 확정 규칙: 항상 아케이드 오렌지. 참여자 4색은 쓰지 않는다. */
-.lobby-screen__primary-btn {
+/* 주 액션(게임 시작 / 준비 하기) — 확정 규칙: 항상 아케이드 오렌지.
+   NOTE: 위 `.lobby-screen__actions .pap-pixel-btn`이 클래스 2개(0,2,0)라
+   `.lobby-screen__primary-btn` 단독(0,1,0)으로는 배경이 안 먹는다. 선택자를 맞춰야 한다. */
+.lobby-screen__actions .lobby-screen__primary-btn {
   background: var(--pap-arcade-orange);
 }
 
 /* 준비 완료 — Figma `Lobby / Ready Complete Action` (1586:150).
-   살구색이지만 그림자는 5px 그대로 유지한다 (눌린 채 고정이 아니다). */
-.lobby-screen__ready-btn--on {
+   메인 페이지 인원수 "선택됨"과 같은 살구색. 그림자는 5px 그대로 유지한다. */
+.lobby-screen__actions .lobby-screen__ready-btn--on {
   background: var(--pap-selection-apricot);
 }
 
-/* 준비/게임시작 라벨은 Figma 13px (환경설정 14 · 게임시작 15와 별도) */
-.lobby-screen__ready-btn--on,
+/* 준비 하기 / 준비 완료 라벨은 Figma 13px (환경설정 14 · 게임 시작 15와 별도) */
+.lobby-screen__actions .lobby-screen__ready-btn--on,
 .lobby-screen__actions .lobby-screen__primary-btn--ready {
   font-size: 13px;
 }

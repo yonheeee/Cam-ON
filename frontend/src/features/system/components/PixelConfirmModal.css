@@ -33,13 +33,16 @@
 }
 
 .confirm-modal__actions > * {
+  /* box-shadow를 직접 덮어쓰면 hover/active(:hover가 우선순위 높음)에서 색·크기가 튄다.
+     오프셋만 바꿔주면 .pap-pixel-btn의 hover/active 계산이 그대로 이어진다. */
+  --pap-shadow-offset: 3px;
   flex: 1;
   height: 52px;
   padding: 0 14px;
   border-radius: 12px;
   font-family: var(--camon-font);
   font-size: 14px;
-  box-shadow: 3px 3px 0 rgb(43 24 51 / 45%);
+  font-weight: 700;
   /* "방 나가기"가 좁은 버튼에서 두 줄로 꺾이지 않게 */
   white-space: nowrap;
 }

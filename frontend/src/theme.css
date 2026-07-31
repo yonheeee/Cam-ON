@@ -88,6 +88,11 @@
   --pap-shadow-card: 5px;
   --pap-shadow-icon: 2px;
   --pap-radius-popup: 12px;
+  /* Figma 효과 `Pixel Plaza / Hard Offset 5` = #29213A85 (알파 0.52).
+     불투명 잉크색을 그림자로 쓰면 검게 떠 보이므로 항상 이 토큰을 쓴다. */
+  --pap-shadow-color: rgb(41 33 58 / 0.52);
+  --pap-host-gold: #eeab1e; /* 방장 왕관 */
+  --pap-success-teal: #12a594; /* 토스트 완료 체크 (초록빛 청록) */
 }
 
 /* ---- 전체 화면 스테이지 ----
@@ -168,7 +173,9 @@
  * Type: Code Copied / Link Copied (244×48) · Host Transferred (276×56) */
 .pap-toast {
   position: fixed;
-  top: 46px;
+  /* 참가자 영상 카드와 겹치지 않게 화면 최상단 쪽에 붙인다.
+     (본문 시작 y는 화면 높이에 따라 88~134로 줄어들 수 있어서 여유를 크게 둔다) */
+  top: 14px;
   left: 50%;
   z-index: 200;
   display: inline-flex;
@@ -179,14 +186,15 @@
   min-width: 244px;
   height: 48px;
   padding: 0 18px;
-  border: 3px solid var(--pap-ink);
+  border: var(--pap-stroke-panel) solid var(--pap-ink);
   border-radius: 14px;
   background: #fff7e2;
   color: var(--pap-ink);
-  box-shadow: 5px 5px 0 rgb(41 33 58 / 0.52);
+  box-shadow: var(--pap-shadow-card) var(--pap-shadow-card) 0 var(--pap-shadow-color);
   font-family: var(--pap-font-pixel);
   font-size: 14px;
   font-weight: 700;
+  letter-spacing: 0;
   white-space: nowrap;
   transform: translateX(-50%);
   animation: pap-toast-in 120ms ease-out;
@@ -197,6 +205,23 @@
   flex: none;
   width: 18px;
   height: 18px;
+  color: var(--pap-success-teal);
+}
+
+/* Figma `Shared / Toast` Type=Host Transferred — 크림 #fffbf0 · radius 18 · 276×56 · 아이콘 24 */
+.pap-toast--host {
+  min-width: 276px;
+  height: 56px;
+  gap: 12px;
+  border-radius: 18px;
+  background: #fffbf0;
+  font-size: 15px;
+}
+
+.pap-toast--host svg {
+  width: 24px;
+  height: 24px;
+  color: var(--pap-host-gold);
 }
 
 @keyframes pap-toast-in {
@@ -235,6 +260,8 @@
 .pap-pixel-btn {
   font-family: var(--pap-font-pixel);
   font-size: 20px;
+  /* 디자인 가이드 TYPOGRAPHY: "버튼 라벨은 짧고 굵게" — 모든 픽셀 버튼 라벨은 Bold */
+  font-weight: 700;
   line-height: 1;
   color: var(--pap-ink);
   background: var(--pap-white);
@@ -242,7 +269,7 @@
   border-radius: var(--pap-radius);
   padding: 14px 28px;
   cursor: pointer;
-  box-shadow: var(--pap-shadow-offset) var(--pap-shadow-offset) 0 0 var(--pap-ink);
+  box-shadow: var(--pap-shadow-offset) var(--pap-shadow-offset) 0 0 var(--pap-shadow-color);
   transition: transform 60ms ease-out, box-shadow 60ms ease-out;
   image-rendering: pixelated;
   user-select: none;
@@ -250,12 +277,13 @@
 
 .pap-pixel-btn:hover:not(:disabled) {
   transform: translate(-1px, -1px);
-  box-shadow: calc(var(--pap-shadow-offset) + 1px) calc(var(--pap-shadow-offset) + 1px) 0 0 var(--pap-ink);
+  box-shadow: calc(var(--pap-shadow-offset) + 1px) calc(var(--pap-shadow-offset) + 1px) 0 0
+    var(--pap-shadow-color);
 }
 
 .pap-pixel-btn:active:not(:disabled) {
   transform: translate(var(--pap-shadow-offset), var(--pap-shadow-offset));
-  box-shadow: 0 0 0 0 var(--pap-ink);
+  box-shadow: 0 0 0 0 var(--pap-shadow-color);
 }
 
 .pap-pixel-btn:disabled {
@@ -298,6 +326,15 @@
 .pap-pixel-title {
   font-family: var(--pap-font-pixel);
   color: var(--pap-ink);
+}
+
+/* index.css의 `h1, h2 { font-weight: 500 }`이 제목에 걸리는데, Mona12는 400/700 두 종만
+ * 있어서 CSS 폰트 매칭 규칙상 500은 700이 아니라 400(Regular)으로 떨어진다 — 제목이
+ * bold로 안 보이던 원인. h1/h2 제목에만 700을 되돌린다(span/p에는 영향 없음).
+ * 참고: 600·800은 700으로 올라가므로 게임 화면들은 원래대로 bold다. */
+h1.pap-pixel-title,
+h2.pap-pixel-title {
+  font-weight: 700;
 }
 
 /* 픽셀 아트 이미지 공통: 확대 시 블러 방지 */
