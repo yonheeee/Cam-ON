@@ -552,9 +552,14 @@
 
 /* 시작 버튼이 왜 비활성인지 커서를 올리면 즉시 알려주는 말풍선.
    비활성 버튼의 네이티브 title 툴팁은 뜨기까지 지연이 길고 눈에 안 띄어 CSS로 직접 그린다. */
+/* 주 액션(방장 시작 / 참가자 준비)을 감싸는 래퍼 — 안 눌리는 이유를 말풍선으로 띄우기 위해
+   position: relative가 필요하다. 액션 행에서는 이 래퍼가 flex 아이템이므로, 버튼에 걸린
+   flex: 1이 아니라 래퍼가 flex: 1을 가져야 톱니 버튼을 뺀 나머지 너비를 다 쓴다
+   (주석의 "주 액션이 나머지 너비를 다 가진다"가 이걸 말한다). */
 .lobby-screen__start-wrap {
   position: relative;
   display: inline-flex;
+  flex: 1;
 }
 
 .lobby-screen__start-wrap[data-hint]:hover::after {

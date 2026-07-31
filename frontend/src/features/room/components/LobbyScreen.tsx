@@ -55,6 +55,16 @@ const GAME_ICONS: Record<GameName, typeof FetchGameIcon> = {
   CHARADES: CharadesGameIcon,
 };
 
+// 카메라를 끈 채로 게임에 들어가면 되돌릴 방법이 없다 — 게임 화면에는 카메라 토글이 없고
+// 대기방에만 있다. 그래서 캠이 꺼져 있으면 준비/시작을 막는다.
+//
+// 말풍선(data-hint)은 CSS가 nowrap이라 한 줄에 들어가는 길이여야 사이드바를 안 넘친다.
+// 이유를 더 길게 설명하는 문구는 토스트로만 쓴다.
+const CAMERA_OFF_HINT = '카메라를 켜야 준비할 수 있어요!';
+const CAMERA_OFF_MESSAGE = '카메라를 켜야 준비할 수 있어요 — 게임 중엔 다시 켤 수 없어요!';
+const CAMERA_OFF_READY_CLEARED = '카메라를 꺼서 준비가 취소됐어요.';
+const CAMERA_OFF_HOST_MESSAGE = '카메라를 켜야 시작할 수 있어요!';
+
 // 대기방 전체 화면 — 피그마 로비 시안 구조를 Pixel Arcade Plaza 테마로 구현.
 // 참가자 정보(이름/역할/준비, 내 캠·마이크 토글)는 비디오 타일 자체에 표시하고,
 // 사이드바는 게임 구성 + 채팅 + 액션. 참가자는 항상 닉네임으로만 표시한다.
@@ -195,6 +205,13 @@ export function LobbyScreen({
 
   const handleToggleReady = async () => {
     if (!self || readyPending) return;
+    // 카메라가 꺼진 채로 준비하면, 게임에 들어간 뒤엔 켤 방법이 없다 — 게임 화면(닌자/몸으로
+    // 말해요/물건 가져오기)에는 카메라 토글이 없고 대기방에만 있다. 캠 없이 신체 인식 게임을
+    // 하는 셈이 되므로 준비 자체를 막는다.
+    if (!isCameraEnabled) {
+      showToast(CAMERA_OFF_MESSAGE);
+      return;
+    }
     setReadyPending(true);
     try {
       await toggleReady(!self.ready);
@@ -204,6 +221,20 @@ export function LobbyScreen({
       setReadyPending(false);
     }
   };
+
+  // 준비를 마친 뒤 카메라를 끄면 준비를 되돌린다 — 위에서 "카메라 꺼짐 → 준비 불가"만 막으면
+  // 준비한 다음에 끄는 순서로 우회된다. 방장은 준비 토글을 쓰지 않고(시작 버튼이 곧 준비 의사)
+  // 방 생성 시부터 ready=true인 불변식이 있어서 제외한다 — 방장 캠은 아래 시작 게이트가 본다.
+  useEffect(() => {
+    if (amHost || isCameraEnabled) return;
+    if (!self?.ready) return;
+    showToast(CAMERA_OFF_READY_CLEARED);
+    void toggleReady(false).catch(() => {
+      // 실패해도 서버 ready는 그대로다 — 시작 게이트가 여전히 막으므로 조용히 넘어간다.
+    });
+    // showToast는 매 렌더 새 함수라 넣으면 매번 재실행된다(토스트가 계속 뜬다).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [amHost, isCameraEnabled, self?.ready, toggleReady]);
 
   // 스페이스바 단축키 — 방장은 게임 시작, 참가자는 준비 토글. 마우스 없이 대기방을 진행할 수
   // 있게 한다. 오작동 방지 가드:
@@ -233,6 +264,10 @@ export function LobbyScreen({
         if (starting) return;
         if (!course || course.items.length === 0) {
           showToast('코스를 정해주세요!');
+          return;
+        }
+        if (!isCameraEnabled) {
+          showToast(CAMERA_OFF_HOST_MESSAGE);
           return;
         }
         if (!allReturned) {
@@ -508,11 +543,13 @@ export function LobbyScreen({
                 data-hint={
                   course && course.items.length === 0
                     ? '코스를 정해주세요!'
-                    : !allReturned
-                      ? '아직 결과 화면을 보고 있는 참가자가 있어요!'
-                      : allOthersReady
-                        ? undefined
-                        : '모든 참가자가 준비를 완료해야 해요!'
+                    : !isCameraEnabled
+                      ? CAMERA_OFF_HOST_MESSAGE
+                      : !allReturned
+                        ? '아직 결과 화면을 보고 있는 참가자가 있어요!'
+                        : allOthersReady
+                          ? undefined
+                          : '모든 참가자가 준비를 완료해야 해요!'
                 }
               >
                 <button
@@ -521,11 +558,14 @@ export function LobbyScreen({
                   // 코스가 비면 시작할 게 없고(서버도 COURSE_EMPTY로 거부), 전원 준비 전에도
                   // 서버가 거부하므로(ROOM_NOT_ALL_READY) 둘 다 미리 막는다. 이전 코스 결과
                   // 화면에 남아 있는 사람이 있을 때도 마찬가지(ROOM_NOT_ALL_RETURNED).
+                  // 방장 카메라는 서버가 알 수 없어서(로컬 상태) 여기서만 막는다 — 게임에
+                  // 들어가면 켤 방법이 없다.
                   disabled={
                     starting ||
                     !room ||
                     !course ||
                     course.items.length === 0 ||
+                    !isCameraEnabled ||
                     !allReturned ||
                     !allOthersReady
                   }
@@ -533,27 +573,42 @@ export function LobbyScreen({
                 >
                   {starting
                     ? '시작 중...'
-                    : !allReturned
-                      ? '복귀 대기 중...'
-                      : allOthersReady
-                        ? '게임 시작 (Space)'
-                        : '준비 대기 중...'}
+                    : !isCameraEnabled
+                      ? '카메라 꺼짐'
+                      : !allReturned
+                        ? '복귀 대기 중...'
+                        : allOthersReady
+                          ? '게임 시작 (Space)'
+                          : '준비 대기 중...'}
                 </button>
               </span>
             ) : (
               // 준비되면 눌린 채 고정된 라임 버튼으로 — 누르는 순간의 "철컥" UX.
               // (확정안은 준비 버튼 제거 예정 — 백엔드 ready 규칙 정리 전까지 임시)
-              <button
-                type="button"
-                className={`pap-pixel-btn${
-                  self?.ready ? ' lobby-screen__ready-btn--on' : ' pap-pixel-btn--teal'
-                }`}
-                data-button-sound={self?.ready ? 'cancel' : 'ready'}
-                disabled={readyPending || !self}
-                onClick={() => void handleToggleReady()}
+              // 카메라가 꺼져 있으면 준비할 수 없다(이유는 말풍선으로 — 비활성 버튼의 title
+              // 툴팁만으론 눈에 안 띄어서 "버튼이 고장났다"로 읽힌다).
+              <span
+                className="lobby-screen__start-wrap"
+                data-hint={isCameraEnabled ? undefined : CAMERA_OFF_HINT}
               >
-                {readyPending ? '...' : self?.ready ? '준비 완료!' : '준비 하기 (Space)'}
-              </button>
+                <button
+                  type="button"
+                  className={`pap-pixel-btn${
+                    self?.ready ? ' lobby-screen__ready-btn--on' : ' pap-pixel-btn--teal'
+                  }`}
+                  data-button-sound={self?.ready ? 'cancel' : 'ready'}
+                  disabled={readyPending || !self || !isCameraEnabled}
+                  onClick={() => void handleToggleReady()}
+                >
+                  {readyPending
+                    ? '...'
+                    : !isCameraEnabled
+                      ? '카메라 꺼짐'
+                      : self?.ready
+                        ? '준비 완료!'
+                        : '준비 하기 (Space)'}
+                </button>
+              </span>
             )}
           </div>
           {startError && <p className="lobby-screen__error">{startError}</p>}
