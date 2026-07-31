@@ -24,6 +24,7 @@ import { useRoomHeartbeat } from '../../room/hooks/useRoomHeartbeat';
 import { clearRoom } from '../../room/lib/roomStorage';
 import { FetchCoursePanel } from '../../fetch/components/FetchCoursePanel';
 import { roomApi, RoomApiError, type ParticipantResponse } from '../../room/api/roomApi';
+import { analyticsApi } from '../../analytics/api/analyticsApi';
 import '@livekit/components-styles';
 import './VideoCallRoom.css';
 
@@ -182,6 +183,40 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
     accessToken,
     participantId,
   );
+  const recordedRoomEntryRef = useRef(false);
+  useEffect(() => {
+    if (recordedRoomEntryRef.current) return;
+    recordedRoomEntryRef.current = true;
+    void analyticsApi
+      .recordEvent(roomId, accessToken, {
+        eventName: 'ROOM_ENTERED',
+      })
+      .catch(() => {
+        // Analytics must never block or interrupt room entry.
+      });
+  }, [roomId, accessToken]);
+
+  const recordedResultIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!finished) {
+      recordedResultIdRef.current = null;
+      return;
+    }
+    const resultId = `${finished.totalSessions}:${finished.ranking
+      .map((entry) => `${entry.participantId}:${entry.totalScore}`)
+      .join(',')}`;
+    if (recordedResultIdRef.current === resultId) return;
+    recordedResultIdRef.current = resultId;
+    void analyticsApi
+      .recordEvent(roomId, accessToken, {
+        eventName: 'RESULT_SCREEN_VIEWED',
+        properties: { totalSessions: finished.totalSessions },
+      })
+      .catch(() => {
+        // Analytics must never block or interrupt the game result screen.
+      });
+  }, [finished, roomId, accessToken]);
+
   // 이벤트로 받은 세션이 우선이고, 놓친 경우(늦은 접속/재접속)엔 아래 복구 경로가 채운다.
   const [recoveredSession, setRecoveredSession] = useState<GameStartedData | null>(null);
   const session = activeSession ?? recoveredSession;

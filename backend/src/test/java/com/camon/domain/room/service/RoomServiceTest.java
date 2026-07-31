@@ -10,6 +10,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.camon.domain.media.service.LiveKitTokenService;
+import com.camon.domain.analytics.service.AnalyticsExitContextResolver;
 import com.camon.domain.room.domain.ConnectionStatus;
 import com.camon.domain.room.domain.Participant;
 import com.camon.domain.room.domain.Room;
@@ -57,6 +58,7 @@ class RoomServiceTest {
     private LiveKitTokenService liveKitTokenService;
     private RoomConnectionService roomConnectionService;
     private ApplicationEventPublisher applicationEventPublisher;
+    private AnalyticsExitContextResolver analyticsExitContextResolver;
     private RoomService roomService;
 
     @BeforeEach
@@ -70,6 +72,7 @@ class RoomServiceTest {
         liveKitTokenService = mock(LiveKitTokenService.class);
         roomConnectionService = mock(RoomConnectionService.class);
         applicationEventPublisher = mock(ApplicationEventPublisher.class);
+        analyticsExitContextResolver = mock(AnalyticsExitContextResolver.class);
         roomService = new RoomService(
             roomRepository,
             participantRepository,
@@ -80,7 +83,8 @@ class RoomServiceTest {
             liveKitTokenService,
             roomConnectionService,
             Clock.fixed(NOW, ZoneOffset.UTC),
-            applicationEventPublisher
+            applicationEventPublisher,
+            analyticsExitContextResolver
         );
     }
 

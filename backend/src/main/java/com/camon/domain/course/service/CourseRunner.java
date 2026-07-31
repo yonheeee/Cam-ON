@@ -1,5 +1,7 @@
 package com.camon.domain.course.service;
 
+import com.camon.domain.analytics.domain.AnalyticsDomainEvent;
+import com.camon.domain.analytics.domain.AnalyticsEventName;
 import com.camon.domain.course.domain.CourseItem;
 import com.camon.domain.course.repository.CourseRepository;
 import com.camon.domain.course.ws.CourseEventPublisher;
@@ -36,6 +38,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.TaskScheduler;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
 // 대기방에서 확정된 코스를 실제로 굴리는 오케스트레이터.
@@ -77,6 +80,7 @@ public class CourseRunner {
     private final GameScoreService gameScoreService;
     private final CourseEventPublisher courseEventPublisher;
     private final TaskScheduler taskScheduler;
+    private final ApplicationEventPublisher applicationEventPublisher;
     // games.name → 그 게임의 세션을 여는 방법. 게임이 추가되면 빈이 하나 늘어날 뿐 이 클래스는
     // 바뀌지 않는다.
     private final Map<String, GameSessionStarter> startersByGameName;
@@ -90,7 +94,8 @@ public class CourseRunner {
         GameScoreService gameScoreService,
         CourseEventPublisher courseEventPublisher,
         TaskScheduler taskScheduler,
-        List<GameSessionStarter> sessionStarters
+        List<GameSessionStarter> sessionStarters,
+        ApplicationEventPublisher applicationEventPublisher
     ) {
         this.roomRepository = roomRepository;
         this.participantRepository = participantRepository;
@@ -100,6 +105,7 @@ public class CourseRunner {
         this.gameScoreService = gameScoreService;
         this.courseEventPublisher = courseEventPublisher;
         this.taskScheduler = taskScheduler;
+        this.applicationEventPublisher = applicationEventPublisher;
         this.startersByGameName = sessionStarters.stream().collect(
             Collectors.toUnmodifiableMap(
                 GameSessionStarter::gameName,
@@ -157,6 +163,21 @@ public class CourseRunner {
         courseEventPublisher.publishIntermission(roomId, intermission);
         taskScheduler.schedule(() -> advance(roomId, BEFORE_FIRST_SESSION), resumesAt);
 
+        // 첫 게임이 실제로 열리는 건 룰 설명이 끝난 뒤지만(GAME_SESSION_STARTED가 그때 나간다),
+        // "코스가 시작됐다"는 방장이 시작을 누른 이 순간이다.
+        applicationEventPublisher.publishEvent(
+            AnalyticsDomainEvent.server(
+                AnalyticsEventName.COURSE_STARTED,
+                roomId,
+                requesterId,
+                Instant.now(),
+                Map.of(
+                    "playerCount", participants.size(),
+                    "courseSize", items.size()
+                )
+            )
+        );
+
         // 응답은 "곧 열릴 게임"이다. 화면 전환은 인터미션 뒤의 game:started가 담당하므로 프론트가
         // 이 값으로 화면을 바꾸진 않지만, 요청이 무엇을 예약했는지는 응답으로도 확인돼야 한다.
         // validatePlayable을 통과했으므로 열 수 있는 칸이 최소 하나는 있다.
@@ -181,6 +202,9 @@ public class CourseRunner {
                 room.roomCode(), finishedSeq, room.currentSessionSeq());
             return;
         }
+
+        // 세트가 끝난 사실 자체는 여기서 한 번만 기록한다 — 아래 두 구간은 화면 전환일 뿐이다.
+        publishFinishedSessionAnalytics(room, finishedSeq);
 
         // 두 구간을 순서대로 준다 — 겹치면 룰 설명이 방금 세트의 결과를 덮는다.
         //   1) 세트 중간 결과 (SET_RESULT_DURATION): 방금 끝난 세트의 순위/점수를 읽는 시간.
@@ -333,6 +357,20 @@ public class CourseRunner {
                     skipReason.get()
                 )
             );
+            applicationEventPublisher.publishEvent(new AnalyticsDomainEvent(
+                UUID.randomUUID(),
+                AnalyticsEventName.GAME_SESSION_SKIPPED,
+                roomId,
+                null,
+                gameCatalogService.findName(item.gameId()),
+                seq,
+                null,
+                Instant.now(),
+                null,
+                null,
+                null,
+                Map.of("reason", skipReason.get())
+            ));
         }
 
         // 첫 게임 앞 인터미션에서 여기까지 왔다면 한 판도 열리지 않았다는 뜻이다(설명을 읽는
@@ -380,6 +418,23 @@ public class CourseRunner {
             new GameSessionSpec(item.gameId(), item.roundCount(), item.topicId()),
             participants
         );
+        applicationEventPublisher.publishEvent(new AnalyticsDomainEvent(
+            UUID.randomUUID(),
+            AnalyticsEventName.GAME_SESSION_STARTED,
+            room.roomId(),
+            null,
+            game.getName(),
+            seq,
+            null,
+            Instant.now(),
+            null,
+            null,
+            null,
+            Map.of(
+                "playerCount", participants.size(),
+                "roundCount", item.roundCount()
+            )
+        ));
     }
 
     // 코스 종합 결과 화면에서 참가자가 "방으로 돌아가기"를 누르는 지점 — 방장 전용이 아니라
@@ -452,10 +507,53 @@ public class CourseRunner {
         // 방을 FINISHED로 닫는다. 같은 방에서 다시 놀려면 방장이 returnToLobby로 점수를
         // 초기화하고 WAITING으로 되돌린 뒤 코스를 다시 시작한다.
         roomRepository.updateStatus(room.roomId(), RoomStatus.FINISHED);
+        List<CourseScoreEntry> ranking = buildRanking(room);
         courseEventPublisher.publishCourseFinished(
             room.roomId(),
-            new CourseFinishedPayload(totalSessions, buildRanking(room))
+            new CourseFinishedPayload(totalSessions, ranking)
         );
+        applicationEventPublisher.publishEvent(
+            AnalyticsDomainEvent.server(
+                AnalyticsEventName.COURSE_FINISHED,
+                room.roomId(),
+                null,
+                Instant.now(),
+                Map.of(
+                    "playerCount", ranking.size(),
+                    "totalSessions",
+                    totalSessions
+                )
+            )
+        );
+    }
+
+    private void publishFinishedSessionAnalytics(Room room, int finishedSeq) {
+        try {
+            CourseItem item = courseRepository
+                .findAll(room.roomId(), room.roomCode())
+                .get(finishedSeq - 1);
+            applicationEventPublisher.publishEvent(new AnalyticsDomainEvent(
+                UUID.randomUUID(),
+                AnalyticsEventName.GAME_SESSION_FINISHED,
+                room.roomId(),
+                null,
+                gameCatalogService.findName(item.gameId()),
+                finishedSeq,
+                null,
+                Instant.now(),
+                null,
+                null,
+                null,
+                Map.of()
+            ));
+        } catch (RuntimeException exception) {
+            log.warn(
+                "[Analytics] failed to describe finished game session: roomCode={}, seq={}",
+                room.roomCode(),
+                finishedSeq,
+                exception
+            );
+        }
     }
 
     // 코스 전체 누적 점수(room:{code}:course:totals) 내림차순. 동점은 같은 순위를 준다.

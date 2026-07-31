@@ -45,6 +45,7 @@ import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.scheduling.TaskScheduler;
+import org.springframework.context.ApplicationEventPublisher;
 
 @ExtendWith(MockitoExtension.class)
 class CourseRunnerTest {
@@ -70,6 +71,8 @@ class CourseRunnerTest {
     private CourseEventPublisher courseEventPublisher;
     @Mock
     private TaskScheduler taskScheduler;
+    @Mock
+    private ApplicationEventPublisher applicationEventPublisher;
 
     private RecordingStarter ninjaStarter;
     private RecordingStarter charadesStarter;
@@ -90,7 +93,8 @@ class CourseRunnerTest {
             gameScoreService,
             courseEventPublisher,
             taskScheduler,
-            List.of(ninjaStarter, charadesStarter)
+            List.of(ninjaStarter, charadesStarter),
+            applicationEventPublisher
         );
         roomId = UUID.randomUUID();
         hostId = UUID.randomUUID();
