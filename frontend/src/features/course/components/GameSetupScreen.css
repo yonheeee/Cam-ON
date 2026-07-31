@@ -1,0 +1,670 @@
+/* 게임 구성 — Figma `Screen / Game Setup · Compact Sets + Accordion List`(1713:52) 이식.
+ *
+ * 시각적으로는 별도 페이지(브레드크럼 + 돌아가기)지만, LiveKit 연결·채팅을 유지하기 위해
+ * 라우트 이동 없이 대기방 위에 전체 화면으로 덮는다.
+ *
+ * 해상도 대응은 대기방과 같은 원칙: 글자·여백·좌측 패널 폭(416)은 고정하고,
+ * 우측 게임 리스트 폭과 패널 높이가 남는 공간을 흡수한다. 목록은 패널 안에서 스크롤.
+ *
+ * Figma 기준 수치(1440×1024): 헤더 72,118 1296×92 · 좌측 패널 72,230 416×690 ·
+ * 우측 패널 528,230 840×690 (패널 간 24) · 하단 여백 104
+ * 색은 Figma 원문(#ff9e33/#4075e0/#fffbf0/#fff7e0) 대신 확정 토큰을 쓴다
+ * (오렌지 #f6a13a · 블루 #4169c8 · paper/cream). 삭제 버튼만 시안 고유색 #db385c 유지.
+ */
+
+.game-setup {
+  position: fixed;
+  inset: 0;
+  z-index: 60; /* 대기방 콘텐츠 위, 토스트(200)보다 아래 */
+  overflow: hidden;
+  color: var(--pap-ink);
+  font-family: var(--pap-font-pixel);
+  letter-spacing: 0;
+  text-align: left;
+  background:
+    url('/assets/lobby-quiet-pixel-plaza-bg.png') center center / cover no-repeat,
+    linear-gradient(#7bddfc 0%, #bbf4f6 60%, #fee7c3 100%);
+
+  --setup-pad-x: 72px;
+  --setup-header-top: 118px;
+  --setup-panel-top: 230px;
+  --setup-pad-bottom: 104px;
+}
+
+@media (max-height: 940px) {
+  .game-setup {
+    --setup-header-top: 96px;
+    --setup-panel-top: 196px;
+    --setup-pad-bottom: 48px;
+  }
+}
+
+@media (max-width: 1320px) {
+  .game-setup {
+    --setup-pad-x: 32px;
+  }
+}
+
+/* index.css의 전역 `h1, h2 { font-family: var(--heading); font-weight: 500; color: var(--text-h) }`가
+   제목의 Mona12 상속을 덮어쓴다 (500은 Mona12에 없어서 Regular로 떨어짐 — 대기방과 같은 문제).
+   이 화면 안의 모든 제목을 상속으로 되돌린다. */
+.game-setup h1,
+.game-setup h2,
+.game-setup h3 {
+  color: inherit;
+  font-family: inherit;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.game-setup__bg-bottom {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 76px;
+  background: rgb(251 234 195 / 0.98);
+  pointer-events: none;
+}
+
+.game-setup__logo {
+  position: absolute;
+  top: 35px;
+  left: 52px;
+  width: 172px;
+  height: 65px;
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+
+/* ---------- 헤더 ---------- */
+
+.game-setup__header {
+  position: absolute;
+  top: var(--setup-header-top);
+  right: var(--setup-pad-x);
+  left: var(--setup-pad-x);
+  height: 92px;
+}
+
+.game-setup__breadcrumb {
+  position: absolute;
+  top: 0;
+  left: 0;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.game-setup__title {
+  position: absolute;
+  top: 28px;
+  left: 0;
+  margin: 0;
+  font-size: 34px;
+  font-weight: 700;
+  line-height: 40px;
+  white-space: nowrap;
+}
+
+.game-setup__subtitle {
+  position: absolute;
+  top: 72px;
+  left: 0;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+/* 돌아가기 — Figma 104×38, radius 10, 그림자 5 */
+.game-setup__back {
+  position: absolute;
+  top: 26px;
+  right: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  box-sizing: border-box;
+  height: 38px;
+  padding: 0 14px;
+  border: var(--pap-stroke-control) solid var(--pap-ink);
+  border-radius: 10px;
+  background: var(--pap-white);
+  color: var(--pap-ink);
+  box-shadow: 5px 5px 0 var(--pap-shadow-color);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 60ms ease-out, box-shadow 60ms ease-out;
+}
+
+.game-setup__back svg {
+  width: 18px;
+  height: 18px;
+}
+
+.game-setup__back:hover:not(:disabled) {
+  transform: translate(-1px, -1px);
+  box-shadow: 6px 6px 0 var(--pap-shadow-color);
+}
+
+.game-setup__back:active:not(:disabled) {
+  transform: translate(5px, 5px);
+  box-shadow: 0 0 0 var(--pap-shadow-color);
+}
+
+/* ---------- 본문 2열 ---------- */
+
+.game-setup__body {
+  position: absolute;
+  top: var(--setup-panel-top);
+  right: var(--setup-pad-x);
+  bottom: var(--setup-pad-bottom);
+  left: var(--setup-pad-x);
+  display: grid;
+  grid-template-columns: 416px minmax(0, 1fr);
+  gap: 24px;
+}
+
+.game-setup__panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  min-height: 0;
+  overflow: hidden;
+  border: var(--pap-stroke-control) solid var(--pap-ink);
+  border-radius: 12px;
+  background: var(--pap-white);
+  box-shadow: 5px 5px 0 var(--pap-shadow-color);
+}
+
+.game-setup__panel-head {
+  flex: none;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 24px 26px 0;
+}
+
+.game-setup__panel-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 26px;
+}
+
+.game-setup__set-counter {
+  color: var(--pap-arcade-blue);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.game-setup__panel-hint {
+  flex: none;
+  margin: 8px 26px 0;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--pap-text-muted);
+}
+
+/* ---------- 좌측: 세트 구성 ---------- */
+
+.game-setup__sets {
+  flex: 1;
+  min-height: 0;
+  /* 아래 여백 22px — 스크롤로 잘리는 카드가 패널 테두리에 붙지 않고
+     우측 패널 푸터처럼 여백을 두고 잘리게 한다 */
+  margin: 14px 0 22px;
+  padding: 8px 24px 8px;
+  overflow-y: auto;
+  list-style: none;
+  scrollbar-width: thin;
+  scrollbar-color: rgb(43 24 51 / 0.3) transparent;
+}
+
+/* 세트 카드 — Figma 368×104, cream, radius 10, 그림자 3, 간격 12 */
+.game-setup__set {
+  position: relative;
+  box-sizing: border-box;
+  height: 104px;
+  margin-bottom: 12px;
+  border: var(--pap-stroke-control) solid var(--pap-ink);
+  border-radius: 10px;
+  background: var(--pap-plaza-cream);
+  box-shadow: 3px 3px 0 var(--pap-shadow-color);
+  cursor: grab;
+}
+
+.game-setup__set:active {
+  cursor: grabbing;
+}
+
+.game-setup__set--dragging {
+  opacity: 0.45;
+}
+
+.game-setup__set:focus-visible {
+  outline: 3px solid var(--pap-arcade-blue);
+  outline-offset: 2px;
+}
+
+.game-setup__set-handle {
+  position: absolute;
+  top: 36px;
+  left: 14px;
+  color: rgb(43 24 51 / 0.65);
+  font-size: 22px;
+  line-height: 1;
+  user-select: none;
+}
+
+.game-setup__set-seq {
+  position: absolute;
+  top: 12px;
+  left: 46px;
+  color: var(--pap-arcade-blue);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.game-setup__set-name {
+  position: absolute;
+  top: 36px;
+  left: 46px;
+  width: 252px;
+  overflow: hidden;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 22px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.game-setup__set-rule {
+  position: absolute;
+  top: 66px;
+  left: 46px;
+  width: 220px;
+  color: var(--pap-arcade-blue);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.game-setup__set-rule--warn {
+  color: var(--pap-festival-coral);
+  font-size: 12px;
+}
+
+/* 몸으로 말해요의 주제 선택 — 규칙 텍스트 자리에 셀렉트로 대체
+   (추후 게임 시작 직전 팝업으로 옮기는 안이 있음 — 백엔드 topicId 검증 변경 필요) */
+.game-setup__topic {
+  position: absolute;
+  top: 62px;
+  left: 46px;
+  box-sizing: border-box;
+  width: 220px;
+  height: 30px;
+  padding: 0 8px;
+  border: var(--pap-stroke-control) solid var(--pap-ink);
+  border-radius: var(--pap-radius);
+  background: var(--pap-white);
+  color: var(--pap-ink);
+  font-family: inherit;
+  font-size: 12px;
+}
+
+.game-setup__topic--missing {
+  border-color: var(--pap-festival-coral);
+}
+
+/* 세트 삭제 — Figma 32×32, #db385c(시안 고유 삭제색), radius 8, 그림자 3 */
+.game-setup__set-delete {
+  position: absolute;
+  top: 34px;
+  right: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: var(--pap-stroke-control) solid var(--pap-ink);
+  border-radius: 8px;
+  background: #db385c;
+  color: var(--pap-white);
+  box-shadow: 3px 3px 0 var(--pap-shadow-color);
+  cursor: pointer;
+  transition: transform 60ms ease-out, box-shadow 60ms ease-out;
+}
+
+.game-setup__set-delete svg {
+  width: 18px;
+  height: 18px;
+}
+
+.game-setup__set-delete:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 4px 4px 0 var(--pap-shadow-color);
+}
+
+.game-setup__set-delete:active {
+  transform: translate(3px, 3px);
+  box-shadow: 0 0 0 var(--pap-shadow-color);
+}
+
+/* 빈 상태 */
+.game-setup__sets-empty {
+  box-sizing: border-box;
+  height: 104px;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: var(--pap-stroke-control) dashed rgb(43 24 51 / 0.32);
+  border-radius: 10px;
+  background: rgb(255 253 245 / 0.6);
+  color: var(--pap-text-muted);
+  font-size: 13px;
+  text-align: center;
+  line-height: 19px;
+}
+
+/* ---------- 우측: 게임 리스트 ---------- */
+
+.game-setup__games {
+  flex: 1;
+  min-height: 0;
+  margin: 14px 0 0;
+  padding: 8px 28px 12px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgb(43 24 51 / 0.3) transparent;
+}
+
+/* 게임 카드 — 접힘 104 / 펼침 auto. cream, radius 10, 그림자 5, 간격 16 */
+.game-setup__game {
+  position: relative;
+  box-sizing: border-box;
+  margin-bottom: 16px;
+  border: var(--pap-stroke-control) solid var(--pap-ink);
+  border-radius: 10px;
+  background: var(--pap-plaza-cream);
+  box-shadow: 5px 5px 0 var(--pap-shadow-color);
+  transition: transform 60ms ease-out, box-shadow 60ms ease-out;
+}
+
+.game-setup__game--collapsible:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 6px 6px 0 var(--pap-shadow-color);
+}
+
+/* 카드 머리(항상 보임) — 클릭하면 펼침/접힘 */
+.game-setup__game-head {
+  position: relative;
+  box-sizing: border-box;
+  height: 100px;
+  cursor: pointer;
+}
+
+.game-setup__game-icon {
+  position: absolute;
+  top: 24px;
+  left: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 52px;
+  height: 52px;
+  border: var(--pap-stroke-control) solid var(--pap-ink);
+  border-radius: 9px;
+  background: var(--pap-arcade-blue);
+  color: var(--pap-white);
+  font-size: 9px;
+  font-weight: 400;
+  letter-spacing: 0.5px;
+}
+
+.game-setup__game-title {
+  position: absolute;
+  top: 25px;
+  left: 88px;
+  right: 120px;
+  margin: 0;
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 22px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.game-setup__game-summary {
+  position: absolute;
+  top: 55px;
+  left: 88px;
+  right: 120px;
+  margin: 0;
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 15px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.game-setup__game-summary--warn {
+  color: var(--pap-festival-coral);
+  font-weight: 700;
+}
+
+/* 세트에 추가 — Figma 32×32 오렌지, radius 9, 그림자 3 */
+.game-setup__game-add {
+  position: absolute;
+  top: 34px;
+  right: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: var(--pap-stroke-control) solid var(--pap-ink);
+  border-radius: 9px;
+  background: var(--pap-arcade-orange);
+  color: var(--pap-ink);
+  box-shadow: 3px 3px 0 var(--pap-shadow-color);
+  cursor: pointer;
+  transition: transform 60ms ease-out, box-shadow 60ms ease-out;
+}
+
+.game-setup__game-add svg {
+  width: 18px;
+  height: 18px;
+}
+
+.game-setup__game-add:hover:not(:disabled) {
+  transform: translate(-1px, -1px);
+  box-shadow: 4px 4px 0 var(--pap-shadow-color);
+}
+
+.game-setup__game-add:active:not(:disabled) {
+  transform: translate(3px, 3px);
+  box-shadow: 0 0 0 var(--pap-shadow-color);
+}
+
+.game-setup__game-add:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ---------- 펼친 내용 ---------- */
+
+.game-setup__game-detail {
+  position: relative;
+  padding: 0 26px 24px;
+}
+
+.game-setup__divider {
+  height: 2px;
+  margin-bottom: 16px;
+  background: #dbc9b0; /* Figma Accordion/Divider */
+}
+
+.game-setup__detail-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 230px;
+  gap: 16px;
+}
+
+/* 진행 3단계 */
+.game-setup__steps {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 12px 0;
+}
+
+.game-setup__step {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.game-setup__step-no {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 28px;
+  height: 28px;
+  border: 1.5px solid var(--pap-ink);
+  border-radius: 7px;
+  background: var(--pap-arcade-blue);
+  color: var(--pap-white);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.game-setup__step-title {
+  flex: none;
+  width: 88px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.game-setup__step-desc {
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 15px;
+}
+
+/* ROUND / PLAYER / DEVICE */
+.game-setup__info {
+  box-sizing: border-box;
+  padding: 24px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+  border-radius: 10px;
+  background: #e9f1fd; /* 시안의 연한 블루 패널 */
+}
+
+.game-setup__info-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.game-setup__info-label {
+  flex: none;
+  width: 62px;
+  color: var(--pap-arcade-blue);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.game-setup__info-value {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* ---------- 우측 하단 고정 푸터 ---------- */
+
+.game-setup__footer {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  box-sizing: border-box;
+  height: 80px;
+  padding: 0 28px;
+  border-top: var(--pap-stroke-control) solid rgb(43 24 51 / 0.12);
+  background: var(--pap-white);
+}
+
+.game-setup__footer-note {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--pap-text-muted);
+}
+
+.game-setup__footer-note--error {
+  color: var(--pap-festival-coral);
+  font-weight: 700;
+}
+
+/* 저장하고 대기방으로 — Figma 320×46, 오렌지, radius 12, 그림자 5 */
+.game-setup__save {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  box-sizing: border-box;
+  width: 320px;
+  height: 46px;
+  border: var(--pap-stroke-control) solid var(--pap-ink);
+  border-radius: 12px;
+  background: var(--pap-arcade-orange);
+  color: var(--pap-ink);
+  box-shadow: 5px 5px 0 var(--pap-shadow-color);
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 60ms ease-out, box-shadow 60ms ease-out;
+}
+
+.game-setup__save svg {
+  width: 18px;
+  height: 18px;
+}
+
+.game-setup__save:hover:not(:disabled) {
+  transform: translate(-1px, -1px);
+  box-shadow: 6px 6px 0 var(--pap-shadow-color);
+}
+
+.game-setup__save:active:not(:disabled) {
+  transform: translate(5px, 5px);
+  box-shadow: 0 0 0 var(--pap-shadow-color);
+}
+
+.game-setup__save:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}

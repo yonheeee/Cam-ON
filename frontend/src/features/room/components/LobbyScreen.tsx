@@ -7,7 +7,7 @@ import { PixelConfirmModal } from '../../system/components/PixelConfirmModal';
 import { roomApi, RoomApiError } from '../api/roomApi';
 import { StartPreflightModal } from './StartPreflightModal';
 import { useRoomLobby } from '../hooks/useRoomLobby';
-import { CourseEditorModal } from '../../course/components/CourseEditorModal';
+import { GameSetupScreen } from '../../course/components/GameSetupScreen';
 import { GAME_LABELS } from '../../course/api/courseApi';
 import { useCourse } from '../../course/hooks/useCourse';
 import { useTopics } from '../../course/hooks/useTopics';
@@ -702,8 +702,9 @@ export function LobbyScreen({
           {toast.text}
         </div>
       )}
+      {/* 게임 구성 — 팝업이 아니라 대기방 위를 덮는 전체 화면 (라우트 이동 없이 연결 유지) */}
       {courseEditorOpen && (
-        <CourseEditorModal
+        <GameSetupScreen
           games={games}
           course={course}
           topicsByGameId={topicsByGameId}
