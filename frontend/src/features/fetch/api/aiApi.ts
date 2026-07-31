@@ -22,13 +22,17 @@ export class AiApiError extends Error {}
 
 export const aiApi = {
   /** ROI crop 이미지를 보내 인식 결과를 받는다. 정답 판정이 아니라 분류 + 제시어 매칭 정보. */
-  async detect(image: Blob, target: string): Promise<DetectionResult> {
+  async detect(
+    image: Blob,
+    target: string,
+    signal?: AbortSignal,
+  ): Promise<DetectionResult> {
     const form = new FormData();
     form.append('image', image, 'roi.jpg');
     form.append('target', target);
     const response = await fetch(
       `${AI_BASE_URL}/ai/games/${FETCH_GAME_ID}/fetch-object/detections`,
-      { method: 'POST', body: form },
+      { method: 'POST', body: form, signal },
     );
     if (!response.ok) throw new AiApiError(`AI 서버 요청 실패 (HTTP ${response.status})`);
     const body = await response.json();
@@ -37,9 +41,4 @@ export const aiApi = {
 
   /** 미션 제시어 풀. 원래는 Spring GET .../fetch-object/mission이 제시어를 주지만
    *  (제시어 주체 = Spring), 그 API가 생기기 전까지 방장이 이 풀에서 뽑아 브로드캐스트한다. */
-  async labels(): Promise<string[]> {
-    const response = await fetch(`${AI_BASE_URL}/dev/labels`);
-    if (!response.ok) throw new AiApiError('제시어 목록 조회 실패');
-    return (await response.json()) as string[];
-  },
 };
