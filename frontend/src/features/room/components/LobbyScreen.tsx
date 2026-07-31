@@ -47,8 +47,9 @@ interface LobbyScreenProps {
 // 대기방 전체 화면 — Figma `03 · PIXEL ARCADE PLAZA · Screen Mockups` /
 // `Screen / Lobby v2 · Standalone Cards`(1275:47)를 1:1로 옮긴 화면.
 //
-// 레이아웃은 1440×1024 아트보드 좌표를 그대로 쓰고, 화면 크기 대응은 .camon-stage__canvas의
-// transform: scale() 하나가 전담한다 — 그래서 어떤 해상도에서도 배치가 Figma와 같다.
+// 해상도 대응: 화면 전체를 축소/확대하지 않는다. 글자·외곽선·여백·카드 간격·사이드 열 폭(416)
+// ·티켓/게임구성/하단버튼 높이는 고정하고, 남는 공간은 참가자 타일 그리드와 채팅 카드가 흡수한다.
+// 1440×1024에서는 Figma와 픽셀 단위로 같고, 그 외 해상도에서도 스크롤 없이 한 화면에 들어온다.
 // 참가자 정보(이름/역할/준비)는 비디오 타일 하단 바에, 사이드는 티켓 + 게임 구성 + 채팅 + 액션.
 export function LobbyScreen({
   roomId,

@@ -574,13 +574,18 @@
   overflow: hidden;
 }
 
+/* h2라서 index.css의 전역 `h1,h2 { font-family: var(--heading) }`(시스템 산세리프)와
+   `color: var(--text-h)`가 상속을 덮어쓴다. 여기서 되돌린다. */
 .lobby-screen__panel-title {
   position: absolute;
   top: 16px; /* Figma 18 */
   left: 14px; /* Figma 16 */
   margin: 0;
+  color: var(--pap-ink);
+  font-family: inherit;
   font-size: 18px;
   font-weight: 700;
+  letter-spacing: 0;
   line-height: 1;
   white-space: nowrap;
 }

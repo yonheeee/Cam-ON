@@ -106,6 +106,9 @@
   overflow: hidden;
   color: var(--pap-ink);
   font-family: var(--pap-font-pixel);
+  /* index.css의 :root가 letter-spacing: 0.18px를 상속시킨다.
+     Figma의 Mona12는 letterSpacing 0이라 여기서 되돌린다. */
+  letter-spacing: 0;
   text-align: left;
 }
 
