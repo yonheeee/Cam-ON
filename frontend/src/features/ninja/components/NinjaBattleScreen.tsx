@@ -97,6 +97,7 @@ export function NinjaBattleScreen({
     hp,
     currentAttackerToken,
     isMyAttack,
+    isEliminated,
     roundTimerSeconds,
     attackTimerSeconds,
     requiredSkill,
@@ -338,6 +339,17 @@ export function NinjaBattleScreen({
                       ))}
                     </ol>
                   </>
+                )}
+              </div>
+            ) : isEliminated ? (
+              /* 탈락자는 손동작이 판정되지 않는다(훅이 콤보 추적을 끊는다). 콤보 트래커를 그대로
+                 두면 눌러도 반응이 없는 화면이 되므로, 관전 중임을 분명히 보여준다. */
+              <div className="ninja-board__body ninja-board__body--eliminated">
+                <p className="ninja-board__label">탈락</p>
+                <p className="ninja-board__skill pap-pixel-title">관전 중</p>
+                <p className="ninja-board__hint">이 판은 끝났어요. 손동작은 판정되지 않아요.</p>
+                {requiredSkill && (
+                  <p className="ninja-board__hint">지금 술법: {requiredSkill.skillName}</p>
                 )}
               </div>
             ) : (

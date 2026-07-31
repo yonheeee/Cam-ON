@@ -752,6 +752,17 @@
   gap: 6px;
 }
 
+/* 탈락 후 관전 — 인터미션과 같은 높이를 유지해 보드가 튀지 않게 하고, 내 차례가 아님이
+   한눈에 읽히도록 채도를 낮춘다. */
+.ninja-board__body--eliminated {
+  min-height: 168px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+  opacity: 0.65;
+}
+
 .ninja-result {
   list-style: none;
   margin: 0;
