@@ -6,6 +6,7 @@ import type { ChatMessage } from '../../chat/hooks/useRoomChat';
 import { BackgroundMusic } from '../../sound/components/BackgroundMusic';
 import { PixelConfirmModal } from '../../system/components/PixelConfirmModal';
 import { roomApi, RoomApiError } from '../api/roomApi';
+import { StartPreflightModal } from './StartPreflightModal';
 import { useRoomLobby } from '../hooks/useRoomLobby';
 import { CourseEditorModal } from '../../course/components/CourseEditorModal';
 import { GAME_LABELS, type GameName } from '../../course/api/courseApi';
@@ -79,6 +80,10 @@ export function LobbyScreen({
   );
   const [kickPending, setKickPending] = useState(false);
   const [courseEditorOpen, setCourseEditorOpen] = useState(false);
+  // 시작 버튼 → 사전 점검 모달 → (전부 통과) → 실제 시작. 인식이 외부 자원(MediaPipe CDN,
+  // AI 서버)에 의존하는 게임이 코스에 있으면, 게임에 들어간 뒤 인식만 실패하는 것보다 여기서
+  // 걸러내는 편이 싸다.
+  const [preflightOpen, setPreflightOpen] = useState(false);
 
   // 코스는 서버가 원본이다 — 방장이 저장하면 member:game-updated로 전원 화면이 맞춰진다.
   const { course, games, error: courseError, saving: courseSaving, saveCourse } = useCourse(
@@ -221,7 +226,7 @@ export function LobbyScreen({
       ) {
         return;
       }
-      if (courseEditorOpen || confirmLeave || kickTarget) return;
+      if (courseEditorOpen || confirmLeave || kickTarget || preflightOpen) return;
       e.preventDefault(); // 페이지 스크롤 방지
 
       if (amHost) {
@@ -238,7 +243,7 @@ export function LobbyScreen({
           showToast('모든 참가자가 준비를 완료해야 해요!');
           return;
         }
-        onStartGame();
+        setPreflightOpen(true);
       } else {
         void handleToggleReady();
       }
@@ -524,7 +529,7 @@ export function LobbyScreen({
                     !allReturned ||
                     !allOthersReady
                   }
-                  onClick={() => onStartGame()}
+                  onClick={() => setPreflightOpen(true)}
                 >
                   {starting
                     ? '시작 중...'
@@ -566,6 +571,18 @@ export function LobbyScreen({
           saveError={courseError}
           onSave={saveCourse}
           onClose={() => setCourseEditorOpen(false)}
+        />
+      )}
+      {/* 시작 버튼을 누르면 바로 시작하지 않고 사전 점검을 거친다 — 전부 통과하면 모달이
+          스스로 onProceed를 불러 시작한다. 실패하면 시작하지 않고 이유를 보여준다. */}
+      {preflightOpen && (
+        <StartPreflightModal
+          course={course}
+          gameNameOf={(gameId) => games.find((game) => game.gameId === gameId)?.name ?? null}
+          onProceed={onStartGame}
+          onCancel={() => setPreflightOpen(false)}
+          starting={starting}
+          startError={startError}
         />
       )}
       {confirmLeave && (

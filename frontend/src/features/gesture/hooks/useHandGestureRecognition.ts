@@ -1,15 +1,10 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
-import { FilesetResolver, HandLandmarker, type NormalizedLandmark } from '@mediapipe/tasks-vision';
+import { HandLandmarker, type NormalizedLandmark } from '@mediapipe/tasks-vision';
 import { calcLandmarkList, preProcessLandmark, combineTwoHandLandmarks } from '../lib/landmarkPreprocessing';
+import { createHandLandmarker } from '../lib/handLandmarker';
 import { classifyKeyPoint } from '../lib/keypointClassifier';
 import { HandLandmarkSmoother } from '../lib/oneEuroFilter';
 
-const WASM_BASE = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/wasm';
-const MODEL_URL =
-  'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
-// app.py의 mp.solutions.hands 기본 인자(min_detection_confidence=0.7, min_tracking_confidence=0.5)와 맞춤.
-const MIN_HAND_DETECTION_CONFIDENCE = 0.7;
-const MIN_TRACKING_CONFIDENCE = 0.5;
 // app.py의 combo_sign_history = deque(maxlen=5) — 프레임 하나짜리 오인식(손 떨림 등)에
 // 흔들리지 않도록 최근 5프레임의 다수결로 안정화한다.
 const STABILIZE_WINDOW = 5;
@@ -65,16 +60,7 @@ export function useHandGestureRecognition(videoRef: RefObject<HTMLVideoElement |
 
   useEffect(() => {
     let cancelled = false;
-    FilesetResolver.forVisionTasks(WASM_BASE)
-      .then((vision) =>
-        HandLandmarker.createFromOptions(vision, {
-          baseOptions: { modelAssetPath: MODEL_URL, delegate: 'GPU' },
-          runningMode: 'VIDEO',
-          numHands: 2,
-          minHandDetectionConfidence: MIN_HAND_DETECTION_CONFIDENCE,
-          minTrackingConfidence: MIN_TRACKING_CONFIDENCE,
-        }),
-      )
+    createHandLandmarker()
       .then((landmarker) => {
         if (cancelled) {
           landmarker.close();
