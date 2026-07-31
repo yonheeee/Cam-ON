@@ -353,8 +353,9 @@ export function FetchObjectGame({
         </div>
       )}
 
-      {/* 최종 결과 팝업 */}
-      {state.phase === 'ended' && (
+      {/* 최종 결과 팝업 — 코스로 진행할 땐 공통 중간 결과 화면(SetResultScreen)이 대신하므로
+          띄우지 않는다. /dev/fetch mock(onExit가 있는 경우)만 자체 결과를 보여준다. */}
+      {state.phase === 'ended' && onExit && (
         <div className="pap-modal-backdrop">
           <div className="pap-modal">
             <div className="fetch-game__result pap-pixel-card">
@@ -366,9 +367,7 @@ export function FetchObjectGame({
                   </li>
                 ))}
               </ol>
-              {!onExit ? (
-                <p className="fetch-game__wait">잠시 후 다음 게임으로 넘어가요...</p>
-              ) : isHost ? (
+              {isHost ? (
                 <button type="button" className="pap-pixel-btn pap-pixel-btn--primary" onClick={onExit}>
                   대기방으로
                 </button>

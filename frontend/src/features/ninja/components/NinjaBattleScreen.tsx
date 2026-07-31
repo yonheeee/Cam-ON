@@ -92,7 +92,6 @@ export function NinjaBattleScreen({
   const {
     round,
     exchange,
-    sessionTotals,
     alivePlayers,
     hp,
     currentAttackerToken,
@@ -468,22 +467,8 @@ export function NinjaBattleScreen({
         </div>
       )}
 
-      {gameEnded && (
-        <div className="ninja-final">
-          <div className="ninja-final__card">
-            <p className="ninja-final__title pap-pixel-title">최종 순위</p>
-            <ol className="ninja-final__list">
-              {ranking.map((entry) => (
-                <li key={entry.token} className={entry.token === myId ? 'ninja-final--me' : ''}>
-                  <span className="ninja-final__rank pap-pixel-title">{entry.rank}</span>
-                  <span className="ninja-final__name">{nicknameOf(entry.token)}</span>
-                  <span className="ninja-final__pt pap-pixel-title">{sessionTotals[entry.token] ?? 0}점</span>
-                </li>
-              ))}
-            </ol>
-          </div>
-        </div>
-      )}
+      {/* 세트가 끝난 뒤의 순위 발표는 이 화면이 하지 않는다 — 코스 공통 중간 결과 화면
+          (SetResultScreen)이 게임 위에 덮어 그린다. 여기서 또 띄우면 두 겹으로 겹친다. */}
 
         {error && <p className="ninja-screen__error">{error}</p>}
       </div>

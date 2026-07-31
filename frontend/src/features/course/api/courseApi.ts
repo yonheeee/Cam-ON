@@ -86,6 +86,13 @@ export const courseApi = {
   getCourse: (roomId: string, accessToken: string) =>
     request<Course>(`/api/rooms/${roomId}/course`, accessToken),
 
+  // [백엔드 미구현] 세트 중간 결과에서 방장이 "다음 세트 시작하기"를 누르는 지점.
+  // 지금 서버는 세트 종료 후 고정 시간(CourseRunner.SESSION_INTERMISSION)이 지나야 다음 세트를
+  // 열기 때문에, 이 엔드포인트가 생기기 전까지 버튼은 자동 진행을 앞당기지 못한다(실패해도
+  // 화면은 그대로 두고 자동 진행을 기다린다). 서버가 붙으면 예약된 진행을 취소하고 즉시 연다.
+  startNextSet: (roomId: string, accessToken: string) =>
+    request<void>(`/api/rooms/${roomId}/course/next`, accessToken, { method: 'POST' }),
+
   // 전체 교체(PUT). 성공하면 서버가 member:game-updated를 브로드캐스트해 전원 화면이 맞춰진다.
   updateCourse: (roomId: string, items: CourseItemInput[], accessToken: string) =>
     request<Course>(`/api/rooms/${roomId}/course`, accessToken, {

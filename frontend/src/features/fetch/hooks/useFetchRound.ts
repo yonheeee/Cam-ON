@@ -11,8 +11,11 @@ import { COUNTDOWN_MS, type FetchGameState } from './useFetchGame';
 // 전원 제출 또는 타임아웃 시 round:end → 즉시 다음 round:start → 마지막 라운드 뒤 game:end.
 // 클라이언트는 이벤트를 소비해 화면 상태를 만들고, 인식 성공 시 POST submissions만 한다.
 //
-// 한계(백엔드에 상태 조회 GET이 없음): 게임 도중 새로고침하면 다음 round:start가 올 때까지
-// (최대 23초) 제시어를 모른다 — 그동안 phase='idle'로 대기 화면을 보여준다.
+// 세 게임 공통 규칙: 구독 직후와 재연결 직후에 GET .../state로 스냅샷을 한 번 읽고, 그 뒤로는
+// 이벤트로만 증분 갱신한다(폴링 없음). 이게 없으면 게임 시작 직후처럼 "구독을 거는 사이에
+// 지나간 이벤트"를 영영 못 받아서 다음 라운드까지 빈 화면으로 기다리게 된다.
+// [백엔드 미구현] 물건 가져오기의 state 엔드포인트는 아직 없다 — 생기기 전까지 조회는 조용히
+// 실패하고 예전처럼 이벤트만으로 진행한다(그동안은 위 증상이 남는다).
 
 interface RoundStartData {
   round: number;
@@ -69,6 +72,46 @@ export function useFetchRound(
   stateRef.current = state;
   const resolveRef = useRef(resolveNickname);
   resolveRef.current = resolveNickname;
+
+  // 스냅샷 동기화 — 닌자(useNinjaRealtime.onConnected)·몸으로말해요와 같은 역할이다.
+  // 이벤트는 "발생 순간 접속해 있던 사람"에게만 가므로, 구독을 건 직후 한 번 읽어 그 사이
+  // 놓친 라운드(특히 game:started 바로 뒤에 나가는 첫 round:start)를 따라잡는다.
+  const syncState = useCallback(async () => {
+    try {
+      const snapshot = await fetchGameApi.getState(gameId, accessToken);
+      setState((prev) => ({
+        ...prev,
+        phase:
+          snapshot.status === 'PLAYING'
+            ? 'playing'
+            : snapshot.status === 'ROUND_ENDED'
+              ? 'roundResult'
+              : snapshot.status === 'FINISHED'
+                ? 'ended'
+                : 'idle',
+        round: snapshot.round,
+        totalRounds: snapshot.totalRounds,
+        target: snapshot.target,
+        startedAt: snapshot.startedAt ?? 0,
+        deadlineAt: null,
+        // 도착 순서만 알 수 있다 — 경과 시간은 이벤트를 받은 사람만 아는 값이라 0으로 둔다.
+        successes: snapshot.successes.map((entry) => ({
+          nickname: resolveRef.current(entry.participantId),
+          elapsedMs: 0,
+        })),
+        totals: Object.fromEntries(
+          snapshot.totals.map((entry) => [resolveRef.current(entry.participantId), entry.score]),
+        ),
+      }));
+    } catch {
+      // 조회 실패는 무시 — 엔드포인트가 아직 없는 동안에도 이벤트만으로 진행은 된다.
+    }
+  }, [gameId, accessToken]);
+
+  // 마운트 직후 1회 (STOMP 연결이 늦거나 실패해도 현재 스냅샷은 그린다)
+  useEffect(() => {
+    void syncState();
+  }, [syncState]);
 
   useEffect(() => {
     const defaultProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -148,13 +191,16 @@ export function useFetchRound(
             }
           }
         });
+        // 구독을 걸어둔 "뒤에" 동기화해야 스냅샷과 다음 이벤트 사이에 빈틈이 없다
+        // (재연결 때마다 불린다 — 끊긴 동안 지나간 라운드를 여기서 따라잡는다).
+        void syncState();
       },
     });
     client.activate();
     return () => {
       void client.deactivate();
     };
-  }, [roomId, accessToken]);
+  }, [roomId, accessToken, syncState]);
 
   // 라운드당 1회만 제출. 409(중복/마감 직후 경합/카운트다운)는 정상 경합이라 조용히 넘어간다.
   const submittedRoundRef = useRef(0);
