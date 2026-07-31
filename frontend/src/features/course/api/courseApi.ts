@@ -86,12 +86,46 @@ export const courseApi = {
   getCourse: (roomId: string, accessToken: string) =>
     request<Course>(`/api/rooms/${roomId}/course`, accessToken),
 
+  // [백엔드 미구현] 세트 중간 결과에서 방장이 "다음 세트 시작하기"를 누르는 지점.
+  // 지금 서버는 세트 종료 후 고정 시간(CourseRunner.SESSION_INTERMISSION)이 지나야 다음 세트를
+  // 열기 때문에, 이 엔드포인트가 생기기 전까지 버튼은 자동 진행을 앞당기지 못한다(실패해도
+  // 화면은 그대로 두고 자동 진행을 기다린다). 서버가 붙으면 예약된 진행을 취소하고 즉시 연다.
+  startNextSet: (roomId: string, accessToken: string) =>
+    request<void>(`/api/rooms/${roomId}/course/next`, accessToken, { method: 'POST' }),
+
   // 전체 교체(PUT). 성공하면 서버가 member:game-updated를 브로드캐스트해 전원 화면이 맞춰진다.
   updateCourse: (roomId: string, items: CourseItemInput[], accessToken: string) =>
     request<Course>(`/api/rooms/${roomId}/course`, accessToken, {
       method: 'PUT',
       body: JSON.stringify({ items }),
     }),
+
+  // [방장 전용] 게임 사이 대기를 건너뛰고 다음 게임을 즉시 연다. finishedSessionSeq는
+  // course:intermission으로 받은 값을 그대로 돌려보낸다 — 타이머가 이미 다음 게임을 열어버린
+  // 뒤의 늦은 클릭을 서버가 걸러낼 수 있게(그냥 "넘겨"로 만들면 방금 시작한 게임이 날아간다).
+  // 화면 전환은 평소와 같은 game:started가 담당하므로 응답 본문이 없다(204).
+  skipIntermission: async (
+    roomId: string,
+    finishedSessionSeq: number,
+    accessToken: string,
+  ): Promise<void> => {
+    const response = await fetch(`${BASE_URL}/api/rooms/${roomId}/course/skip-intermission`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ finishedSessionSeq }),
+    });
+    if (!response.ok) {
+      if (isSessionDead(response.status)) handleExpiredSession();
+      const body = await response.json().catch(() => null);
+      throw new CourseApiError(
+        body?.message ?? `요청 실패 (HTTP ${response.status})`,
+        body?.code,
+      );
+    }
+  },
 };
 
 // 게임 이름 → 화면 표시용 한글명. 서버의 description과 별개로 UI에서 쓰는 정식 게임 타이틀이다.

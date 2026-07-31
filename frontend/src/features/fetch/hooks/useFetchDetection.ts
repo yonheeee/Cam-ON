@@ -13,7 +13,11 @@ interface UseFetchDetectionOptions {
   videoRef: React.RefObject<HTMLVideoElement | null>;
   target: string | null;
   active: boolean;
-  onSuccess: (elapsedMs: number) => void;
+  /** false를 반환하면 서버가 아직 제출을 받지 못한 것이므로 인식을 초기화하고 재시도한다. */
+  onSuccess: (
+    elapsedMs: number,
+    result: DetectionResult,
+  ) => boolean | void | Promise<boolean | void>;
 }
 
 export function useFetchDetection({ videoRef, target, active, onSuccess }: UseFetchDetectionOptions) {
@@ -24,7 +28,8 @@ export function useFetchDetection({ videoRef, target, active, onSuccess }: UseFe
   const [latencyMs, setLatencyMs] = useState<number | null>(null);
 
   // 타이머 콜백에서 stale closure를 피하기 위한 ref들
-  const inflightRef = useRef(false);
+  const requestRef = useRef<AbortController | null>(null);
+  const generationRef = useRef(0);
   const streakRef = useRef(0);
   const doneRef = useRef(false);
   const startedAtRef = useRef(0);
@@ -32,7 +37,12 @@ export function useFetchDetection({ videoRef, target, active, onSuccess }: UseFe
   onSuccessRef.current = onSuccess;
 
   useEffect(() => {
-    if (!active || !target) return;
+    const generation = ++generationRef.current;
+    if (!active || !target) {
+      requestRef.current?.abort();
+      requestRef.current = null;
+      return;
+    }
 
     // 라운드(target) 단위로 초기화
     doneRef.current = false;
@@ -44,13 +54,18 @@ export function useFetchDetection({ videoRef, target, active, onSuccess }: UseFe
 
     const tick = async () => {
       const video = videoRef.current;
-      if (inflightRef.current || doneRef.current || !video || !video.videoWidth) return;
-      inflightRef.current = true;
+      if (requestRef.current || doneRef.current || !video || !video.videoWidth) return;
+
+      const controller = new AbortController();
+      requestRef.current = controller;
       const requestStart = performance.now();
       try {
         const blob = await cropRoi(video);
-        if (!blob) return;
-        const result = await aiApi.detect(blob, target);
+        if (!blob || generationRef.current !== generation || controller.signal.aborted) return;
+
+        const result = await aiApi.detect(blob, target, controller.signal);
+        if (generationRef.current !== generation || controller.signal.aborted) return;
+
         setLatencyMs(Math.round(performance.now() - requestStart));
         if (doneRef.current) return;
         setLastResult(result);
@@ -61,21 +76,40 @@ export function useFetchDetection({ videoRef, target, active, onSuccess }: UseFe
           setStreak(streakRef.current);
           if (streakRef.current >= REQUIRED_STREAK) {
             doneRef.current = true;
-            onSuccessRef.current(Date.now() - startedAtRef.current);
+            const accepted = await onSuccessRef.current(
+              Date.now() - startedAtRef.current,
+              result,
+            );
+            if (generationRef.current !== generation || controller.signal.aborted) return;
+            if (accepted === false) {
+              doneRef.current = false;
+              streakRef.current = 0;
+              setStreak(0);
+            }
           }
         } else {
           streakRef.current = 0;
           setStreak(0);
         }
       } catch (err) {
+        if (controller.signal.aborted || generationRef.current !== generation) return;
         setError(err instanceof Error ? err.message : 'AI 서버 연결 실패');
       } finally {
-        inflightRef.current = false;
+        if (requestRef.current === controller) {
+          requestRef.current = null;
+        }
       }
     };
 
     const timer = setInterval(() => void tick(), INTERVAL_MS);
-    return () => clearInterval(timer);
+    return () => {
+      clearInterval(timer);
+      if (generationRef.current === generation) {
+        generationRef.current += 1;
+      }
+      requestRef.current?.abort();
+      requestRef.current = null;
+    };
   }, [active, target, videoRef]);
 
   return { lastResult, streak, requiredStreak: REQUIRED_STREAK, error, latencyMs };

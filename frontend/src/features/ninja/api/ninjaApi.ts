@@ -15,24 +15,6 @@ export interface GestureStep {
   gestureLabelKr: string;
 }
 
-export interface EffectDto {
-  id: number;
-  name: string;
-  color: string;
-  particleCount: number;
-  life: number;
-  radiusMin: number;
-  radiusMax: number;
-  speedMin: number;
-  speedMax: number;
-}
-
-export interface NextSkillPreview {
-  skillId: number;
-  skillName: string;
-  gestures: GestureStep[];
-}
-
 export interface RoundSkillResponse {
   round: number;
   // 판(round) 안의 교환 번호 — (round, exchange)가 바뀌면 프론트가 이 스킬을 다시 조회한다.
@@ -41,9 +23,6 @@ export interface RoundSkillResponse {
   skillName: string;
   skillDesc: string | null;
   gestures: GestureStep[];
-  effect: EffectDto;
-  // 바로 다음 교환에 나올 스킬 예고 — 없으면 null.
-  nextSkill: NextSkillPreview | null;
 }
 
 export interface AttackResponse {

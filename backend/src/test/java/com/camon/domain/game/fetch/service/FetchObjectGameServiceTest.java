@@ -22,7 +22,10 @@ import com.camon.domain.game.common.ws.GameEventPublisher;
 import com.camon.domain.game.fetch.domain.FetchObjectMissionCatalog;
 import com.camon.domain.game.fetch.dto.FetchSubmissionRequest;
 import com.camon.domain.game.fetch.dto.FetchSubmissionResponse;
+import com.camon.domain.game.fetch.dto.FetchObjectStateResponse;
+import com.camon.domain.game.fetch.repository.FetchObjectRoundState;
 import com.camon.domain.game.fetch.repository.FetchObjectRedisRepository;
+import com.camon.domain.game.fetch.repository.FetchObjectSubmissionRecord;
 import com.camon.domain.game.fetch.repository.FetchSubmissionClaimResult;
 import com.camon.domain.game.fetch.repository.FetchSubmissionStatus;
 import com.camon.domain.game.fetch.ws.FetchObjectEventPublisher;
@@ -273,11 +276,62 @@ class FetchObjectGameServiceTest {
             ROOM_ID,
             "round:success",
             new FetchRoundSuccessPayload(
+                1,
                 participantId,
                 1,
                 5L,
+                NOW.toEpochMilli(),
                 NOW.plus(FetchObjectGameService.FIRST_SUBMISSION_GRACE).toEpochMilli()
             )
+        );
+    }
+
+    @Test
+    void returnsRecoverableStateIncludingCurrentRoundScores() {
+        UUID first = participants.get(0).participantId();
+        UUID second = participants.get(1).participantId();
+        Instant submittedAt = NOW.plusSeconds(4);
+        when(fetchRedis.findCurrentRoundState(ROOM_CODE, SESSION_SEQ))
+            .thenReturn(Optional.of(new FetchObjectRoundState(
+                2,
+                5,
+                "마우스",
+                NOW,
+                NOW.plusSeconds(8),
+                "PLAYING",
+                List.of(new FetchObjectSubmissionRecord(first, 1, submittedAt))
+            )));
+        when(fetchRedis.getParticipants(ROOM_CODE, SESSION_SEQ))
+            .thenReturn(Set.of(first, second));
+        when(fetchRedis.scoreForRank(1)).thenReturn(5L);
+        when(gameScoreService.getSessionTotals(ROOM_ID, SESSION_SEQ))
+            .thenReturn(Map.of(first, 4L, second, 5L));
+
+        FetchObjectStateResponse response = service.getState(room);
+
+        assertThat(response.round()).isEqualTo(2);
+        assertThat(response.target()).isEqualTo("마우스");
+        assertThat(response.deadlineAt()).isEqualTo(NOW.plusSeconds(8).toEpochMilli());
+        assertThat(response.successes()).singleElement().satisfies(success -> {
+            assertThat(success.participantId()).isEqualTo(first);
+            assertThat(success.rank()).isEqualTo(1);
+            assertThat(success.score()).isEqualTo(5L);
+            assertThat(success.submittedAt()).isEqualTo(submittedAt.toEpochMilli());
+        });
+        assertThat(response.totals())
+            .anySatisfy(score -> {
+                assertThat(score.participantId()).isEqualTo(first);
+                assertThat(score.score()).isEqualTo(9L);
+                assertThat(score.rank()).isEqualTo(1);
+            })
+            .anySatisfy(score -> {
+                assertThat(score.participantId()).isEqualTo(second);
+                assertThat(score.score()).isEqualTo(5L);
+                assertThat(score.rank()).isEqualTo(2);
+            });
+        verify(taskScheduler).schedule(
+            any(Runnable.class),
+            eq(NOW.plusSeconds(8))
         );
     }
 

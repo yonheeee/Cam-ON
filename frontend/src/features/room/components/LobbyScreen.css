@@ -272,6 +272,29 @@
   height: 16px;
 }
 
+/* 아직 코스 결과 화면에 남아 있는 참가자 — 방을 떠난 게 아니라 자리를 지키고 있는 상태이므로
+   연결 끊김(회색 처리)과 달리 캠 화면을 살려 두고, 진행 중임을 알리는 색만 얹는다. */
+.lobby-tile--in-result {
+  border-color: var(--pap-festival-coral);
+}
+
+.lobby-tile__in-result {
+  position: absolute;
+  /* 영상 영역만 덮는다(하단 바 64 제외) — 누가 아직 결과를 보는지 이름이 계속 읽히게 */
+  inset: 0 0 64px;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: rgb(43 24 51 / 0.5);
+  color: var(--pap-white);
+  font-size: 13px;
+  font-weight: 700;
+  pointer-events: none;
+}
+
 /* 방장 — 영상 우측 상단 왕관 배지. 내 타일이든 남의 타일이든 방장이면 항상 표시. */
 .lobby-tile__host-badge {
   position: absolute;
@@ -942,6 +965,8 @@
   font-size: 13px;
 }
 
+/* 주 액션(방장 시작 / 참가자 준비)을 감싸는 래퍼 — 안 눌리는 이유(data-hint)를 말풍선으로
+   띄우기 위해 position: relative가 필요하다. 그리드(124px 260px) 안이라 폭은 100%로 충분. */
 .lobby-screen__start-wrap {
   position: relative;
   display: inline-flex;

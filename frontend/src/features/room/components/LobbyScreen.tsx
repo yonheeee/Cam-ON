@@ -5,6 +5,7 @@ import { ChatPanel } from '../../chat/components/ChatPanel';
 import type { ChatMessage } from '../../chat/hooks/useRoomChat';
 import { PixelConfirmModal } from '../../system/components/PixelConfirmModal';
 import { roomApi, RoomApiError } from '../api/roomApi';
+import { StartPreflightModal } from './StartPreflightModal';
 import { useRoomLobby } from '../hooks/useRoomLobby';
 import { CourseEditorModal } from '../../course/components/CourseEditorModal';
 import { GAME_LABELS } from '../../course/api/courseApi';
@@ -20,6 +21,7 @@ import {
   CopyIcon,
   CrownIcon,
   GearIcon,
+  InResultIcon,
   KickIcon,
   LinkIcon,
   MicOffIcon,
@@ -42,6 +44,16 @@ interface LobbyScreenProps {
   chatMessages: ChatMessage[];
   onSendChat: (text: string) => void;
 }
+
+// 카메라를 끈 채로 게임에 들어가면 되돌릴 방법이 없다 — 게임 화면에는 카메라 토글이 없고
+// 대기방에만 있다. 그래서 캠이 꺼져 있으면 준비/시작을 막는다.
+//
+// 말풍선(data-hint)은 CSS가 nowrap이라 한 줄에 들어가는 길이여야 사이드바를 안 넘친다.
+// 이유를 더 길게 설명하는 문구는 토스트로만 쓴다.
+const CAMERA_OFF_HINT = '카메라를 켜야 준비할 수 있어요!';
+const CAMERA_OFF_MESSAGE = '카메라를 켜야 준비할 수 있어요 — 게임 중엔 다시 켤 수 없어요!';
+const CAMERA_OFF_READY_CLEARED = '카메라를 꺼서 준비가 취소됐어요.';
+const CAMERA_OFF_HOST_MESSAGE = '카메라를 켜야 시작할 수 있어요!';
 
 // 대기방 전체 화면 — Figma `03 · PIXEL ARCADE PLAZA · Screen Mockups` /
 // `Screen / Lobby v2 · Standalone Cards`(1275:47)를 1:1로 옮긴 화면.
@@ -73,6 +85,10 @@ export function LobbyScreen({
   );
   const [kickPending, setKickPending] = useState(false);
   const [courseEditorOpen, setCourseEditorOpen] = useState(false);
+  // 시작 버튼 → 사전 점검 모달 → (전부 통과) → 실제 시작. 인식이 외부 자원(MediaPipe CDN,
+  // AI 서버)에 의존하는 게임이 코스에 있으면, 게임에 들어간 뒤 인식만 실패하는 것보다 여기서
+  // 걸러내는 편이 싸다.
+  const [preflightOpen, setPreflightOpen] = useState(false);
 
   // 코스는 서버가 원본이다 — 방장이 저장하면 member:game-updated로 전원 화면이 맞춰진다.
   const { course, games, error: courseError, saving: courseSaving, saveCourse } = useCourse(
@@ -97,6 +113,11 @@ export function LobbyScreen({
     room.participants
       .filter((p) => p.participantId !== room.hostParticipantId)
       .every((p) => p.ready);
+  // 이전 코스 결과 화면에 아직 남아 있는 사람. 방을 떠난 게 아니라 자리를 지키고 있을 뿐이라
+  // 타일에 "게임 중"으로 표시되고, 전원이 돌아오기 전엔 다음 코스를 시작할 수 없다
+  // (서버도 ROOM_NOT_ALL_RETURNED로 거부한다).
+  const stillInResult = room?.participants.filter((p) => !p.inLobby) ?? [];
+  const allReturned = stillInResult.length === 0;
   // 타일 map 안에서 isHost가 "이 타일 주인이 방장인가"로 섀도잉되므로, "내가 방장인가"는 별칭으로 들고 간다.
   const amHost = isHost;
   // 타일 테두리·표시에 쓸 참가자 정보 (LiveKit identity == participantId)
@@ -108,6 +129,7 @@ export function LobbyScreen({
         ready: p.ready,
         isHost: p.participantId === room?.hostParticipantId,
         offline: p.connectionStatus === 'DISCONNECTED',
+        inResult: !p.inLobby,
         colorIndex: (index % 4) + 1,
       },
     ]),
@@ -207,6 +229,13 @@ export function LobbyScreen({
 
   const handleToggleReady = async () => {
     if (!self || readyPending) return;
+    // 카메라가 꺼진 채로 준비하면, 게임에 들어간 뒤엔 켤 방법이 없다 — 게임 화면(닌자/몸으로
+    // 말해요/물건 가져오기)에는 카메라 토글이 없고 대기방에만 있다. 캠 없이 신체 인식 게임을
+    // 하는 셈이 되므로 준비 자체를 막는다.
+    if (!isCameraEnabled) {
+      showToast(CAMERA_OFF_MESSAGE);
+      return;
+    }
     setReadyPending(true);
     try {
       await toggleReady(!self.ready);
@@ -232,6 +261,19 @@ export function LobbyScreen({
     showToast(`방장이 ${nickname}님으로 변경됐어요`, 'host');
   }, [room, showToast]);
 
+  // 준비를 마친 뒤 카메라를 끄면 준비를 되돌린다 — 위에서 "카메라 꺼짐 → 준비 불가"만 막으면
+  // 준비한 다음에 끄는 순서로 우회된다. 방장은 준비 토글을 쓰지 않고(시작 버튼이 곧 준비 의사)
+  // 방 생성 시부터 ready=true인 불변식이 있어서 제외한다 — 방장 캠은 아래 시작 게이트가 본다.
+  // (showToast는 useCallback으로 고정돼 있어 의존성에 넣어도 재실행 폭주가 없다)
+  useEffect(() => {
+    if (amHost || isCameraEnabled) return;
+    if (!self?.ready) return;
+    showToast(CAMERA_OFF_READY_CLEARED);
+    void toggleReady(false).catch(() => {
+      // 실패해도 서버 ready는 그대로다 — 시작 게이트가 여전히 막으므로 조용히 넘어간다.
+    });
+  }, [amHost, isCameraEnabled, self?.ready, toggleReady, showToast]);
+
   // 스페이스바 단축키 — 방장은 게임 시작, 참가자는 준비 토글. 마우스 없이 대기방을 진행할 수
   // 있게 한다. 오작동 방지 가드:
   //  - 채팅 입력 등 폼 요소/버튼에 포커스가 있으면 무시 (입력 중 스페이스, 포커스된 버튼의
@@ -253,7 +295,7 @@ export function LobbyScreen({
       ) {
         return;
       }
-      if (courseEditorOpen || confirmLeave || kickTarget) return;
+      if (courseEditorOpen || confirmLeave || kickTarget || preflightOpen) return;
       e.preventDefault(); // 페이지 스크롤 방지
 
       if (amHost) {
@@ -262,11 +304,19 @@ export function LobbyScreen({
           showToast('코스를 정해주세요!');
           return;
         }
+        if (!isCameraEnabled) {
+          showToast(CAMERA_OFF_HOST_MESSAGE);
+          return;
+        }
+        if (!allReturned) {
+          showToast('아직 결과 화면을 보고 있는 참가자가 있어요!');
+          return;
+        }
         if (!allOthersReady) {
           showToast('모든 참가자가 준비를 완료해야 해요!');
           return;
         }
-        onStartGame();
+        setPreflightOpen(true);
       } else {
         void handleToggleReady();
       }
@@ -302,9 +352,12 @@ export function LobbyScreen({
               const info = infoByIdentity.get(identity);
               const isHost = info?.isHost ?? false;
               const ready = info?.ready ?? false;
+              // 아직 코스 결과 화면에 있는 사람 — 자리·순서·방장 자격은 그대로 두고 "게임 중"만
+              // 덮는다. 준비 배지는 의미가 없으니 이 사람에겐 띄우지 않는다.
+              const inResult = info?.inResult ?? false;
               // 방장은 게임 시작 게이트를 위해 내부적으로 ready=true지만, 대기방 UI엔 준비 배지·
               // 상태를 표시하지 않는다 — 방장은 준비 대상이 아니라 게임을 시작하는 주체이기 때문.
-              const showReady = ready && !isHost;
+              const showReady = ready && !isHost && !inResult;
               const isMe = identity === participantId;
               // 연결이 끊긴 참가자는 재접속 유예(15초) 동안 자리를 지킨 채 회색으로만 표시된다.
               // 유예가 끝나면 서버가 member:left를 보내고 그때 타일이 사라진다(방장이면 위임까지).
@@ -315,7 +368,9 @@ export function LobbyScreen({
                   key={identity}
                   className={`lobby-tile${info ? ` lobby-tile--p${info.colorIndex}` : ''}${
                     showReady ? ' lobby-tile--ready' : ''
-                  }${offline ? ' lobby-tile--offline' : ''}`}
+                  }${offline ? ' lobby-tile--offline' : ''}${
+                    inResult ? ' lobby-tile--in-result' : ''
+                  }`}
                 >
                   {/* Figma의 캠 대기 화면 — 크림 원 + 대표색 원 + 이니셜.
                       비디오 트랙이 붙으면 위에 얹히는 <video>가 그대로 덮는다. */}
@@ -347,6 +402,14 @@ export function LobbyScreen({
                       <span className="lobby-tile__offline-sub">
                         15초 동안 응답이 없으면 방에서 나가요
                       </span>
+                    </div>
+                  )}
+                  {/* 결과 화면에 남아 있는 사람. 연결 끊김이 더 급한 상태라 그때는 양보한다.
+                      (READY! 배지는 위쪽에서 이미 그린다 — showReady가 inResult를 제외한다) */}
+                  {inResult && !offline && (
+                    <div className="lobby-tile__in-result">
+                      {InResultIcon}
+                      <span>게임 중</span>
                     </div>
                   )}
                   <div className="lobby-tile__bar">
@@ -554,43 +617,76 @@ export function LobbyScreen({
               data-hint={
                 course && course.items.length === 0
                   ? '코스를 정해주세요!'
-                  : allOthersReady
-                    ? undefined
-                    : '모든 참가자가 준비를 완료해야 해요!'
+                  : !isCameraEnabled
+                    ? CAMERA_OFF_HOST_MESSAGE
+                    : !allReturned
+                      ? '아직 결과 화면을 보고 있는 참가자가 있어요!'
+                      : allOthersReady
+                        ? undefined
+                        : '모든 참가자가 준비를 완료해야 해요!'
               }
             >
               <button
                 type="button"
                 className="pap-pixel-btn lobby-screen__primary-btn"
                 // 코스가 비면 시작할 게 없고(서버도 COURSE_EMPTY로 거부), 전원 준비 전에도
-                // 서버가 거부하므로(ROOM_NOT_ALL_READY) 둘 다 미리 막는다.
+                // 서버가 거부하므로(ROOM_NOT_ALL_READY) 둘 다 미리 막는다. 이전 코스 결과
+                // 화면에 남아 있는 사람이 있을 때도 마찬가지(ROOM_NOT_ALL_RETURNED).
+                // 방장 카메라는 서버가 알 수 없어서(로컬 상태) 여기서만 막는다 — 게임에
+                // 들어가면 켤 방법이 없다.
                 disabled={
-                  starting || !room || !course || course.items.length === 0 || !allOthersReady
+                  starting ||
+                  !room ||
+                  !course ||
+                  course.items.length === 0 ||
+                  !isCameraEnabled ||
+                  !allReturned ||
+                  !allOthersReady
                 }
-                onClick={() => onStartGame()}
+                // 바로 시작하지 않고 사전 점검 모달을 거친다 (MediaPipe/AI 서버 체크)
+                onClick={() => setPreflightOpen(true)}
               >
                 {PlayIcon}
-                {starting ? '시작 중...' : allOthersReady ? '게임 시작' : '준비 대기 중...'}
+                {starting
+                  ? '시작 중...'
+                  : !isCameraEnabled
+                    ? '카메라 꺼짐'
+                    : !allReturned
+                      ? '복귀 대기 중...'
+                      : allOthersReady
+                        ? '게임 시작'
+                        : '준비 대기 중...'}
               </button>
             </span>
           ) : (
             // Figma `Lobby / Start Action`(미준비, 오렌지) ↔ `Lobby / Ready Complete Action`
             // (준비 완료, 살구 #ffc56e). 둘 다 Material check 아이콘 + 13px 라벨, 그림자 5px 유지.
-            // 참여자 4색은 쓰지 않는다.
-            <button
-              type="button"
-              className={`pap-pixel-btn ${
-                self?.ready
-                  ? 'lobby-screen__ready-btn--on'
-                  : 'lobby-screen__primary-btn lobby-screen__primary-btn--ready'
-              }`}
-              data-button-sound={self?.ready ? 'cancel' : 'ready'}
-              disabled={readyPending || !self}
-              onClick={() => void handleToggleReady()}
+            // 카메라가 꺼져 있으면 준비할 수 없다 — 이유는 말풍선으로.
+            <span
+              className="lobby-screen__start-wrap"
+              data-hint={isCameraEnabled ? undefined : CAMERA_OFF_HINT}
             >
-              {CheckIcon}
-              {readyPending ? '...' : self?.ready ? '준비 완료' : '준비 하기'}
-            </button>
+              <button
+                type="button"
+                className={`pap-pixel-btn ${
+                  self?.ready
+                    ? 'lobby-screen__ready-btn--on'
+                    : 'lobby-screen__primary-btn lobby-screen__primary-btn--ready'
+                }`}
+                data-button-sound={self?.ready ? 'cancel' : 'ready'}
+                disabled={readyPending || !self || !isCameraEnabled}
+                onClick={() => void handleToggleReady()}
+              >
+                {CheckIcon}
+                {readyPending
+                  ? '...'
+                  : !isCameraEnabled
+                    ? '카메라 꺼짐'
+                    : self?.ready
+                      ? '준비 완료'
+                      : '준비 하기'}
+              </button>
+            </span>
           )}
           </div>
           {startError && <p className="lobby-screen__error">{startError}</p>}
@@ -605,49 +701,61 @@ export function LobbyScreen({
         </div>
       )}
       {courseEditorOpen && (
-          <CourseEditorModal
-            games={games}
-            course={course}
-            topicsByGameId={topicsByGameId}
-            playerCount={joinedCount}
-            saving={courseSaving}
-            saveError={courseError}
-            onSave={saveCourse}
-            onClose={() => setCourseEditorOpen(false)}
-          />
-        )}
-        {confirmLeave && (
-          <PixelConfirmModal
-            title="정말 방을 나갈까요?"
-            message="현재 방과 게임 결과에서 나가 메인 화면으로 이동해요."
-            confirmLabel="방 나가기"
-            cancelLabel="취소"
-            tone="danger"
-            onConfirm={onLeave}
-            onCancel={() => setConfirmLeave(false)}
-          />
-        )}
-        {kickTarget && (
-          <PixelConfirmModal
-            title={`'${kickTarget.nickname}' 님을 강퇴할까요?`}
-            message="강퇴된 참가자는 이 방에 다시 들어올 수 없어요."
-            confirmLabel={kickPending ? '강퇴 중...' : '강퇴'}
-            cancelLabel="취소"
-            tone="danger"
-            onConfirm={() => void handleKick()}
-            onCancel={() => !kickPending && setKickTarget(null)}
-          />
-        )}
-        {/* 내가 강퇴당한 경우 — member:left(KICKED)에서 내 id를 확인한 결과. 확인을 눌러야
-            방을 떠난다(onLeave가 정리 + 메인 이동. leaveRoom API는 404가 나지만 조용히 무시됨). */}
-        {kicked && (
-          <PixelConfirmModal
-            title="강퇴되었습니다"
-            message="방장이 회원님을 방에서 내보냈어요."
-            confirmLabel="메인으로"
-            onConfirm={onLeave}
-          />
-        )}
+        <CourseEditorModal
+          games={games}
+          course={course}
+          topicsByGameId={topicsByGameId}
+          playerCount={joinedCount}
+          saving={courseSaving}
+          saveError={courseError}
+          onSave={saveCourse}
+          onClose={() => setCourseEditorOpen(false)}
+        />
+      )}
+      {/* 시작 버튼을 누르면 바로 시작하지 않고 사전 점검을 거친다 — 전부 통과하면 모달이
+          스스로 onProceed를 불러 시작한다. 실패하면 시작하지 않고 이유를 보여준다. */}
+      {preflightOpen && (
+        <StartPreflightModal
+          course={course}
+          gameNameOf={(gameId) => games.find((game) => game.gameId === gameId)?.name ?? null}
+          onProceed={onStartGame}
+          onCancel={() => setPreflightOpen(false)}
+          starting={starting}
+          startError={startError}
+        />
+      )}
+      {confirmLeave && (
+        <PixelConfirmModal
+          title="정말 방을 나갈까요?"
+          message="현재 방과 게임 결과에서 나가 메인 화면으로 이동해요."
+          confirmLabel="방 나가기"
+          cancelLabel="취소"
+          tone="danger"
+          onConfirm={onLeave}
+          onCancel={() => setConfirmLeave(false)}
+        />
+      )}
+      {kickTarget && (
+        <PixelConfirmModal
+          title={`'${kickTarget.nickname}' 님을 강퇴할까요?`}
+          message="강퇴된 참가자는 이 방에 다시 들어올 수 없어요."
+          confirmLabel={kickPending ? '강퇴 중...' : '강퇴'}
+          cancelLabel="취소"
+          tone="danger"
+          onConfirm={() => void handleKick()}
+          onCancel={() => !kickPending && setKickTarget(null)}
+        />
+      )}
+      {/* 내가 강퇴당한 경우 — member:left(KICKED)에서 내 id를 확인한 결과. 확인을 눌러야
+          방을 떠난다(onLeave가 정리 + 메인 이동. leaveRoom API는 404가 나지만 조용히 무시됨). */}
+      {kicked && (
+        <PixelConfirmModal
+          title="강퇴되었습니다"
+          message="방장이 회원님을 방에서 내보냈어요."
+          confirmLabel="메인으로"
+          onConfirm={onLeave}
+        />
+      )}
     </div>
   );
 }

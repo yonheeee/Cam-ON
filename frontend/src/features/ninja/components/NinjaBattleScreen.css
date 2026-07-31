@@ -306,7 +306,7 @@
 }
 
 /* 이펙트 오버레이를 타일 안에 가둔다 — Pixel*Effect는 .ninja-effect-overlay를 쓰고
-   NinjaGamePanel.css에서 position: fixed / 100vw로 전체화면에 깔리게 돼 있는데, 여기서는
+   pixelEffectOverlay.css에서 position: fixed / 100vw로 전체화면에 깔리게 돼 있는데, 여기서는
    맞은 사람 타일에서만 재생하므로 absolute로 덮어쓴다(컴포넌트는 resizeTo: host라 알아서 맞춘다). */
 /* 이펙트는 캠보다 1.5배 크게 잡는다 — 타격감이 프레임 안에 얌전히 갇히지 않게. 컴포넌트가
    호스트 크기(resizeTo: host)에 맞춰 그리므로 호스트를 키우면 내용도 같이 커진다. 타일의
@@ -752,6 +752,17 @@
   gap: 6px;
 }
 
+/* 탈락 후 관전 — 인터미션과 같은 높이를 유지해 보드가 튀지 않게 하고, 내 차례가 아님이
+   한눈에 읽히도록 채도를 낮춘다. */
+.ninja-board__body--eliminated {
+  min-height: 168px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+  opacity: 0.65;
+}
+
 .ninja-result {
   list-style: none;
   margin: 0;
@@ -786,72 +797,6 @@
 }
 
 .ninja-result__pt {
-  margin-left: auto;
-  font-size: 22px;
-  color: var(--pap-success-lime);
-}
-
-/* ---- 최종 순위 ---- */
-.ninja-final {
-  position: fixed;
-  inset: 0;
-  z-index: 60;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgb(27 18 48 / 0.82);
-}
-
-.ninja-final__card {
-  width: min(420px, calc(100vw - 40px));
-  padding: 26px 28px;
-  background: rgb(27 18 48 / 0.95);
-  border: 4px solid var(--pap-play-yellow);
-  border-radius: 10px;
-  box-shadow: 6px 6px 0 0 rgb(0 0 0 / 0.5);
-}
-
-.ninja-final__title {
-  margin: 0 0 16px;
-  font-size: 33px;
-  color: var(--pap-play-yellow);
-  text-align: center;
-}
-
-.ninja-final__list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.ninja-final__list li {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 9px 12px;
-  background: rgb(255 253 245 / 0.08);
-  border-radius: 6px;
-}
-
-.ninja-final--me {
-  background: rgb(255 217 102 / 0.2) !important;
-}
-
-.ninja-final__rank {
-  width: 24px;
-  font-size: 22px;
-  color: var(--pap-play-yellow);
-}
-
-.ninja-final__name {
-  font-size: 16px;
-  font-weight: 700;
-}
-
-.ninja-final__pt {
   margin-left: auto;
   font-size: 22px;
   color: var(--pap-success-lime);

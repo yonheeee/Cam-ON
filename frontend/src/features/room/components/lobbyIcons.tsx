@@ -137,3 +137,28 @@ export const SpinnerIcon = (
   </svg>
 );
 
+// 아직 코스 결과 화면에 남아 있는 참가자("게임 중") 타일 오버레이용 트로피 —
+// 재접속 스피너와 같은 자리에 같은 크기로 쓴다.
+export const InResultIcon = (
+  <svg width="32" height="32" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <path
+      d="M4.5 2h7v3.5a3.5 3.5 0 0 1-7 0V2Z"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinejoin="round"
+    />
+    <path
+      d="M4.5 3H2.8v1.2A2.2 2.2 0 0 0 5 6.4M11.5 3h1.7v1.2A2.2 2.2 0 0 1 11 6.4"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+    />
+    <path
+      d="M8 9v2.5M5.5 14h5M6.5 11.5h3l.6 2.5H5.9l.6-2.5Z"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
