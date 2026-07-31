@@ -152,10 +152,8 @@ export function GameSetupScreen({
       })) ?? [],
   );
   const [localError, setLocalError] = useState<string | null>(null);
-  // 아코디언은 한 번에 하나만 펼친다 (시안과 동일). 기본은 첫 게임.
-  const [expandedGameId, setExpandedGameId] = useState<number | null>(
-    () => games.find((game) => game.supported)?.gameId ?? null,
-  );
+  // 아코디언은 한 번에 하나만 펼친다 (시안과 동일). 처음에는 전부 접어둔다.
+  const [expandedGameId, setExpandedGameId] = useState<number | null>(null);
   // 드래그 추적은 index가 아니라 uid로 — 재정렬로 index가 계속 바뀌기 때문
   const [dragUid, setDragUid] = useState<number | null>(null);
 
@@ -240,7 +238,6 @@ export function GameSetupScreen({
       <img className="game-setup__logo" src="/assets/cam-on-logo-v3.png" alt="CAM, ON!" />
 
       <header className="game-setup__header">
-        <span className="game-setup__breadcrumb">대기방&nbsp;&nbsp;/&nbsp;&nbsp;게임 구성</span>
         <h1 className="game-setup__title">게임 구성</h1>
         <p className="game-setup__subtitle">오른쪽 게임 목록에서 게임을 추가해 세트를 구성하세요.</p>
         <button type="button" className="game-setup__back" data-button-sound="cancel" onClick={onClose}>
@@ -288,7 +285,9 @@ export function GameSetupScreen({
                   onDragEnd={() => setDragUid(null)}
                   onDrop={() => setDragUid(null)}
                   onKeyDown={(e) => {
-                    // 키보드 접근성 — 카드에 포커스를 두고 ↑/↓로 순서 변경
+                    // 키보드 접근성 — 카드 자체에 포커스가 있을 때만 ↑/↓로 순서 변경.
+                    // (카드 안 주제 셀렉트에서 올라온 방향키까지 잡으면 옵션 선택이 안 된다)
+                    if (e.target !== e.currentTarget) return;
                     if (e.key === 'ArrowUp') {
                       e.preventDefault();
                       moveItem(index, index - 1);
