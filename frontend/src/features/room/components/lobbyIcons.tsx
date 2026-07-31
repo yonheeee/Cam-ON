@@ -67,6 +67,35 @@ export const GearIcon = (
   </svg>
 );
 
+// 게임 세트 카드 우상단 — Material "info" (아케이드 블루로 상속 색 사용)
+export const InfoIcon = (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <circle cx="8" cy="8" r="6.4" stroke="currentColor" strokeWidth="1.5" />
+    <path d="M8 7.1v4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    <circle cx="8" cy="4.9" r="0.95" fill="currentColor" />
+  </svg>
+);
+
+// 준비 버튼 / 토스트 — Material "check"
+export const CheckIcon = (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path
+      d="m4.5 12.8 5 5L19.5 7.2"
+      stroke="currentColor"
+      strokeWidth="2.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
+// 하단 주 액션 — Material "play_arrow"
+export const PlayIcon = (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path d="M8 5.5v13l11-6.5-11-6.5Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+  </svg>
+);
+
 export const ChevronUpIcon = (
   <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
     <path d="m3.5 10 4.5-4.5L12.5 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
