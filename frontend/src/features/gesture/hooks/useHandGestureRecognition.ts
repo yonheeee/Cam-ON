@@ -161,5 +161,14 @@ export function useHandGestureRecognition(videoRef: RefObject<HTMLVideoElement |
     return () => cancelAnimationFrame(rafId);
   }, [active, ready, videoRef]);
 
+  // active가 꺼지면 마지막 판정을 비운다. 안 그러면 루프만 멈추고 직전 콤보 값이 그대로 남아,
+  // 내 화면과 다른 참가자 보드에 아직 인식되는 것처럼 보인다(탈락 직후가 특히 그렇다).
+  useEffect(() => {
+    if (active) return;
+    stabilizeWindowRef.current = [];
+    setResults([]);
+    setCombo({ label: null, confidence: 0 });
+  }, [active]);
+
   return { results, combo, ready, error, mirrorCanvasRef };
 }

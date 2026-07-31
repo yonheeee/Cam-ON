@@ -27,9 +27,15 @@ interface GesturePanelProps {
    * 두고 CSS에서 object-fit: cover를 걸어 LiveKit의 크롭과 동일하게 잘린다.
    */
   variant?: 'panel' | 'overlay';
+  /**
+   * 인식을 돌릴지. false면 MediaPipe 프레임 루프와 데이터 채널 브로드캐스트를 모두 멈춘다 —
+   * 닌자에서 탈락한 참가자용. 판정에 쓰이지도 않을 추론을 매 프레임 돌리는 건 CPU만 태우고,
+   * 초당 2회 브로드캐스트도 그대로 나가서 낭비다. 기본값 true.
+   */
+  active?: boolean;
 }
 
-export function GesturePanel({ variant = 'panel' }: GesturePanelProps = {}) {
+export function GesturePanel({ variant = 'panel', active = true }: GesturePanelProps = {}) {
   const { cameraTrack, localParticipant } = useLocalParticipant();
   const { send } = useDataChannel(GESTURE_RESULT_TOPIC);
   const setEntry = useGestureBoardStore((state) => state.setEntry);
@@ -48,7 +54,10 @@ export function GesturePanel({ variant = 'panel' }: GesturePanelProps = {}) {
     };
   }, [track]);
 
-  const { results, combo, ready, error, mirrorCanvasRef } = useHandGestureRecognition(videoRef, Boolean(track));
+  const { results, combo, ready, error, mirrorCanvasRef } = useHandGestureRecognition(
+    videoRef,
+    active && Boolean(track),
+  );
 
   // 훅이 내부적으로 소유한(React 트리 밖에서 생성된) mirrorCanvas를 스테이지의 첫 번째
   // 자식으로 직접 삽입한다 — 스켈레톤 캔버스보다 먼저 와야 그 아래(배경)에 깔린다.
@@ -86,12 +95,27 @@ export function GesturePanel({ variant = 'panel' }: GesturePanelProps = {}) {
   // 아직 안 열렸을 때 보낸 메시지는 유실되는데, 값이 그대로면(예: 계속 손 미인식)
   // 다시는 재전송되지 않아 영원히 "대기 중"으로 남는 문제가 있었다.
   useEffect(() => {
+    // 인식을 안 돌리면(탈락 등) 보낼 것도 없다 — 주기 전송을 멈춘다. 다만 마지막으로 한 번
+    // "손 없음"을 알려서 다른 참가자 보드에 내 직전 콤보가 굳은 채 남지 않게 한다.
+    if (!active) {
+      const cleared: GestureResultPayload = {
+        identity: localParticipant.identity,
+        comboLabel: null,
+        confidence: 0,
+      };
+      latestEntryRef.current = cleared;
+      send(new TextEncoder().encode(JSON.stringify(cleared)), {
+        topic: GESTURE_RESULT_TOPIC,
+        reliable: true,
+      }).catch(() => {});
+      return;
+    }
     const interval = setInterval(() => {
       const serialized = JSON.stringify(latestEntryRef.current);
       send(new TextEncoder().encode(serialized), { topic: GESTURE_RESULT_TOPIC, reliable: true }).catch(() => {});
     }, 500);
     return () => clearInterval(interval);
-  }, [send]);
+  }, [active, send, localParticipant.identity]);
 
   useEffect(() => {
     const canvas = canvasRef.current;

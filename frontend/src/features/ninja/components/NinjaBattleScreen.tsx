@@ -225,7 +225,9 @@ export function NinjaBattleScreen({
           {/* 내 손 스켈레톤은 내 캠 위에 직접 그린다 — 랜드마크는 내 카메라에서만 나오므로
               (남의 랜드마크는 전송되지 않는다) 각자 자기 타일에서만 보인다. 이 컴포넌트가
               인식 루프를 소유하므로 게임 중 정확히 한 번만 마운트된다. */}
-          {isMe && <GesturePanel variant="overlay" />}
+          {/* 탈락하면 인식 루프와 브로드캐스트를 끊는다 — 판정에 쓰이지 않는 추론을 매 프레임
+              돌릴 이유가 없다(제출도 훅에서 이미 막혀 있다). 다음 판이 열리면 다시 켜진다. */}
+          {isMe && <GesturePanel variant="overlay" active={!isEliminated} />}
           {/* 이펙트는 이 타일 안에서만 재생된다 — 컴포넌트가 호스트 div 크기에 맞춰 그린다 */}
           {effectTargetId === id &&
             (pixelEffect ?? (requiredSkill && <NinjaEffectOverlay effect={requiredSkill.effect} />))}
