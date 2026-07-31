@@ -23,6 +23,11 @@ const ATTACK_TARGET_TIMER_SECONDS = 15;
 // 이벤트를 못 받은 경우(새로고침 직후 스냅샷 동기화로 진입)에만 이 근사치로 다시 센다.
 // 백엔드 NinjaGameService.EXCHANGE_DURATION(30초)과 맞춤.
 const ROUND_DURATION_SECONDS = 30;
+// 다음 교환 카운트다운은 3 → 2 → 1을 한 칸 0.5초씩 보여준다(총 1.5초).
+// 백엔드 NinjaGameService.COUNTDOWN_DURATION(1500ms) = COUNTDOWN_STEPS * COUNTDOWN_STEP_MS.
+// 셋 중 하나를 바꾸면 나머지도 같이 맞춰야 숫자와 실제 대기가 어긋나지 않는다.
+const COUNTDOWN_STEPS = 3;
+const COUNTDOWN_STEP_MS = 500;
 
 // 상태 동기화 구조("상태 변경 요청은 REST, 변경 전파는 WS" 프로젝트 원칙):
 // - 입장/STOMP (재)연결 시 GET .../state로 전체 스냅샷을 1회 동기화하고,
@@ -369,7 +374,8 @@ export function useNinjaRound(
   useEffect(() => {
     if (!isIntermission) return;
     setNow(Date.now());
-    const interval = setInterval(() => setNow(Date.now()), 200);
+    // 카운트다운 한 칸이 0.5초라 그보다 촘촘히 재야 숫자가 제때 바뀐다.
+    const interval = setInterval(() => setNow(Date.now()), 100);
     return () => clearInterval(interval);
   }, [isIntermission, effectUntil, nextRoundAt]);
 
@@ -379,7 +385,11 @@ export function useNinjaRound(
     nextRoundAt != null &&
     (effectUntil == null || now >= effectUntil) &&
     now < nextRoundAt;
-  const countdownSeconds = inCountdown ? Math.max(1, Math.ceil((nextRoundAt - now) / 1000)) : null;
+  // 3 → 2 → 1을 0.5초씩 보여준다(서버 COUNTDOWN_DURATION = 1500ms). 남은 시간을 초로
+  // 나누면 1.5초 동안 2와 1만 스쳐서 "3, 2, 1" 리듬이 안 나온다.
+  const countdownSeconds = inCountdown
+    ? Math.min(COUNTDOWN_STEPS, Math.max(1, Math.ceil((nextRoundAt - now) / COUNTDOWN_STEP_MS)))
+    : null;
 
   return {
     round,

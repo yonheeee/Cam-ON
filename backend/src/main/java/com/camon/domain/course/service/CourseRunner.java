@@ -53,10 +53,15 @@ import org.springframework.stereotype.Service;
 @Service
 public class CourseRunner {
 
-    // 게임이 열리기까지의 간격. 게임 사이에서는 직전 게임의 종료 화면(최종 순위)을 읽을 시간이자,
-    // 코스 첫 게임 앞에서는 룰 설명을 읽을 시간이다. 게임 내부 인터미션(닌자 이펙트 5초 +
-    // 카운트다운 3초)과는 별개의 구간이다.
+    // 다음 게임 룰 설명 화면(course:intermission)이 떠 있는 시간. 코스 첫 게임 앞에서는 이
+    // 구간만 있고, 게임 사이에서는 아래 세트 결과 구간이 끝난 뒤에 이어진다.
+    // 게임 내부 인터미션(닌자 이펙트 5초 + 카운트다운 3초)과는 별개의 구간이다.
     private static final Duration SESSION_INTERMISSION = Duration.ofSeconds(8);
+
+    // 게임 하나가 끝난 뒤 그 세트의 순위/점수를 읽는 시간. 이 구간이 지나면 룰 설명 구간이
+    // 열린다 — 두 화면을 겹쳐 띄우면 룰 설명이 결과를 덮으므로 순서대로 준다.
+    // 프론트의 세트 결과 카운트다운(VideoCallRoom.SET_RESULT_DURATION_MS)과 같은 값이어야 한다.
+    private static final Duration SET_RESULT_DURATION = Duration.ofSeconds(8);
 
     // "코스는 시작됐지만 아직 첫 게임이 열리지 않았다"를 나타내는 seq. 첫 게임도 룰 설명을 보고
     // 들어가게 되면서, 게임이 하나도 안 열린 구간을 표현할 값이 필요해졌다. 게임 사이 인터미션이
@@ -177,15 +182,47 @@ public class CourseRunner {
             return;
         }
 
+        // 두 구간을 순서대로 준다 — 겹치면 룰 설명이 방금 세트의 결과를 덮는다.
+        //   1) 세트 중간 결과 (SET_RESULT_DURATION): 방금 끝난 세트의 순위/점수를 읽는 시간.
+        //      게임별 종료 이벤트(ninja:game-ended 등)가 이미 나갔으므로 서버가 따로 알릴 것이 없다.
+        //   2) 다음 게임 룰 설명 (SESSION_INTERMISSION): course:intermission으로 시작을 알린다.
+        Instant rulesAt = Instant.now().plus(SET_RESULT_DURATION);
+        log.info("[Course] scheduleAdvance : roomCode={} seq={} 종료 — 세트 결과 {}초 후 룰 설명",
+            room.roomCode(), finishedSeq, SET_RESULT_DURATION.toSeconds());
+        taskScheduler.schedule(() -> beginRuleIntermission(roomId, finishedSeq), rulesAt);
+    }
+
+    // 세트 결과를 보여준 뒤 다음 게임 룰 설명 구간을 연다. 이 시점에 course:intermission이
+    // 나가고, 프론트는 그걸 받아 세트 결과 화면을 접고 룰 설명으로 넘어간다(전환 기준이 서버
+    // 이벤트라 전원이 같은 순간에 넘어간다).
+    void beginRuleIntermission(UUID roomId, int finishedSeq) {
+        Room room = roomRepository.findById(roomId).orElse(null);
+        if (room == null || room.status() != RoomStatus.PLAYING) {
+            return;
+        }
+        // 방장이 세트 결과 화면에서 "다음 세트 시작하기"를 눌러 이미 넘어갔다면 할 일이 없다.
+        if (finishedSeq != room.currentSessionSeq()) {
+            log.info("[Course] beginRuleIntermission : roomCode={} seq={} 이미 넘어갔다 — 건너뜀",
+                room.roomCode(), finishedSeq);
+            return;
+        }
+
         Instant resumesAt = Instant.now().plus(SESSION_INTERMISSION);
-        log.info("[Course] scheduleAdvance : roomCode={} seq={} 종료 — {}초 후 다음 진행",
-            room.roomCode(), finishedSeq, SESSION_INTERMISSION.toSeconds());
-        // 인터미션 화면에 "다음에 뭘 하는지"를 알린다. 다음 칸이 곧 다음 게임인 것은 아니라
-        // (인원이 안 맞는 칸은 건너뛴다) 서버가 직접 골라서 내려준다.
-        courseEventPublisher.publishIntermission(
-            roomId,
-            buildIntermission(room, finishedSeq, resumesAt)
-        );
+        // 다음 칸이 곧 다음 게임인 것은 아니라(인원이 안 맞는 칸은 건너뛴다) 서버가 직접 고른다.
+        CourseIntermissionPayload payload = buildIntermission(room, finishedSeq, resumesAt);
+        if (payload.nextSessionSeq() == null) {
+            // 마지막 세트였다 — 설명할 다음 게임이 없으므로 룰 설명 구간을 생략하고 곧바로
+            // 종합 결과로 넘어간다. 빈 화면을 8초 더 보여줄 이유가 없다.
+            log.info("[Course] beginRuleIntermission : roomCode={} 남은 게임 없음 — 룰 설명 생략",
+                room.roomCode());
+            advance(roomId, finishedSeq);
+            return;
+        }
+
+        log.info("[Course] beginRuleIntermission : roomCode={} seq={} 룰 설명 {}초 후 seq={} 시작",
+            room.roomCode(), finishedSeq, SESSION_INTERMISSION.toSeconds(),
+            payload.nextSessionSeq());
+        courseEventPublisher.publishIntermission(roomId, payload);
         taskScheduler.schedule(() -> advance(roomId, finishedSeq), resumesAt);
     }
 
