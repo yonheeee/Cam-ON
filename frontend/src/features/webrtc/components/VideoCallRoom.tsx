@@ -18,6 +18,7 @@ import { FetchObjectGame } from '../../fetch/components/FetchObjectGame';
 import { FetchCoursePanel } from '../../fetch/components/FetchCoursePanel';
 import { useFetchGame } from '../../fetch/hooks/useFetchGame';
 import { roomApi, RoomApiError, type ParticipantResponse } from '../../room/api/roomApi';
+import { analyticsApi } from '../../analytics/api/analyticsApi';
 import '@livekit/components-styles';
 import './VideoCallRoom.css';
 
@@ -42,7 +43,8 @@ const roomOptions: RoomOptions = {
 };
 
 // LiveKit Cloud 프로젝트 서버 URL — 고정값이라 매번 입력받을 필요 없음.
-const LIVEKIT_SERVER_URL = 'wss://plaiground-gkmfgv1j.livekit.cloud';
+const LIVEKIT_SERVER_URL =
+  import.meta.env.VITE_LIVEKIT_URL ?? 'ws://localhost:7880';
 
 interface VideoCallRoomProps {
   // 방 생성/입장 플로우를 마치고 들어오는 화면이라, 여기 도달한 시점엔 넷 다 이미 확보돼 있다.
@@ -144,6 +146,39 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
     roomId,
     accessToken,
   );
+  const recordedRoomEntryRef = useRef(false);
+  useEffect(() => {
+    if (recordedRoomEntryRef.current) return;
+    recordedRoomEntryRef.current = true;
+    void analyticsApi
+      .recordEvent(roomId, accessToken, {
+        eventName: 'ROOM_ENTERED',
+      })
+      .catch(() => {
+        // Analytics must never block or interrupt room entry.
+      });
+  }, [roomId, accessToken]);
+
+  const recordedResultIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!finished) {
+      recordedResultIdRef.current = null;
+      return;
+    }
+    const resultId = `${finished.totalSessions}:${finished.ranking
+      .map((entry) => `${entry.participantId}:${entry.totalScore}`)
+      .join(',')}`;
+    if (recordedResultIdRef.current === resultId) return;
+    recordedResultIdRef.current = resultId;
+    void analyticsApi
+      .recordEvent(roomId, accessToken, {
+        eventName: 'RESULT_SCREEN_VIEWED',
+        properties: { totalSessions: finished.totalSessions },
+      })
+      .catch(() => {
+        // Analytics must never block or interrupt the game result screen.
+      });
+  }, [finished, roomId, accessToken]);
   // 이벤트로 받은 세션이 우선이고, 놓친 경우(늦은 접속/재접속)엔 아래 복구 경로가 채운다.
   const [recoveredSession, setRecoveredSession] = useState<GameStartedData | null>(null);
   const session = activeSession ?? recoveredSession;

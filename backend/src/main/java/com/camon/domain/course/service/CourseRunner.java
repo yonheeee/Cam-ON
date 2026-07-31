@@ -1,5 +1,7 @@
 package com.camon.domain.course.service;
 
+import com.camon.domain.analytics.domain.AnalyticsDomainEvent;
+import com.camon.domain.analytics.domain.AnalyticsEventName;
 import com.camon.domain.course.domain.CourseItem;
 import com.camon.domain.course.repository.CourseRepository;
 import com.camon.domain.course.ws.CourseEventPublisher;
@@ -33,6 +35,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.TaskScheduler;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
 // 대기방에서 확정된 코스를 실제로 굴리는 오케스트레이터.
@@ -60,6 +63,7 @@ public class CourseRunner {
     private final GameScoreService gameScoreService;
     private final CourseEventPublisher courseEventPublisher;
     private final TaskScheduler taskScheduler;
+    private final ApplicationEventPublisher applicationEventPublisher;
     // games.name → 그 게임의 세션을 여는 방법. 게임이 추가되면 빈이 하나 늘어날 뿐 이 클래스는
     // 바뀌지 않는다.
     private final Map<String, GameSessionStarter> startersByGameName;
@@ -73,7 +77,8 @@ public class CourseRunner {
         GameScoreService gameScoreService,
         CourseEventPublisher courseEventPublisher,
         TaskScheduler taskScheduler,
-        List<GameSessionStarter> sessionStarters
+        List<GameSessionStarter> sessionStarters,
+        ApplicationEventPublisher applicationEventPublisher
     ) {
         this.roomRepository = roomRepository;
         this.participantRepository = participantRepository;
@@ -83,6 +88,7 @@ public class CourseRunner {
         this.gameScoreService = gameScoreService;
         this.courseEventPublisher = courseEventPublisher;
         this.taskScheduler = taskScheduler;
+        this.applicationEventPublisher = applicationEventPublisher;
         this.startersByGameName = sessionStarters.stream().collect(
             Collectors.toUnmodifiableMap(
                 GameSessionStarter::gameName,
@@ -123,6 +129,18 @@ public class CourseRunner {
         try {
             CourseItem first = items.getFirst();
             openSession(room, firstSeq, first, participants);
+            applicationEventPublisher.publishEvent(
+                AnalyticsDomainEvent.server(
+                    AnalyticsEventName.COURSE_STARTED,
+                    roomId,
+                    requesterId,
+                    Instant.now(),
+                    Map.of(
+                        "playerCount", participants.size(),
+                        "courseSize", items.size()
+                    )
+                )
+            );
             return new StartedSession(first.gameId(), firstSeq, first.roundCount());
         } catch (RuntimeException e) {
             // 세션 오픈 실패 시 대기방으로 되돌려 재시작이 가능하게 한다.
@@ -147,6 +165,7 @@ public class CourseRunner {
 
         log.info("[Course] scheduleAdvance : roomCode={} seq={} 종료 — {}초 후 다음 진행",
             room.roomCode(), finishedSeq, SESSION_INTERMISSION.toSeconds());
+        publishFinishedSessionAnalytics(room, finishedSeq);
         taskScheduler.schedule(
             () -> advance(roomId, finishedSeq),
             Instant.now().plus(SESSION_INTERMISSION)
@@ -194,6 +213,20 @@ public class CourseRunner {
                     skipReason.get()
                 )
             );
+            applicationEventPublisher.publishEvent(new AnalyticsDomainEvent(
+                UUID.randomUUID(),
+                AnalyticsEventName.GAME_SESSION_SKIPPED,
+                roomId,
+                null,
+                gameCatalogService.findName(item.gameId()),
+                seq,
+                null,
+                Instant.now(),
+                null,
+                null,
+                null,
+                Map.of("reason", skipReason.get())
+            ));
         }
 
         finishCourse(room, items.size());
@@ -228,6 +261,23 @@ public class CourseRunner {
             new GameSessionSpec(item.gameId(), item.roundCount(), item.topicId()),
             participants
         );
+        applicationEventPublisher.publishEvent(new AnalyticsDomainEvent(
+            UUID.randomUUID(),
+            AnalyticsEventName.GAME_SESSION_STARTED,
+            room.roomId(),
+            null,
+            game.getName(),
+            seq,
+            null,
+            Instant.now(),
+            null,
+            null,
+            null,
+            Map.of(
+                "playerCount", participants.size(),
+                "roundCount", item.roundCount()
+            )
+        ));
     }
 
     // 코스 종합 결과 화면에서 방장이 "방으로 돌아가기"를 누르는 지점. 이전 코스의 점수 기록을
@@ -281,10 +331,53 @@ public class CourseRunner {
         // 방을 FINISHED로 닫는다. 같은 방에서 다시 놀려면 방장이 returnToLobby로 점수를
         // 초기화하고 WAITING으로 되돌린 뒤 코스를 다시 시작한다.
         roomRepository.updateStatus(room.roomId(), RoomStatus.FINISHED);
+        List<CourseScoreEntry> ranking = buildRanking(room);
         courseEventPublisher.publishCourseFinished(
             room.roomId(),
-            new CourseFinishedPayload(totalSessions, buildRanking(room))
+            new CourseFinishedPayload(totalSessions, ranking)
         );
+        applicationEventPublisher.publishEvent(
+            AnalyticsDomainEvent.server(
+                AnalyticsEventName.COURSE_FINISHED,
+                room.roomId(),
+                null,
+                Instant.now(),
+                Map.of(
+                    "playerCount", ranking.size(),
+                    "totalSessions",
+                    totalSessions
+                )
+            )
+        );
+    }
+
+    private void publishFinishedSessionAnalytics(Room room, int finishedSeq) {
+        try {
+            CourseItem item = courseRepository
+                .findAll(room.roomId(), room.roomCode())
+                .get(finishedSeq - 1);
+            applicationEventPublisher.publishEvent(new AnalyticsDomainEvent(
+                UUID.randomUUID(),
+                AnalyticsEventName.GAME_SESSION_FINISHED,
+                room.roomId(),
+                null,
+                gameCatalogService.findName(item.gameId()),
+                finishedSeq,
+                null,
+                Instant.now(),
+                null,
+                null,
+                null,
+                Map.of()
+            ));
+        } catch (RuntimeException exception) {
+            log.warn(
+                "[Analytics] failed to describe finished game session: roomCode={}, seq={}",
+                room.roomCode(),
+                finishedSeq,
+                exception
+            );
+        }
     }
 
     // 코스 전체 누적 점수(room:{code}:course:totals) 내림차순. 동점은 같은 순위를 준다.

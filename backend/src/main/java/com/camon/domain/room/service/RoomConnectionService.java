@@ -1,5 +1,7 @@
 package com.camon.domain.room.service;
 
+import com.camon.domain.analytics.domain.AnalyticsDomainEvent;
+import com.camon.domain.analytics.domain.AnalyticsEventName;
 import com.camon.domain.room.config.RoomConnectionProperties;
 import com.camon.domain.room.domain.ConnectionStatus;
 import com.camon.domain.room.event.ParticipantLeftEvent;
@@ -74,6 +76,15 @@ public class RoomConnectionService {
                 participantId,
                 ConnectionStatus.CONNECTED
             );
+            applicationEventPublisher.publishEvent(
+                AnalyticsDomainEvent.server(
+                    AnalyticsEventName.PARTICIPANT_RECONNECTED,
+                    roomId,
+                    participantId,
+                    Instant.now(),
+                    java.util.Map.of()
+                )
+            );
         }
     }
 
@@ -103,6 +114,15 @@ public class RoomConnectionService {
                 roomId,
                 participantId,
                 ConnectionStatus.DISCONNECTED
+            );
+            applicationEventPublisher.publishEvent(
+                AnalyticsDomainEvent.server(
+                    AnalyticsEventName.PARTICIPANT_DISCONNECTED,
+                    roomId,
+                    participantId,
+                    Instant.now(),
+                    java.util.Map.of()
+                )
             );
         }
         scheduleTimeout(roomId, participantId);
@@ -219,6 +239,15 @@ public class RoomConnectionService {
                     roomId,
                     participantId,
                     "TIMEOUT"
+                )
+            );
+            applicationEventPublisher.publishEvent(
+                AnalyticsDomainEvent.server(
+                    AnalyticsEventName.PARTICIPANT_LEFT,
+                    roomId,
+                    participantId,
+                    Instant.now(),
+                    java.util.Map.of("reason", "TIMEOUT")
                 )
             );
         } finally {

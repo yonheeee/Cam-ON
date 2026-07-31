@@ -1,5 +1,8 @@
 package com.camon.domain.room.service;
 
+import com.camon.domain.analytics.domain.AnalyticsDomainEvent;
+import com.camon.domain.analytics.domain.AnalyticsEventName;
+import com.camon.domain.analytics.service.AnalyticsExitContextResolver;
 import com.camon.domain.media.service.LiveKitTokenService;
 import com.camon.domain.room.domain.ConnectionStatus;
 import com.camon.domain.room.domain.Participant;
@@ -48,6 +51,7 @@ public class RoomService {
     private final LiveKitTokenService liveKitTokenService;
     private final Clock clock;
     private final ApplicationEventPublisher applicationEventPublisher;
+    private final AnalyticsExitContextResolver analyticsExitContextResolver;
 
     public RoomService(
         RoomRepository roomRepository,
@@ -58,7 +62,8 @@ public class RoomService {
         RoomEventPublisher roomEventPublisher,
         LiveKitTokenService liveKitTokenService,
         Clock jwtClock,
-        ApplicationEventPublisher applicationEventPublisher
+        ApplicationEventPublisher applicationEventPublisher,
+        AnalyticsExitContextResolver analyticsExitContextResolver
     ) {
         this.roomRepository = roomRepository;
         this.participantRepository = participantRepository;
@@ -69,6 +74,7 @@ public class RoomService {
         this.liveKitTokenService = liveKitTokenService;
         this.clock = jwtClock;
         this.applicationEventPublisher = applicationEventPublisher;
+        this.analyticsExitContextResolver = analyticsExitContextResolver;
     }
 
     public CreateRoomResponse createRoom(
@@ -104,6 +110,16 @@ public class RoomService {
             );
 
             if (roomRepository.tryCreate(room, host)) {
+                applicationEventPublisher.publishEvent(
+                    AnalyticsDomainEvent.serverIdempotent(
+                        AnalyticsEventName.ROOM_CREATED,
+                        room.roomId(),
+                        participantId,
+                        "created",
+                        createdAt,
+                        java.util.Map.of("maxPlayers", room.maxPlayers())
+                    )
+                );
                 return toCreateRoomResponse(room, host);
             }
         }
@@ -141,6 +157,15 @@ public class RoomService {
             participant.participantId(),
             participant.nickname()
         );
+        applicationEventPublisher.publishEvent(
+            AnalyticsDomainEvent.server(
+                AnalyticsEventName.PARTICIPANT_JOINED,
+                room.roomId(),
+                participantId,
+                clock.instant(),
+                java.util.Map.of()
+            )
+        );
 
         Room currentRoom = roomRepository.findById(room.roomId())
             .orElseThrow(() -> new BusinessException(ErrorCode.ROOM_NOT_FOUND));
@@ -163,6 +188,8 @@ public class RoomService {
     }
 
     public void leaveRoom(UUID roomId, UUID participantId) {
+        java.util.Map<String, Object> exitContext =
+            analyticsExitContextResolver.resolve(roomId);
         LeaveRoomResult result = participantRepository.leave(roomId, participantId);
         if (result.status() == LeaveRoomStatus.ROOM_NOT_FOUND) {
             throw new BusinessException(ErrorCode.ROOM_NOT_FOUND);
@@ -196,9 +223,20 @@ public class RoomService {
                 "LEFT"
             )
         );
+        applicationEventPublisher.publishEvent(
+            AnalyticsDomainEvent.server(
+                AnalyticsEventName.PARTICIPANT_LEFT,
+                roomId,
+                participantId,
+                clock.instant(),
+                withReason(exitContext, "LEFT")
+            )
+        );
     }
 
     public void kick(UUID roomId, UUID requesterId, UUID targetId) {
+        java.util.Map<String, Object> exitContext =
+            analyticsExitContextResolver.resolve(roomId);
         KickParticipantResult result = participantRepository.kick(
             roomId,
             requesterId,
@@ -214,6 +252,15 @@ public class RoomService {
         roomEventPublisher.publishMemberLeft(roomId, targetId, null, "KICKED");
         applicationEventPublisher.publishEvent(
             new ParticipantLeftEvent(roomId, targetId, "KICKED")
+        );
+        applicationEventPublisher.publishEvent(
+            AnalyticsDomainEvent.server(
+                AnalyticsEventName.PARTICIPANT_LEFT,
+                roomId,
+                targetId,
+                clock.instant(),
+                withReason(exitContext, "KICKED")
+            )
         );
     }
 
@@ -242,6 +289,18 @@ public class RoomService {
             participantId,
             result.ready(),
             result.allReady()
+        );
+        applicationEventPublisher.publishEvent(
+            AnalyticsDomainEvent.server(
+                AnalyticsEventName.READY_CHANGED,
+                roomId,
+                participantId,
+                clock.instant(),
+                java.util.Map.of(
+                    "ready", result.ready(),
+                    "allReady", result.allReady()
+                )
+            )
         );
         return new UpdateReadyResponse(
             participantId,
@@ -306,6 +365,16 @@ public class RoomService {
                 "Successful join has no error code"
             );
         };
+    }
+
+    private java.util.Map<String, Object> withReason(
+        java.util.Map<String, Object> context,
+        String reason
+    ) {
+        java.util.LinkedHashMap<String, Object> values =
+            new java.util.LinkedHashMap<>(context);
+        values.put("reason", reason);
+        return java.util.Map.copyOf(values);
     }
 
     private ErrorCode toErrorCode(KickParticipantResult result) {
