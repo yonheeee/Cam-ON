@@ -21,6 +21,8 @@ import com.camon.domain.room.repository.ParticipantRepository;
 import com.camon.domain.room.repository.RoomRepository;
 import com.camon.global.exception.BusinessException;
 import com.camon.global.exception.ErrorCode;
+import static java.util.Objects.requireNonNullElse;
+
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -51,9 +53,16 @@ import org.springframework.stereotype.Service;
 @Service
 public class CourseRunner {
 
-    // 한 게임이 끝나고 다음 게임이 열리기까지의 간격. 각 게임의 종료 화면(최종 순위)을 읽을
-    // 시간을 준다. 게임 내부 인터미션(닌자 이펙트 5초 + 카운트다운 3초)과는 별개의 구간이다.
+    // 게임이 열리기까지의 간격. 게임 사이에서는 직전 게임의 종료 화면(최종 순위)을 읽을 시간이자,
+    // 코스 첫 게임 앞에서는 룰 설명을 읽을 시간이다. 게임 내부 인터미션(닌자 이펙트 5초 +
+    // 카운트다운 3초)과는 별개의 구간이다.
     private static final Duration SESSION_INTERMISSION = Duration.ofSeconds(8);
+
+    // "코스는 시작됐지만 아직 첫 게임이 열리지 않았다"를 나타내는 seq. 첫 게임도 룰 설명을 보고
+    // 들어가게 되면서, 게임이 하나도 안 열린 구간을 표현할 값이 필요해졌다. 게임 사이 인터미션이
+    // "직전 seq"를 쓰는 것과 같은 자리에 들어가므로, 첫 게임 앞 인터미션과 게임 사이 인터미션이
+    // 진행/스킵 경로를 그대로 공유한다(advance(0) → 1번 칸을 연다).
+    private static final int BEFORE_FIRST_SESSION = 0;
 
     private final RoomRepository roomRepository;
     private final ParticipantRepository participantRepository;
@@ -94,7 +103,12 @@ public class CourseRunner {
         );
     }
 
-    // 방장이 대기방에서 "게임 시작"을 누르는 지점. 코스의 첫 칸 세션을 연다.
+    // 방장이 대기방에서 "게임 시작"을 누르는 지점.
+    //
+    // 첫 게임을 곧바로 열지 않고 룰 설명 인터미션을 먼저 준다 — 게임 사이와 똑같은 구간이다.
+    // 예전엔 여기서 바로 openSession을 불러서, 첫 게임만 설명 없이 시작됐다. 지금은 seq를
+    // BEFORE_FIRST_SESSION으로 두고 advance(0)를 예약하므로, 첫 게임 앞 인터미션이 게임 사이
+    // 인터미션과 같은 진행/스킵 경로를 탄다(방장은 "바로 시작"으로 건너뛸 수 있다).
     public StartedSession startCourse(UUID roomId, UUID requesterId) {
         Room room = requireRoom(roomId);
         if (!room.hostParticipantId().equals(requesterId)) {
@@ -122,26 +136,31 @@ public class CourseRunner {
         // 인원 조건은 코스 저장 때가 아니라 여기서 본다 — 저장 시점엔 사람이 계속 드나든다.
         courseService.validatePlayable(items, participants.size());
 
-        int firstSeq = 1;
-        // 게임 도메인은 room.currentSessionSeq()로 자기 Redis 키를 조립하므로, 세션을 열기 전에
-        // 반드시 seq를 먼저 기록해야 한다. 순서가 뒤바뀌면 엉뚱한 키에 세션이 만들어진다.
-        roomRepository.updateCurrentSessionSeq(roomId, firstSeq);
-        // status를 먼저 PLAYING으로 올려, game:started가 나갈 시점엔 이미 PLAYING이 되도록 한다
-        // (늦게 붙은 클라이언트가 방 status 조회로 게임 화면을 복구할 수 있게).
+        // 아직 게임을 열지 않는다 — 룰 설명 인터미션이 끝나야 1번 칸이 열린다.
+        roomRepository.updateCurrentSessionSeq(roomId, BEFORE_FIRST_SESSION);
+        // status를 먼저 PLAYING으로 올려, 인터미션·game:started가 나갈 시점엔 이미 PLAYING이
+        // 되도록 한다(늦게 붙은 클라이언트가 방 status 조회로 게임 화면을 복구할 수 있게).
         roomRepository.updateStatus(roomId, RoomStatus.PLAYING);
         // 게임 중엔 아무도 대기방에 없다. 코스가 끝나면 각자 "방으로 돌아가기"로 다시 true가 된다.
         participantRepository.updateAllInLobby(roomId, false);
-        try {
-            CourseItem first = items.getFirst();
-            openSession(room, firstSeq, first, participants);
-            return new StartedSession(first.gameId(), firstSeq, first.roundCount());
-        } catch (RuntimeException e) {
-            // 세션 오픈 실패 시 대기방으로 되돌려 재시작이 가능하게 한다. inLobby도 함께
-            // 되돌리지 않으면 전원이 "게임 중"으로 굳어 재시작 자체가 막힌다.
-            roomRepository.updateStatus(roomId, RoomStatus.WAITING);
-            participantRepository.updateAllInLobby(roomId, true);
-            throw e;
-        }
+
+        Instant resumesAt = Instant.now().plus(SESSION_INTERMISSION);
+        CourseIntermissionPayload intermission =
+            buildIntermission(room, BEFORE_FIRST_SESSION, resumesAt);
+        log.info("[Course] startCourse : roomCode={} 첫 게임 룰 설명 {}초 후 seq={} 시작",
+            room.roomCode(), SESSION_INTERMISSION.toSeconds(), intermission.nextSessionSeq());
+        courseEventPublisher.publishIntermission(roomId, intermission);
+        taskScheduler.schedule(() -> advance(roomId, BEFORE_FIRST_SESSION), resumesAt);
+
+        // 응답은 "곧 열릴 게임"이다. 화면 전환은 인터미션 뒤의 game:started가 담당하므로 프론트가
+        // 이 값으로 화면을 바꾸진 않지만, 요청이 무엇을 예약했는지는 응답으로도 확인돼야 한다.
+        // validatePlayable을 통과했으므로 열 수 있는 칸이 최소 하나는 있다.
+        CourseItem first = items.getFirst();
+        return new StartedSession(
+            requireNonNullElse(intermission.nextGameId(), first.gameId()),
+            requireNonNullElse(intermission.nextSessionSeq(), 1),
+            requireNonNullElse(intermission.nextRoundCount(), first.roundCount())
+        );
     }
 
     // 게임 하나가 끝났을 때(GameSessionFinishedEvent) 호출된다. 결과를 볼 시간을 준 뒤 다음으로.
@@ -171,6 +190,7 @@ public class CourseRunner {
     }
 
     // 인터미션 화면의 "바로 시작"(방장 전용). 남은 대기 시간을 건너뛰고 다음 게임을 즉시 연다.
+    // 코스 첫 게임 앞 인터미션(finishedSeq=BEFORE_FIRST_SESSION)도 같은 경로로 건너뛴다.
     // 스케줄된 타이머는 그대로 두고 seq compare-and-set으로 경쟁을 정리한다 — 먼저 진행 권한을
     // 얻은 쪽만 세션을 열고, 늦게 깬 타이머는 seq가 이미 바뀌어 있어 조용히 아무것도 하지 않는다.
     public void skipIntermission(UUID roomId, UUID requesterId, int finishedSeq) {
@@ -276,6 +296,19 @@ public class CourseRunner {
                     skipReason.get()
                 )
             );
+        }
+
+        // 첫 게임 앞 인터미션에서 여기까지 왔다면 한 판도 열리지 않았다는 뜻이다(설명을 읽는
+        // 8초 사이에 사람이 빠져 전 칸이 인원 미달이 된 경우 등). 0점짜리 종합 결과를 띄우는
+        // 대신 대기방으로 되돌려, 인원을 맞춰 다시 시작할 수 있게 한다.
+        if (finishedSeq == BEFORE_FIRST_SESSION) {
+            log.warn("[Course] advance : roomCode={} 첫 게임을 열지 못했다 — 대기방으로 되돌림",
+                room.roomCode());
+            roomRepository.updateCurrentSessionSeq(roomId, 1);
+            roomRepository.updateStatus(roomId, RoomStatus.WAITING);
+            participantRepository.updateAllInLobby(roomId, true);
+            courseEventPublisher.publishCourseAborted(roomId);
+            return;
         }
 
         finishCourse(room, items.size());

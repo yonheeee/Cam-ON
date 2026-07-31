@@ -5,7 +5,9 @@ import { useEffect, useState } from 'react';
 // 코스 진행 상태를 구독하는 훅. 방 하나의 /topic/rooms/{roomId}에서 코스 관련 이벤트만 골라 본다.
 //
 // - game:started        코스의 다음 게임이 열렸다 (게임별 패널 전환의 유일한 신호)
-// - course:intermission 게임 사이 대기가 시작됐다 — 다음 게임 룰 설명과 자동 재개 시각이 온다
+// - course:intermission 게임이 열리기 전 대기가 시작됐다 — 다음 게임 룰 설명과 자동 재개 시각이
+//                       온다. 코스 첫 게임 앞에도 온다(방장이 "게임 시작"을 누른 직후).
+// - course:aborted      코스를 시작했지만 첫 게임을 열지 못해 대기방으로 되돌아갔다
 // - course:session-skipped  인원이 안 맞아 그 게임을 건너뛰었다
 // - course:finished     코스의 마지막 게임까지 끝났다 → 종합 결과
 // - course:member-returned  누군가 종합 결과에서 대기방 복귀를 눌렀다. 복귀는 개별 행동이라
@@ -50,6 +52,7 @@ export interface SessionSkippedData {
 // 프론트가 코스만 보고 다음 게임을 알 수 없다. 룰 설명(nextGameDescription)의 원본은 MySQL
 // games.description이라 프론트에 문구를 두지 않는다.
 export interface IntermissionData {
+  /** 직전에 끝난 게임의 seq. 코스 첫 게임 앞 인터미션은 끝난 게임이 없어 0이다 */
   finishedSessionSeq: number;
   nextSessionSeq: number | null;
   nextGameId: number | null;
@@ -110,6 +113,12 @@ export function useCourseProgress(
               break;
             case 'course:intermission':
               setIntermission(event.data as IntermissionData);
+              break;
+            case 'course:aborted':
+              // 첫 게임을 열지 못해 방이 WAITING으로 되돌아갔다 — 대기 화면을 접으면 상위가
+              // 대기방을 다시 그리고(스냅샷을 새로 읽는다) 인원을 맞춰 재시작할 수 있다.
+              setIntermission(null);
+              setActiveSession(null);
               break;
             case 'course:session-skipped':
               setSkipped(event.data as SessionSkippedData);

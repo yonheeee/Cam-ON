@@ -97,27 +97,89 @@ class CourseRunnerTest {
     }
 
     @Test
-    void startsFirstGameOfCourse() {
+    void startCourseAnnouncesFirstGameRulesInsteadOfOpeningItImmediately() {
+        // 첫 게임도 룰 설명을 보고 들어간다 — 예전엔 여기서 바로 세션이 열려 첫 게임만
+        // 설명 없이 시작됐다. 지금은 seq를 0(아직 아무 게임도 안 열림)으로 두고 인터미션만 알린다.
         List<Participant> participants = readyParticipants(4);
         givenRoom(RoomStatus.WAITING, 1);
         when(participantRepository.findAll(roomId)).thenReturn(participants);
         givenCourse(new CourseItem(1, CHARADES_ID, 2, TOPIC_ID));
-        givenGame(CHARADES_ID, "CHARADES", 3, 4);
+        givenGame(CHARADES_ID, "CHARADES", 3, 4, "말 없이 몸으로 설명합니다.");
 
         CourseRunner.StartedSession started = runner.startCourse(roomId, hostId);
 
+        // 응답은 "곧 열릴 게임"이다.
         assertThat(started.gameId()).isEqualTo(CHARADES_ID);
         assertThat(started.sessionSeq()).isEqualTo(1);
         assertThat(started.totalRounds()).isEqualTo(2);
-        // 코스가 정한 라운드 수·주제가 그대로 게임에 전달돼야 한다.
+        // 아직 세션은 열리지 않았다.
+        assertThat(charadesStarter.specs).isEmpty();
+        assertThat(ninjaStarter.specs).isEmpty();
+
+        InOrder order = Mockito.inOrder(roomRepository);
+        order.verify(roomRepository).updateCurrentSessionSeq(roomId, 0);
+        order.verify(roomRepository).updateStatus(roomId, RoomStatus.PLAYING);
+
+        // 첫 게임 앞 인터미션 안내 — finishedSessionSeq=0이 "아직 끝난 게임이 없다"는 표시다.
+        ArgumentCaptor<CourseIntermissionPayload> captor = ArgumentCaptor.captor();
+        verify(courseEventPublisher).publishIntermission(eq(roomId), captor.capture());
+        CourseIntermissionPayload payload = captor.getValue();
+        assertThat(payload.finishedSessionSeq()).isZero();
+        assertThat(payload.nextSessionSeq()).isEqualTo(1);
+        assertThat(payload.nextGameName()).isEqualTo("CHARADES");
+        assertThat(payload.nextGameDescription()).isEqualTo("말 없이 몸으로 설명합니다.");
+        assertThat(payload.skippable()).isTrue();
+    }
+
+    @Test
+    void opensFirstGameWhenTheRuleIntermissionElapses() {
+        // 예약된 advance(0)가 실제로 1번 칸을 연다 — 첫 게임 앞 인터미션이 게임 사이 인터미션과
+        // 같은 진행 경로를 쓴다는 것의 확인.
+        givenRoom(RoomStatus.PLAYING, 0);
+        givenConnected(4);
+        givenCourse(new CourseItem(1, CHARADES_ID, 2, TOPIC_ID));
+        givenGame(CHARADES_ID, "CHARADES", 3, 4);
+
+        runner.advance(roomId, 0);
+
+        verify(roomRepository).updateCurrentSessionSeq(roomId, 1);
         assertThat(charadesStarter.specs).containsExactly(
             new GameSessionSpec(CHARADES_ID, 2, TOPIC_ID)
         );
-        assertThat(ninjaStarter.specs).isEmpty();
-        // 게임 도메인이 room.currentSessionSeq()로 자기 키를 조립하므로 seq가 먼저 기록돼야 한다.
-        InOrder order = Mockito.inOrder(roomRepository);
-        order.verify(roomRepository).updateCurrentSessionSeq(roomId, 1);
-        order.verify(roomRepository).updateStatus(roomId, RoomStatus.PLAYING);
+    }
+
+    @Test
+    void hostCanSkipTheFirstGameRuleIntermission() {
+        givenRoom(RoomStatus.PLAYING, 0);
+        givenConnected(4);
+        givenCourse(new CourseItem(1, CHARADES_ID, 2, TOPIC_ID));
+        givenGame(CHARADES_ID, "CHARADES", 3, 4);
+
+        runner.skipIntermission(roomId, hostId, 0);
+
+        assertThat(charadesStarter.specs).containsExactly(
+            new GameSessionSpec(CHARADES_ID, 2, TOPIC_ID)
+        );
+    }
+
+    @Test
+    void returnsRoomToWaitingWhenNoGameCouldBeOpenedAtCourseStart() {
+        // 룰 설명을 읽는 8초 사이에 사람이 빠져 전 칸이 인원 미달이 된 경우. 0점짜리 종합
+        // 결과를 띄우는 대신 대기방으로 되돌려 인원을 맞춰 다시 시작할 수 있게 한다.
+        givenRoom(RoomStatus.PLAYING, 0);
+        givenConnected(2);
+        givenCourse(new CourseItem(1, CHARADES_ID, 2, TOPIC_ID));
+        givenGame(CHARADES_ID, "CHARADES", 3, 4);
+        when(gameCatalogService.findName(CHARADES_ID)).thenReturn("CHARADES");
+
+        runner.advance(roomId, 0);
+
+        verify(roomRepository).updateStatus(roomId, RoomStatus.WAITING);
+        verify(participantRepository).updateAllInLobby(roomId, true);
+        verify(courseEventPublisher).publishCourseAborted(roomId);
+        // 한 판도 안 했으니 종합 결과를 내보내면 안 된다.
+        verify(courseEventPublisher, never()).publishCourseFinished(any(), any());
+        assertThat(charadesStarter.specs).isEmpty();
     }
 
     @Test
@@ -176,17 +238,21 @@ class CourseRunnerTest {
 
     @Test
     void returnsRoomToWaitingWhenOpeningFirstSessionFails() {
-        givenRoom(RoomStatus.WAITING, 1);
-        when(participantRepository.findAll(roomId)).thenReturn(readyParticipants(4));
+        // 세션 오픈은 이제 룰 설명 인터미션 뒤(advance(0), 스케줄러 스레드)에 일어난다.
+        // 여기서 터져도 방이 PLAYING에 갇히면 재시작이 불가능하다.
+        givenRoom(RoomStatus.PLAYING, 0);
+        givenConnected(4);
         givenCourse(new CourseItem(1, NINJA_ID, 3, null));
         givenGame(NINJA_ID, "NINJA", 2, 4);
+        when(gameCatalogService.findName(NINJA_ID)).thenReturn("NINJA");
         ninjaStarter.failure = new IllegalStateException("boom");
 
-        assertThatThrownBy(() -> runner.startCourse(roomId, hostId))
-            .isInstanceOf(IllegalStateException.class);
+        // 스케줄러 스레드에서 도는 메서드라 예외가 밖으로 나가면 아무도 잡지 않는다.
+        runner.advance(roomId, 0);
 
-        // 실패한 방이 PLAYING에 갇히면 재시작이 불가능하다.
         verify(roomRepository).updateStatus(roomId, RoomStatus.WAITING);
+        verify(participantRepository).updateAllInLobby(roomId, true);
+        verify(courseEventPublisher).publishCourseAborted(roomId);
     }
 
     @Test

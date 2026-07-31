@@ -8,6 +8,7 @@ import com.camon.domain.course.ws.payload.MemberReturnedPayload;
 import com.camon.global.ws.StompBroadcaster;
 import com.camon.global.ws.StompEvent;
 import java.time.Instant;
+import java.util.Map;
 import java.util.UUID;
 import org.springframework.stereotype.Component;
 
@@ -53,6 +54,13 @@ public class CourseEventPublisher {
         MemberReturnedPayload payload
     ) {
         publish(roomId, "course:member-returned", payload);
+    }
+
+    // 코스를 시작했지만 첫 게임을 한 판도 열지 못해 대기방으로 되돌렸다(룰 설명을 읽는 사이에
+    // 사람이 빠져 전 칸이 인원 미달이 된 경우 등). 받은 클라이언트는 대기방으로 돌아간다.
+    // payload가 없다 — "되돌아갔다"는 사실만으로 충분하고, 방 상태는 스냅샷을 새로 읽으면 된다.
+    public void publishCourseAborted(UUID roomId) {
+        publish(roomId, "course:aborted", Map.of());
     }
 
     public void publishSessionSkipped(

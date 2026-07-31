@@ -9,8 +9,9 @@ import jakarta.validation.constraints.Min;
  *                           {@code course:intermission}으로 받은 값을 그대로 돌려보낸다.
  *                           서버의 현재 seq와 다르면 이미 다음 게임이 열린 뒤의 늦은 클릭이므로
  *                           거절한다(그냥 "지금 넘겨"로 만들면 방금 시작한 게임을 날려버린다).
+ *                           코스 첫 게임 앞 인터미션은 아직 끝난 게임이 없어 0이다.
  */
 public record SkipIntermissionRequest(
-    @Min(1) int finishedSessionSeq
+    @Min(0) int finishedSessionSeq
 ) {
 }

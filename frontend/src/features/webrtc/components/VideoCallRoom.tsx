@@ -331,6 +331,10 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
 
   const activeGameName = gameNameOf(session?.gameId);
   const inGame = !!session && !finished;
+  // 게임이 열리기 전 대기(코스 첫 게임 앞) 또는 게임 사이 대기. 이 동안엔 대기방을 그리지 않고
+  // 룰 설명 화면이 자리를 차지한다 — 첫 게임 앞에는 아직 열린 세션이 없어(inGame=false) 이
+  // 조건이 없으면 대기방이 그대로 보인다.
+  const showIntermission = !!intermission && !finished;
 
   return (
     <>
@@ -340,7 +344,7 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
         participantId={participantId}
         onPresenterChange={setIsCharadesPresenter}
       />
-      {!inGame && !finished && !fetchActive && (
+      {!inGame && !finished && !fetchActive && !showIntermission && (
         <LobbyScreen
           roomId={roomId}
           accessToken={accessToken}
@@ -405,10 +409,10 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
         />
       )}
 
-      {/* 게임과 게임 사이 — 서버가 다음 세션을 열 때까지의 빈 화면을 덮는다.
-          course:intermission이 도착했으면 다음 게임 룰 설명과 방장용 "바로 시작"까지 있는
-          화면을 쓰고, 아직 안 왔으면(늦은 접속 등) 예전처럼 문구만 덮는다. */}
-      {inGame && betweenGames && intermission && (
+      {/* 게임이 열리기 전 대기 — 코스 첫 게임 앞이든 게임 사이든 같은 화면을 쓴다.
+          다음 게임 룰 설명(서버가 MySQL games.description에서 읽어 보낸 값)과 방장용
+          "바로 시작"이 들어 있다. */}
+      {showIntermission && intermission && (
         <IntermissionScreen
           intermission={intermission}
           isHost={hostParticipantId === participantId}
@@ -417,7 +421,9 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
           skipError={skipError}
         />
       )}
-      {inGame && betweenGames && !intermission && (
+      {/* course:intermission을 놓친 클라이언트(늦은 접속 등)용 폴백 — 게임 패널이 자기 종료
+          화면을 접은 뒤 빈 화면이 보이는 것만 막는다. */}
+      {inGame && betweenGames && !showIntermission && (
         <div className="video-call-room__intermission">
           <p className="pap-pixel-title">다음 게임을 준비하고 있어요...</p>
         </div>

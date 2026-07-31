@@ -30,9 +30,12 @@ function secondsUntil(iso: string): number {
   return Number.isNaN(diff) ? 0 : Math.max(0, Math.ceil(diff / 1000));
 }
 
-// 게임과 게임 사이의 대기 화면. 다음 게임 이름·룰 설명은 서버가 MySQL games.description에서
-// 읽어 course:intermission으로 실어 보낸다 — 프론트에 설명 문구를 두지 않으므로, 룰 문구를
-// 고칠 때 배포 없이 DB만 바꾸면 된다(게임 타이틀 GAME_LABELS만 UI 상수).
+// 게임이 열리기 전 대기 화면. 코스 첫 게임 앞과 게임 사이 모두 이 화면을 쓴다 — 예전엔 첫
+// 게임만 설명 없이 바로 시작했다.
+//
+// 다음 게임 이름·룰 설명은 서버가 MySQL games.description에서 읽어 course:intermission으로
+// 실어 보낸다 — 프론트에 설명 문구를 두지 않으므로, 룰 문구를 고칠 때 배포 없이 DB만 바꾸면
+// 된다(게임 타이틀 GAME_LABELS만 UI 상수).
 export function IntermissionScreen({
   intermission,
   isHost,
@@ -44,6 +47,9 @@ export function IntermissionScreen({
   const nextLabel = intermission.nextGameName
     ? (GAME_LABELS[intermission.nextGameName as GameName] ?? intermission.nextGameName)
     : null;
+  // 코스 첫 게임 앞 인터미션은 아직 끝난 게임이 없어 finishedSessionSeq가 0이다 —
+  // "다음 게임"이 아니라 "첫 게임"이라고 불러야 말이 된다.
+  const beforeFirstGame = intermission.finishedSessionSeq === 0;
 
   return (
     <div className="intermission">
@@ -51,7 +57,9 @@ export function IntermissionScreen({
         <p className="intermission__title pap-pixel-title">
           {intermission.nextSessionSeq === null
             ? '모든 게임이 끝났어요! 결과를 준비하고 있어요...'
-            : '다음 게임을 준비하고 있어요...'}
+            : beforeFirstGame
+              ? '첫 게임을 준비하고 있어요...'
+              : '다음 게임을 준비하고 있어요...'}
         </p>
 
         {nextLabel && (
