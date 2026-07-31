@@ -119,14 +119,24 @@ export function LobbyScreen({
   const joinOrderByIdentity = new Map(
     (room?.participants ?? []).map((p, index) => [p.participantId, index]),
   );
-  const orderedTracks = [...tracks].sort(
-    (a, b) =>
-      (joinOrderByIdentity.get(a.participant.identity) ?? Number.MAX_SAFE_INTEGER) -
-      (joinOrderByIdentity.get(b.participant.identity) ?? Number.MAX_SAFE_INTEGER),
-  );
+  const maxPlayers = room?.maxPlayers ?? 0;
+  // 타일은 방 정원(maxPlayers)을 절대 넘지 않아야 한다. LiveKit 트랙(미디어 실제)과 서버
+  // 스냅샷(room.participants)은 입·퇴장 순간 잠깐 어긋날 수 있는데, 스냅샷에 아직 없는
+  // 트랙은 정렬에서 뒤로 밀리므로 정원만큼 잘라내면 유령/미반영 트랙이 제거된다.
+  const orderedTracks = [...tracks]
+    .sort(
+      (a, b) =>
+        (joinOrderByIdentity.get(a.participant.identity) ?? Number.MAX_SAFE_INTEGER) -
+        (joinOrderByIdentity.get(b.participant.identity) ?? Number.MAX_SAFE_INTEGER),
+    )
+    .slice(0, maxPlayers || undefined);
 
   const joinedCount = room?.participants.length ?? 0;
-  const emptySlots = Math.max(0, (room?.maxPlayers ?? 0) - joinedCount);
+  // 빈 슬롯은 스냅샷 인원이 아니라 "실제로 그리는 타일 수" 기준으로 채운다. 예전엔
+  // (정원 - 스냅샷 인원)개를 그려서, 트랙과 스냅샷이 어긋나면 정원보다 많은 칸이 떴다
+  // (스냅샷 1명 + 트랙 2개 → 2 + (4-1) = 5칸). 이제 항상 정확히 정원만큼만 나온다.
+  const emptySlots = Math.max(0, maxPlayers - orderedTracks.length);
+  // 그리드 배치(2인 한 줄 / 3인 아래 줄 가운데)를 고르는 데 쓴다 = 항상 정원과 같다
   const tileCount = orderedTracks.length + emptySlots;
 
   // Figma 게임 구성 카드 제목 옆의 요약 문구 ("3세트 · 총 11라운드")
@@ -357,7 +367,10 @@ export function LobbyScreen({
             })}
             {Array.from({ length: emptySlots }, (_, i) => (
               <div key={`empty-${i}`} className="lobby-tile lobby-tile--empty">
-                <span className="lobby-tile__empty-slot">P{joinedCount + i + 1}</span>
+                {/* 번호는 실제로 그려진 타일 수 기준 (스냅샷 인원과 어긋나도 어긋나지 않게).
+                    폰트·색은 .lobby-tile__empty-slot이 Figma 값으로 정하므로
+                    pap-pixel-title(잉크색 강제)은 붙이지 않는다. */}
+                <span className="lobby-tile__empty-slot">P{orderedTracks.length + i + 1}</span>
                 <span className="lobby-tile__empty-hint">친구 입장 대기 중...</span>
               </div>
             ))}

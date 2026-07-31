@@ -8,6 +8,8 @@ import {
 import { Track } from 'livekit-client';
 import { PixelConfirmModal } from '../../system/components/PixelConfirmModal';
 import { CamOffIcon, CamOnIcon, MicOffIcon, MicOnIcon } from '../../room/components/lobbyIcons';
+import { BackgroundMusic } from '../../sound/components/BackgroundMusic';
+import { useCountdownSound } from '../../sound/hooks/useCountdownSound';
 import { useFetchDetection } from '../hooks/useFetchDetection';
 import { COUNTDOWN_MS, ROUND_DURATION_MS, type FetchGameState } from '../hooks/useFetchGame';
 import './FetchObjectGame.css';
@@ -70,6 +72,11 @@ export function FetchObjectGame({
   // 3·2·1 카운트다운 — 전원이 제시어를 읽고 동시에 출발 (인식도 이 동안 잠금)
   const inCountdown = playing && countdownLeft > 0;
   const goFlash = playing && countdownLeft <= 0 && nowMs - (state.startedAt + COUNTDOWN_MS) < 700;
+  useCountdownSound(
+    inCountdown,
+    `fetch:${state.round}:${state.startedAt}`,
+    (COUNTDOWN_MS - countdownLeft) / 1000,
+  );
 
   // 내 카메라 트랙을 게임 화면의 비디오에 붙인다 (GesturePanel과 같은 패턴)
   const tracks = useTracks([{ source: Track.Source.Camera, withPlaceholder: false }], {
@@ -174,6 +181,10 @@ export function FetchObjectGame({
           alt="CAM, ON!"
           onClick={() => setConfirmLeave(true)}
         />
+        <BackgroundMusic
+          source="/assets/sounds/find-thing.mp3"
+          className="fetch-game__music-toggle"
+        />
         <div className="fetch-game__mission">
           <span className="fetch-game__mission-label">가져올 물건</span>
           <span className="fetch-game__target pap-pixel-title">{state.target}</span>
@@ -274,6 +285,7 @@ export function FetchObjectGame({
                 <button
                   type="button"
                   className={`fetch-game__control${isCameraEnabled ? '' : ' fetch-game__control--off'}`}
+                  data-button-sound={isCameraEnabled ? 'cancel' : 'basic'}
                   onClick={() => void localParticipant.setCameraEnabled(!isCameraEnabled)}
                   title={isCameraEnabled ? '카메라 끄기' : '카메라 켜기'}
                   aria-label={isCameraEnabled ? '카메라 끄기' : '카메라 켜기'}
@@ -283,6 +295,7 @@ export function FetchObjectGame({
                 <button
                   type="button"
                   className={`fetch-game__control${isMicrophoneEnabled ? '' : ' fetch-game__control--off'}`}
+                  data-button-sound={isMicrophoneEnabled ? 'cancel' : 'basic'}
                   onClick={() => void localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled)}
                   title={isMicrophoneEnabled ? '마이크 끄기' : '마이크 켜기'}
                   aria-label={isMicrophoneEnabled ? '마이크 끄기' : '마이크 켜기'}

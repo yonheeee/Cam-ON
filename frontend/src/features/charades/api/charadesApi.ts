@@ -1,3 +1,4 @@
+import { handleExpiredSession, isSessionDead } from '../../session/lib/sessionExpiry';
 // Spring 백엔드 domain/game/charades REST 클라이언트.
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? `http://${window.location.hostname}:8080`;
 
@@ -52,6 +53,8 @@ async function request<T>(path: string, accessToken: string, init?: RequestInit)
   });
   const body = await response.json().catch(() => null);
   if (!response.ok) {
+    // 토큰이 죽었으면 이 화면에서 할 수 있는 게 없다 — 세션을 정리하고 첫 화면으로 되돌린다.
+    if (isSessionDead(response.status)) handleExpiredSession();
     throw new CharadesApiError(body?.message ?? `요청 실패 (HTTP ${response.status})`, body?.code);
   }
   return body.data as T;
