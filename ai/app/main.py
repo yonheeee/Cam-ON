@@ -71,7 +71,7 @@ if DEV_ENDPOINTS:
 
     @app.get("/dev/labels")
     def dev_labels():
-        """테스트 페이지 제시어 드롭다운용 — 미션 풀(mock) 한국어 라벨 목록."""
+        """AI 테스트 페이지 제시어 드롭다운용 한국어 라벨 목록."""
         return list(MISSION_POOL.keys())
 
 
