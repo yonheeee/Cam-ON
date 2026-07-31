@@ -41,7 +41,9 @@ export function LandingPage() {
           <button
             type="button"
             className="landing__button landing__button--primary"
-            onClick={() => navigate('/players')}
+            // 확정: 인원 선택 단계를 없애고 모든 방은 4인 정원으로 만든다.
+            // 자리가 비어도 현재 인원 전원이 준비하면 시작 가능(서버 검증도 현재 인원 기준).
+            onClick={() => navigate('/nickname?mode=create&players=4')}
           >
             방 만들기
           </button>

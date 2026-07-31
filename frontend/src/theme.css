@@ -38,33 +38,83 @@
   --camon-radius-12: 12px;
   --camon-shadow-hard: 5px 5px 0 rgb(41 33 58 / 52%);
 
-  /* 색상 토큰 */
+  /* 색상 토큰 — 값은 Figma `03 · PIXEL ARCADE PLAZA · Screen Mockups` 실측 기준 */
   --pap-sky-blue: #80d8f4;
-  --pap-plaza-cream: #fff0c8;
+  --pap-plaza-cream: #fff7df; /* Figma --camon-color-cream: 카드 안쪽 크림 */
   --pap-arcade-teal: #2fc7be;
   --pap-festival-coral: #f06478;
   --pap-play-yellow: #ffd966;
   --pap-lavender: #8c78d8;
   --pap-ink: #2b1833;
-  --pap-white: #fffdf5;
+  --pap-white: #fffdf5; /* Figma --camon-color-paper */
   --pap-success-lime: #b8ff4f;
-  --pap-arcade-orange: #f6a13a; /* Figma Action — 주요 버튼 */
-  --pap-arcade-blue: #4169c8; /* Figma Info — 게임 순서·정보 강조 */
+  --pap-arcade-orange: #f6a13a; /* Figma Action — 주요 CTA는 항상 이 색 */
+  --pap-arcade-blue: #4169c8; /* Figma Info — 게임 순서·정보 강조·성공 안내 */
+  --pap-support-sky: #8eddf2; /* 참여 코드 K·P·Q 타일 */
+  --pap-text-muted: #725f79; /* Figma --camon-color-text-muted: 역할/라운드 등 보조 텍스트 */
+  --pap-selection-apricot: #ffc56e; /* 선택된 상태 */
+  --pap-ticket-cream: #fff9df; /* 티켓 위 아이콘 버튼 배경 */
 
-  /* 플레이어 대표색 (1~4P) */
+  /* 플레이어 대표색 (1~4P) — 카드 외곽선·아바타 원 등 "면"에 쓰는 원색 */
   --pap-player-1: var(--pap-arcade-teal);
   --pap-player-2: var(--pap-festival-coral);
   --pap-player-3: var(--pap-play-yellow);
   --pap-player-4: var(--pap-lavender);
 
-  /* 타이포 */
-  --pap-font-pixel: 'Galmuri11', 'Galmuri9', monospace;
-  --pap-font-body: 'Pretendard', system-ui, 'Segoe UI', 'Malgun Gothic', sans-serif;
+  /* 같은 색을 크림 배경(#fffdf5) 위 "글자"로 쓸 때의 읽히는 버전.
+   * 원색 대비: P1 2.06:1 · P2 3.03:1 · P3 1.34:1 · P4 3.56:1 (WCAG AA 4.5 미달)
+   * 그중 눈에 띄게 안 읽히는 청록/옐로만 색조를 유지한 채 명도를 낮춰 4.6:1로 맞췄다.
+   * 코랄/바이올렛은 Figma 원색을 그대로 둔다. */
+  --pap-player-1-text: #1e817b;
+  --pap-player-2-text: var(--pap-festival-coral);
+  --pap-player-3-text: #936e00;
+  --pap-player-4-text: var(--pap-lavender);
 
-  /* 픽셀 UI 형태 — 어두운 외곽선 + 짧은 픽셀 그림자 */
+  /* 타이포 — Figma 확정: 한글·영문·숫자·코드 전부 Mona12. Galmuri는 폰트 미설치 환경 폴백. */
+  --pap-font-pixel: 'Mona12', 'Galmuri11', 'Galmuri9', monospace;
+  --pap-font-body: 'Mona12', 'Pretendard', system-ui, 'Segoe UI', 'Malgun Gothic', sans-serif;
+
+  /* 픽셀 UI 형태 — 어두운 외곽선 + 짧은 픽셀 그림자.
+   * NOTE: 아래 3개는 게임 화면(ninja/charades/fetch)까지 함께 쓰는 전역 값이라 기존 값을 유지한다.
+   *       Figma 확정 규격(패널 3px · 버튼/입력 2px · 카드 그림자 5px · 아이콘 버튼 2px)은
+   *       디자인 담당 화면에서 .lobby-screen 처럼 스코프 안에서 덮어쓴다. */
   --pap-border-width: 3px;
   --pap-shadow-offset: 4px;
   --pap-radius: 6px; /* 과한 계단 방지: 살짝만 둥글게 */
+
+  /* Figma 확정 규격 (스코프에서 --pap-border-width 등에 대입해서 사용) */
+  --pap-stroke-panel: 3px;
+  --pap-stroke-control: 2px;
+  --pap-shadow-card: 5px;
+  --pap-shadow-icon: 2px;
+  --pap-radius-popup: 12px;
+  /* Figma 효과 `Pixel Plaza / Hard Offset 5` = #29213A85 (알파 0.52).
+     불투명 잉크색을 그림자로 쓰면 검게 떠 보이므로 항상 이 토큰을 쓴다. */
+  --pap-shadow-color: rgb(41 33 58 / 0.52);
+  --pap-host-gold: #eeab1e; /* 방장 왕관 */
+  --pap-success-teal: #12a594; /* 토스트 완료 체크 (초록빛 청록) */
+}
+
+/* ---- 전체 화면 스테이지 ----
+ * 게임/대기방 같은 "한 화면에 딱 들어가야 하는" 화면의 공통 껍데기.
+ * #root가 1126px 컨테이너 + text-align:center라서 fixed로 뷰포트를 직접 덮는다.
+ * 스크롤은 만들지 않는다 — 안쪽 레이아웃이 남는 공간을 나눠 가지는 방식으로 대응한다.
+ *
+ * 주의: transform: scale()로 통째로 축소하는 방식은 쓰지 않는다.
+ *  (1) scale()은 <number>를 받는데 min(100vw/1440, …)은 길이라서 값 자체가 무효이고,
+ *  (2) 세로가 짧은 노트북에서 글자까지 같이 작아진다.
+ * 대신 글자·여백·사이드 폭은 고정하고, 남는 공간은 비디오 타일과 채팅이 흡수한다. */
+.camon-stage {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  overflow: hidden;
+  color: var(--pap-ink);
+  font-family: var(--pap-font-pixel);
+  /* index.css의 :root가 letter-spacing: 0.18px를 상속시킨다.
+     Figma의 Mona12는 letterSpacing 0이라 여기서 되돌린다. */
+  letter-spacing: 0;
+  text-align: left;
 }
 
 /* ---- 공통 픽셀 컴포넌트 ---- */
@@ -118,26 +168,65 @@
   }
 }
 
-/* 짧은 안내 토스트 (복사 완료 등) */
+/* 짧은 안내 토스트 — Figma `Shared / Toast` (2000:407) 실측.
+ * 컴포넌트 설명: "화면 상단 중앙에 표시하고 자동으로 사라집니다."
+ * Type: Code Copied / Link Copied (244×48) · Host Transferred (276×56) */
 .pap-toast {
   position: fixed;
-  bottom: 36px;
+  /* 참가자 영상 카드와 겹치지 않게 화면 최상단 쪽에 붙인다.
+     (본문 시작 y는 화면 높이에 따라 88~134로 줄어들 수 있어서 여유를 크게 둔다) */
+  top: 14px;
   left: 50%;
-  transform: translateX(-50%);
-  background: var(--pap-ink);
-  color: var(--pap-white);
-  font-family: var(--pap-font-pixel);
-  font-size: 15px;
-  padding: 10px 20px;
-  border-radius: var(--pap-radius);
   z-index: 200;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  box-sizing: border-box;
+  min-width: 244px;
+  height: 48px;
+  padding: 0 18px;
+  border: var(--pap-stroke-panel) solid var(--pap-ink);
+  border-radius: 14px;
+  background: #fff7e2;
+  color: var(--pap-ink);
+  box-shadow: var(--pap-shadow-card) var(--pap-shadow-card) 0 var(--pap-shadow-color);
+  font-family: var(--pap-font-pixel);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0;
+  white-space: nowrap;
+  transform: translateX(-50%);
   animation: pap-toast-in 120ms ease-out;
   pointer-events: none;
 }
 
+.pap-toast svg {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  color: var(--pap-success-teal);
+}
+
+/* Figma `Shared / Toast` Type=Host Transferred — 크림 #fffbf0 · radius 18 · 276×56 · 아이콘 24 */
+.pap-toast--host {
+  min-width: 276px;
+  height: 56px;
+  gap: 12px;
+  border-radius: 18px;
+  background: #fffbf0;
+  font-size: 15px;
+}
+
+.pap-toast--host svg {
+  width: 24px;
+  height: 24px;
+  color: var(--pap-host-gold);
+}
+
 @keyframes pap-toast-in {
   from {
-    transform: translate(-50%, 6px);
+    transform: translate(-50%, -6px);
     opacity: 0;
   }
   to {
@@ -171,6 +260,8 @@
 .pap-pixel-btn {
   font-family: var(--pap-font-pixel);
   font-size: 20px;
+  /* 디자인 가이드 TYPOGRAPHY: "버튼 라벨은 짧고 굵게" — 모든 픽셀 버튼 라벨은 Bold */
+  font-weight: 700;
   line-height: 1;
   color: var(--pap-ink);
   background: var(--pap-white);
@@ -178,7 +269,7 @@
   border-radius: var(--pap-radius);
   padding: 14px 28px;
   cursor: pointer;
-  box-shadow: var(--pap-shadow-offset) var(--pap-shadow-offset) 0 0 var(--pap-ink);
+  box-shadow: var(--pap-shadow-offset) var(--pap-shadow-offset) 0 0 var(--pap-shadow-color);
   transition: transform 60ms ease-out, box-shadow 60ms ease-out;
   image-rendering: pixelated;
   user-select: none;
@@ -186,12 +277,13 @@
 
 .pap-pixel-btn:hover:not(:disabled) {
   transform: translate(-1px, -1px);
-  box-shadow: calc(var(--pap-shadow-offset) + 1px) calc(var(--pap-shadow-offset) + 1px) 0 0 var(--pap-ink);
+  box-shadow: calc(var(--pap-shadow-offset) + 1px) calc(var(--pap-shadow-offset) + 1px) 0 0
+    var(--pap-shadow-color);
 }
 
 .pap-pixel-btn:active:not(:disabled) {
   transform: translate(var(--pap-shadow-offset), var(--pap-shadow-offset));
-  box-shadow: 0 0 0 0 var(--pap-ink);
+  box-shadow: 0 0 0 0 var(--pap-shadow-color);
 }
 
 .pap-pixel-btn:disabled {
@@ -199,8 +291,18 @@
   cursor: not-allowed;
 }
 
+/* 확정 규칙: 주요 CTA는 아케이드 오렌지. 참여자 옐로(#ffd966 = P3)를 버튼에 쓰지 않는다. */
 .pap-pixel-btn--primary {
-  background: var(--pap-play-yellow);
+  background: var(--pap-arcade-orange);
+}
+
+/* 카드 안에 들어가는 작은 픽셀 버튼 (코스 편집 팝업 등) */
+.lobby-btn-sm {
+  --pap-shadow-offset: var(--pap-shadow-icon);
+  min-width: 76px;
+  padding: 7px 10px;
+  border-radius: var(--pap-radius);
+  font-size: 12px;
 }
 
 .pap-pixel-btn--teal {
@@ -224,6 +326,15 @@
 .pap-pixel-title {
   font-family: var(--pap-font-pixel);
   color: var(--pap-ink);
+}
+
+/* index.css의 `h1, h2 { font-weight: 500 }`이 제목에 걸리는데, Mona12는 400/700 두 종만
+ * 있어서 CSS 폰트 매칭 규칙상 500은 700이 아니라 400(Regular)으로 떨어진다 — 제목이
+ * bold로 안 보이던 원인. h1/h2 제목에만 700을 되돌린다(span/p에는 영향 없음).
+ * 참고: 600·800은 700으로 올라가므로 게임 화면들은 원래대로 bold다. */
+h1.pap-pixel-title,
+h2.pap-pixel-title {
+  font-weight: 700;
 }
 
 /* 픽셀 아트 이미지 공통: 확대 시 블러 방지 */
