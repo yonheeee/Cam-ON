@@ -10,7 +10,6 @@ import com.camon.domain.game.ninja.dto.AttackRequest;
 import com.camon.domain.game.ninja.dto.AttackResponse;
 import com.camon.domain.game.ninja.dto.RoundResultEntry;
 import com.camon.domain.game.ninja.dto.LastAttackResponse;
-import com.camon.domain.game.ninja.dto.NextSkillPreview;
 import com.camon.domain.game.ninja.dto.NinjaStateResponse;
 import com.camon.domain.game.ninja.dto.RankingEntry;
 import com.camon.domain.game.ninja.dto.RoundSkillResponse;
@@ -69,10 +68,14 @@ public class NinjaGameService {
     // 공격권 획득 후 대상 지정 제한시간. 획득 순간 교환 30초 타이머는 취소되고 이 창이 새로 열린다.
     // 제한시간 내 대상을 안 고르면 생존자 중 랜덤으로 자동 지정 — 공격권을 딴 공격이 무산되지 않게.
     private static final Duration TARGET_DURATION = Duration.ofSeconds(15);
-    // 공격 resolve 후 다음 교환/판 사이의 인터미션: 이펙트 재생 5초 + 다음 진행 직전 카운트다운 3초.
-    // 타임아웃(공격 없음)으로 넘어갈 땐 이펙트가 없어 카운트다운(3초)만 태운다.
+    // 공격 resolve 후 다음 교환/판 사이의 인터미션: 이펙트 재생 5초 + 다음 진행 직전 카운트다운.
+    // 타임아웃(공격 없음)으로 넘어갈 땐 이펙트가 없어 카운트다운만 태운다.
     private static final Duration EFFECT_DURATION = Duration.ofSeconds(5);
-    private static final Duration COUNTDOWN_DURATION = Duration.ofSeconds(3);
+    // 카운트다운은 3→2→1을 0.5초씩 보여주고 끝난다(총 1.5초). 숫자 3개를 초 단위로 세면
+    // 교환마다 3초가 죽는데, 손동작 게임은 교환이 자주 돌아서 그 대기가 체감이 크다.
+    // 프론트가 이 길이를 0.5초로 나눠 표시하므로(useNinjaRound.countdownSeconds) 값을 바꿀
+    // 때는 그쪽 나눗셈 단위(COUNTDOWN_STEP_MS)도 함께 봐야 한다.
+    private static final Duration COUNTDOWN_DURATION = Duration.ofMillis(1500);
     // 판이 무한히 안 끝나는 것(모두가 계속 타임아웃 등)을 막는 방어적 상한 — 도달하면 현재 HP 순으로 판을 마감한다.
     private static final int MAX_EXCHANGES_PER_ROUND = 50;
     // 아무도 콤보를 못 낸 교환(타임아웃)마다 생존자 전원이 잃는 HP — 유한 HP가 곧 판 종료 보장
@@ -172,16 +175,7 @@ public class NinjaGameService {
             throw new BusinessException(ErrorCode.NINJA_ROUND_NOT_FOUND);
         }
         Skill skill = findExchangeSkill(roomCode, seq, currentRound, exchange);
-        return RoundSkillResponse.of(round, exchange, skill, findNextSkillPreview(roomCode, seq));
-    }
-
-    // 바로 다음 교환에 나올 스킬 예고(셔플 순서에서 커서가 가리키는 다음 스킬). 없으면 null.
-    private NextSkillPreview findNextSkillPreview(String roomCode, int seq) {
-        Long nextSkillId = ninjaRedis.peekNextSkill(roomCode, seq);
-        if (nextSkillId == null) {
-            return null;
-        }
-        return skillRepository.findById(nextSkillId).map(NextSkillPreview::of).orElse(null);
+        return RoundSkillResponse.of(round, exchange, skill);
     }
 
     @Transactional(readOnly = true)

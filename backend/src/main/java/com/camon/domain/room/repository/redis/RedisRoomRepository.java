@@ -63,7 +63,8 @@ public class RedisRoomRepository implements RoomRepository {
                 'nickname', ARGV[7],
                 'ready', ARGV[8],
                 'connection_status', ARGV[9],
-                'joined_at', ARGV[10])
+                'joined_at', ARGV[10],
+                'in_lobby', ARGV[11])
             redis.call('SADD', KEYS[5], ARGV[7])
             redis.call('SET', KEYS[6], ARGV[1])
             return 1
@@ -75,6 +76,20 @@ public class RedisRoomRepository implements RoomRepository {
                 return 0
             end
             redis.call('HSET', KEYS[1], ARGV[1], ARGV[2])
+            return 1
+            """, Long.class);
+
+    // 현재 seq가 기대값일 때만 올린다 — 인터미션 타이머와 방장의 "바로 시작"이 겹쳐 같은
+    // 게임을 두 번 여는 것을 막는 진행 권한 획득 지점.
+    private static final DefaultRedisScript<Long> ADVANCE_SEQ_SCRIPT =
+        new DefaultRedisScript<>("""
+            if redis.call('EXISTS', KEYS[1]) == 0 then
+                return 0
+            end
+            if redis.call('HGET', KEYS[1], ARGV[1]) ~= ARGV[2] then
+                return 0
+            end
+            redis.call('HSET', KEYS[1], ARGV[1], ARGV[3])
             return 1
             """, Long.class);
 
@@ -153,7 +168,8 @@ public class RedisRoomRepository implements RoomRepository {
             host.nickname(),
             Boolean.toString(host.ready()),
             host.connectionStatus().name(),
-            Long.toString(host.joinedAt().toEpochMilli())
+            Long.toString(host.joinedAt().toEpochMilli()),
+            Boolean.toString(host.inLobby())
         );
         return Long.valueOf(1L).equals(result);
     }
@@ -208,6 +224,18 @@ public class RedisRoomRepository implements RoomRepository {
     @Override
     public void updateCurrentSessionSeq(UUID roomId, int sessionSeq) {
         updateRoomField(roomId, CURRENT_SESSION_SEQ, Integer.toString(sessionSeq));
+    }
+
+    @Override
+    public boolean tryAdvanceSessionSeq(UUID roomId, int fromSeq, int toSeq) {
+        Long result = redisTemplate.execute(
+            ADVANCE_SEQ_SCRIPT,
+            List.of(RedisRoomKeys.room(roomId)),
+            CURRENT_SESSION_SEQ,
+            Integer.toString(fromSeq),
+            Integer.toString(toSeq)
+        );
+        return Long.valueOf(1L).equals(result);
     }
 
     @Override

@@ -1,0 +1,89 @@
+/* 게임 시작 전 사전 점검 모달. 코스 편집 모달(.course-editor)과 같은 픽셀 카드 톤. */
+.preflight__card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: min(420px, 94vw);
+  padding: 24px;
+}
+
+.preflight__title {
+  margin: 0;
+  text-align: center;
+}
+
+.preflight__empty,
+.preflight__ok {
+  margin: 0;
+  text-align: center;
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.preflight__list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.preflight__item {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  padding: 10px;
+  border: 2px solid var(--pap-ink);
+  background: var(--pap-surface, #fff);
+}
+
+.preflight__icon {
+  font-size: 15px;
+  line-height: 1.4;
+  text-align: center;
+}
+
+/* 확인 중인 항목은 아직 판단이 안 된 상태라 색을 주지 않고, 결과가 난 것만 색으로 구분한다. */
+.preflight__item--ok {
+  background: var(--pap-lime, #d7f28c);
+}
+
+.preflight__item--failed {
+  border-color: var(--pap-festival-coral, #f2795f);
+}
+
+.preflight__body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.preflight__label {
+  font-weight: 800;
+  font-size: 14px;
+}
+
+.preflight__hint {
+  font-size: 12px;
+  line-height: 1.5;
+  opacity: 0.75;
+}
+
+.preflight__error {
+  margin: 0;
+  text-align: center;
+  font-size: 12px;
+  color: var(--pap-festival-coral, #f2795f);
+}
+
+.preflight__actions {
+  display: flex;
+  gap: 8px;
+}
+
+.preflight__actions > button {
+  flex: 1;
+}

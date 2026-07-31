@@ -1,4 +1,4 @@
-/* NinjaGamePanel의 "내 캠" 칸(.ninja-battle__cam, position:relative) 안에 꽉 채워지는
+/* 닌자 전투 화면의 "내 캠" 칸(.ninja-tile__cam, position:relative) 안에 꽉 채워지는
    오버레이. mirrorCanvas(실제 카메라 화면)가 먼저 깔리고 그 위에 스켈레톤 캔버스가 겹친다. */
 .gesture-panel__stage {
   position: absolute;

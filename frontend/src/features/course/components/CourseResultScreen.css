@@ -1,39 +1,191 @@
-/* 코스 종합 결과 전체화면. 게임 패널들과 같은 레이어에 덮어 그린다. */
+/* 코스 종합 결과 — 시상대 배경 그림에 캠과 순위표를 얹는 화면.
+
+   좌표계는 SetResultScreen.css와 같은 방식: 배경 그림(1536×1024, 비율 1.5)과 같은 비율의 무대를
+   만들고 위치는 전부 %, 글자 크기는 --u(무대 너비의 1%)로만 잡는다. 그림에 그려진 칸 밖으로
+   내용이 새지 않으려면 px/vw를 섞으면 안 된다. */
 .course-result {
   position: fixed;
   inset: 0;
   z-index: 40;
+  overflow: hidden;
+  background: #1b3a6b;
+}
+
+/* 배경 그림은 3:2(1536×1024)인데 화면은 보통 16:9다. 남는 폭을 흐린 배경으로 메우면
+   양옆에 띠가 생겨 지저분하므로, 무대를 화면보다 크게 잡아(max) 화면을 덮고 위아래를 잘라낸다.
+   내용이 들어가는 칸은 y 26~85% 구간에 몰려 있어서 16:9에서 잘리는 위아래 각 9%에 안 걸린다. */
+.course-result__stage {
+  --u: calc(max(100vw, 100vh * 1.5) / 100);
+
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: max(100vw, 100vh * 1.5);
+  height: max(100vh, 100vw / 1.5);
+  background: url('/assets/pixel-arcade-final-winner-stage-v6-large-runner-screens.png') center /
+    100% 100% no-repeat;
+  image-rendering: pixelated;
+  font-family: var(--pap-font-body);
+  color: var(--pap-plaza-cream);
+  text-align: left;
+}
+
+/* 창이 정사각형에 가까우면 덮기(cover)로는 좌우가 너무 많이 잘려 순위표가 화면 밖으로 나간다 —
+   그럴 때만 폭에 맞추고(위아래 여백은 무대 배경색으로 남긴다) 칸이 다 보이게 한다. */
+@media (max-aspect-ratio: 5 / 4) {
+  .course-result__stage {
+    --u: calc(100vw / 100);
+
+    width: 100vw;
+    height: calc(100vw / 1.5);
+  }
+}
+
+/* 배경이 화려해서 결과가 안 읽힌다 — 가장자리를 눌러 무대 가운데로 시선을 모은다.
+   ::before는 배경 위·자식들 아래에 깔리므로 캠과 순위표는 원래 밝기 그대로다. */
+.course-result__stage::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    ellipse 62% 62% at 45% 55%,
+    rgb(10 14 40 / 0.06) 0%,
+    rgb(10 14 40 / 0.3) 55%,
+    rgb(10 14 40 / 0.55) 100%
+  );
+  pointer-events: none;
+}
+
+/* 아래 %는 전부 배경 그림의 검은 칸을 픽셀 스캔해서 잰 값이다(눈대중 금지 — 칸을 조금만
+   벗어나도 글자가 금테 위로 올라탄다). 명판 x 35.7~48.8 / y 26.3~29.8 */
+.course-result__plate {
+  position: absolute;
+  left: 35.7%;
+  width: 13.1%;
+  top: 26.3%;
+  height: 3.5%;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 16px;
-  background: var(--pap-bg, #f4e9d8);
+  margin: 0;
+  font-family: var(--pap-font-pixel);
+  font-size: calc(var(--u) * 1.05);
+  color: var(--pap-play-yellow);
 }
 
-.course-result__card {
+/* 가운데 큰 화면 — 우승자 캠. 칸: x 15.9~68.8 / y 31.8~64.5 */
+.course-result__winner {
+  position: absolute;
+  left: 15.9%;
+  right: 31.2%;
+  top: 31.8%;
+  bottom: 35.5%;
+  overflow: hidden;
+  border-radius: calc(var(--u) * 0.6);
+  background: #414a63;
+}
+
+/* 아래 3칸 — 2~4위 캠. 칸: y 66.4~83.4, x 15.2~32.0 / 33.5~50.7 / 52.1~69.0
+   (칸 사이 기둥이 화면 너비의 약 2.8%라 gap을 그만큼 준다) */
+.course-result__podium {
+  position: absolute;
+  left: 15.2%;
+  right: 31%;
+  top: 66.4%;
+  bottom: 16.6%;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 2.8%;
+}
+
+.course-result__podium-tile {
+  position: relative; /* 닉네임 스티커의 기준 박스 */
+  overflow: hidden;
+  border-radius: calc(var(--u) * 0.6);
+  /* 캠이 아직 없을 때 보이는 자리색 = 그 사람의 등수 색 (중간 결과 화면과 같은 색 순서) */
+  background: var(--c);
+}
+
+/* 캠 타일 공통 — LiveKit 기본 스타일이 검은 여백을 남겨서 칸을 꽉 채우도록 덮어쓴다 */
+.course-result__winner .lk-participant-tile,
+.course-result__podium-tile .lk-participant-tile {
+  width: 100%;
+  height: 100%;
+  background: transparent;
+}
+
+/* LiveKit 기본 이름표(좌하단 반투명 바)는 끈다 — 닉네임은 위 스티커 하나로만 보여준다
+   (닌자·몸으로말해요·대기방도 같은 처리) */
+.course-result__winner .lk-participant-metadata,
+.course-result__podium-tile .lk-participant-metadata {
+  display: none;
+}
+
+.course-result__winner video,
+.course-result__podium-tile video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* 닉네임 — 닌자 화면(.ninja-tile__badge--name)과 같은 픽셀 스티커. 배경은 그 사람의 등수 색,
+   살짝 기울여 스티커처럼 보이게 한다. 내 것만 강조하는 흰 링은 여기선 쓰지 않는다. */
+.course-result__cam-name {
+  position: absolute;
+  left: calc(var(--u) * 0.6);
+  top: calc(var(--u) * 0.6);
+  z-index: 2;
+  max-width: calc(100% - var(--u) * 1.2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: calc(var(--u) * 0.2) calc(var(--u) * 0.45);
+  font-family: var(--pap-font-pixel);
+  font-size: calc(var(--u) * 0.9);
+  color: var(--pap-ink);
+  background: var(--c, var(--pap-white));
+  border: 2px solid var(--pap-ink);
+  border-radius: calc(var(--u) * 0.3);
+  transform: rotate(-3deg);
+}
+
+/* 캠이 없을 때 닉네임 첫 글자 */
+.course-result__avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  font-size: calc(var(--u) * 2.4);
+  color: rgb(43 24 51 / 0.55);
+}
+
+/* ---- 오른쪽 위: 최종 순위표 ---- 칸: x 75.7~86.9 / y 38.1~70.5 */
+.course-result__ranking {
+  position: absolute;
+  left: 76.3%;
+  right: 13.7%;
+  top: 38.6%;
+  bottom: 30%;
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  width: min(460px, 94vw);
-  padding: 24px;
+  gap: calc(var(--u) * 0.5);
 }
 
-.course-result__title {
+.course-result__ranking-title {
   margin: 0;
   text-align: center;
-}
-
-.course-result__subtitle {
-  margin: 0;
-  text-align: center;
-  font-size: 12px;
-  opacity: 0.75;
+  font-family: var(--pap-font-pixel);
+  font-size: calc(var(--u) * 1.1);
+  color: var(--pap-play-yellow);
 }
 
 .course-result__list {
   display: flex;
+  flex: 1;
   flex-direction: column;
-  gap: 8px;
+  gap: calc(var(--u) * 0.4);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -41,66 +193,77 @@
 
 .course-result__row {
   display: grid;
-  grid-template-columns: 48px minmax(0, 1fr) auto;
+  grid-template-columns: calc(var(--u) * 1.2) 1fr auto;
   align-items: center;
-  gap: 10px;
-  padding: 10px;
+  gap: calc(var(--u) * 0.5);
+  flex: 1;
+  padding: 0 calc(var(--u) * 0.6);
   border: 2px solid var(--pap-ink);
-  background: var(--pap-surface, #fff);
+  border-radius: calc(var(--u) * 0.4);
+  background: var(--camon-color-panel-cream);
+  color: var(--pap-ink);
+  font-size: calc(var(--u) * 0.8);
 }
 
-/* 1위는 눈에 띄게 — 등수 색만 바꾸는 것보다 줄 전체를 강조하는 편이 한눈에 읽힌다 */
+/* 우승자 줄만 금색 */
 .course-result__row--first {
-  background: var(--pap-lime, #d7f28c);
+  background: var(--pap-play-yellow);
 }
 
 .course-result__row--me {
-  outline: 3px solid var(--pap-teal, #2aa198);
-  outline-offset: -3px;
+  outline: 2px solid var(--pap-arcade-teal);
+  outline-offset: -4px;
 }
 
 .course-result__rank {
-  font-size: 14px;
+  font-family: var(--pap-font-pixel);
+  opacity: 0.7;
 }
 
 .course-result__nickname {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.course-result__me-badge {
-  flex: none;
-  padding: 1px 4px;
-  font-size: 9px;
-  border: 2px solid var(--pap-ink);
-  background: var(--pap-teal, #2aa198);
-  color: #fff;
-}
-
 .course-result__score {
-  font-size: 14px;
+  font-family: var(--pap-font-pixel);
 }
 
-.course-result__leave {
-  align-self: center;
+/* ---- 오른쪽 아래: 버튼 ---- 칸: x 75.7~86.9 / y 72.3~84.6 */
+.course-result__actions {
+  position: absolute;
+  left: 76.3%;
+  right: 13.7%;
+  top: 72.8%;
+  bottom: 15.9%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: calc(var(--u) * 0.6);
 }
 
-/* 비방장에게 뜨는 "방장이 누르면 함께 이동" 안내 — 버튼 자리를 대신 차지한다 */
+.course-result__btn {
+  width: 100%;
+  padding: calc(var(--u) * 0.7) calc(var(--u) * 0.8);
+  font-size: calc(var(--u) * 0.85);
+  box-shadow: calc(var(--u) * 0.2) calc(var(--u) * 0.2) 0 0 var(--pap-ink);
+}
+
+.course-result__btn--lobby {
+  background: var(--pap-arcade-orange);
+}
+
 .course-result__wait-host {
   margin: 0;
   text-align: center;
-  font-size: 12px;
-  opacity: 0.75;
+  font-size: calc(var(--u) * 0.65);
+  opacity: 0.8;
 }
 
 .course-result__error {
   margin: 0;
   text-align: center;
-  font-size: 12px;
-  color: var(--pap-red, #d33);
+  font-size: calc(var(--u) * 0.65);
+  color: var(--pap-festival-coral);
 }

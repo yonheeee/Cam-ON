@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { Application, Container, Graphics } from 'pixi.js';
 
-const DURATION_MS = 2300;
+export const DURATION_MS = 2300;
 const PARTICLE_COUNT = 90;
 
 interface ChakraParticle {

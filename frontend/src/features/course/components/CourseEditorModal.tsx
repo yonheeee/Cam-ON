@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useAiHealth } from '../../fetch/hooks/useAiHealth';
 import {
   GAME_LABELS,
   SET_UNIT_HINTS,
@@ -10,6 +11,10 @@ import {
 import './CourseEditorModal.css';
 
 const MAX_COURSE_LENGTH = 7; // 백엔드 CourseService.MAX_COURSE_LENGTH와 같은 값 — 최대 7세트
+
+// AI 서버가 꺼져 있을 때 물건 가져오기를 막는 이유를 사람이 읽을 수 있게. 담기 시도와 저장
+// 검증 두 곳에서 같은 문구를 쓴다.
+const AI_DOWN_MESSAGE = '인식 서버에 연결할 수 없어 지금은 담을 수 없어요.';
 
 interface CourseEditorModalProps {
   games: CatalogGame[];
@@ -61,9 +66,20 @@ export function CourseEditorModal({
   const selectableGames = games.filter((game) => game.supported);
   const unsupportedGames = games.filter((game) => !game.supported);
 
+  // 물건 가져오기는 AI 서버(별개 호스트)의 인식에 의존한다. 그 서버가 꺼져 있으면 게임은
+  // 시작되지만 인식만 조용히 실패해서 "게임이 고장났다"로 보인다 — 코스에 담는 시점에 막는다.
+  // 모달이 열려 있을 때만 확인한다.
+  const aiHealth = useAiHealth(true);
+  const fetchBlocked = aiHealth === 'down';
+  const isFetchGame = (game: CatalogGame) => game.name === 'FETCH_OBJECT';
+
   const addItem = (game: CatalogGame) => {
     if (draft.length >= MAX_COURSE_LENGTH) {
       setLocalError(`코스에는 게임을 다 합쳐 최대 ${MAX_COURSE_LENGTH}세트까지 담을 수 있어요.`);
+      return;
+    }
+    if (isFetchGame(game) && fetchBlocked) {
+      setLocalError(AI_DOWN_MESSAGE);
       return;
     }
     setLocalError(null);
@@ -95,12 +111,17 @@ export function CourseEditorModal({
     setDraft((prev) => prev.map((item, i) => (i === index ? { ...item, topicId } : item)));
   };
 
-  // 저장 전에 프론트에서 잡아낼 수 있는 문제를 먼저 보여준다(서버도 같은 것을 검증한다).
+  // 저장 전에 프론트에서 잡아낼 수 있는 문제를 먼저 보여준다(서버도 같은 것을 검증한다 —
+  // 단 AI 서버 생존 여부는 Spring이 알 수 없으므로 이 검증만 프론트 단독이다).
   const validationMessage = useMemo(() => {
     if (draft.length === 0) return '게임을 최소 1세트 담아야 해요.';
     for (const [index, item] of draft.entries()) {
       const game = gamesById.get(item.gameId);
       if (!game) return `${index + 1}번째 칸의 게임을 찾을 수 없어요.`;
+      // 이미 담겨 있던 코스를 여는 경우에도 걸러야 한다 — 담을 때는 서버가 살아 있었을 수 있다.
+      if (isFetchGame(game) && fetchBlocked) {
+        return `${index + 1}번째 ${GAME_LABELS[game.name]}: ${AI_DOWN_MESSAGE}`;
+      }
       if (game.requiresTopic && item.topicId === null) {
         return `${index + 1}번째 ${GAME_LABELS[game.name]}의 주제를 골라 주세요.`;
       }
@@ -112,7 +133,7 @@ export function CourseEditorModal({
       }
     }
     return null;
-  }, [draft, gamesById, topicsByGameId, playerCount]);
+  }, [draft, gamesById, topicsByGameId, playerCount, fetchBlocked]);
 
   const handleSave = async () => {
     if (validationMessage) {
@@ -215,18 +236,30 @@ export function CourseEditorModal({
           </ol>
 
           <div className="course-editor__add">
-            {selectableGames.map((game) => (
-              <button
-                key={game.gameId}
-                type="button"
-                className="pap-pixel-btn"
-                onClick={() => addItem(game)}
-                disabled={draft.length >= MAX_COURSE_LENGTH}
-              >
-                + {GAME_LABELS[game.name]}
-              </button>
-            ))}
+            {selectableGames.map((game) => {
+              const blocked = isFetchGame(game) && fetchBlocked;
+              return (
+                <button
+                  key={game.gameId}
+                  type="button"
+                  className="pap-pixel-btn"
+                  onClick={() => addItem(game)}
+                  disabled={draft.length >= MAX_COURSE_LENGTH || blocked}
+                  title={blocked ? AI_DOWN_MESSAGE : undefined}
+                >
+                  + {GAME_LABELS[game.name]}
+                </button>
+              );
+            })}
           </div>
+          {/* AI 서버가 꺼져 있으면 왜 못 담는지 버튼 밖에도 적어준다 — 비활성 버튼의 title
+              툴팁만으로는 눈에 안 띄어서 "버튼이 고장났다"로 읽힌다(대기방 시작 버튼과 같은 이유). */}
+          {fetchBlocked && (
+            <p className="course-editor__ai-down">
+              {GAME_LABELS.FETCH_OBJECT}는 인식 서버가 꺼져 있어 지금 담을 수 없어요. 서버를 켠 뒤
+              이 창을 다시 열면 담을 수 있어요.
+            </p>
+          )}
           {unsupportedGames.length > 0 && (
             <p className="course-editor__unsupported">
               준비 중: {unsupportedGames.map((game) => GAME_LABELS[game.name]).join(', ')}
