@@ -20,6 +20,10 @@ public enum ErrorCode {
         "아직 게임 결과 화면에 있는 참가자가 있습니다."
     ),
     ROOM_NOT_FINISHED(HttpStatus.CONFLICT, "코스가 끝난 방에서만 대기방으로 돌아갈 수 있습니다."),
+    COURSE_NOT_IN_INTERMISSION(
+        HttpStatus.CONFLICT,
+        "다음 게임을 기다리는 중이 아닙니다."
+    ),
     NICKNAME_DUPLICATED(HttpStatus.CONFLICT, "이미 사용 중인 닉네임입니다."),
     ALREADY_JOINED(HttpStatus.CONFLICT, "이미 참가한 방입니다."),
     ROOM_CODE_GENERATION_FAILED(

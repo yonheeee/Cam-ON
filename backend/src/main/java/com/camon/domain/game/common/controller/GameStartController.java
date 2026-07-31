@@ -1,14 +1,17 @@
 package com.camon.domain.game.common.controller;
 
 import com.camon.domain.course.service.CourseRunner;
+import com.camon.domain.game.common.dto.SkipIntermissionRequest;
 import com.camon.domain.game.common.dto.StartGameResponse;
 import com.camon.global.apiresponse.ApiResponse;
 import com.camon.global.security.GuestPrincipal;
+import jakarta.validation.Valid;
 import java.util.UUID;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -39,6 +42,24 @@ public class GameStartController {
             started.sessionSeq(),
             started.totalRounds()
         )));
+    }
+
+    // 인터미션(게임 사이 대기) 화면에서 방장이 "바로 시작"을 누르는 지점. 남은 대기 시간을
+    // 건너뛰고 다음 게임을 즉시 연다 — 화면 전환은 평소와 같은 game:started로 이뤄진다.
+    // finishedSessionSeq는 course:intermission으로 받은 값을 그대로 돌려보낸다: 어느 인터미션을
+    // 건너뛰려는지 특정해, 타이머가 이미 다음 게임을 열어버린 뒤의 늦은 클릭을 걸러낸다.
+    @PostMapping("/{roomId}/course/skip-intermission")
+    public ResponseEntity<Void> skipIntermission(
+        @AuthenticationPrincipal GuestPrincipal principal,
+        @PathVariable UUID roomId,
+        @Valid @RequestBody SkipIntermissionRequest request
+    ) {
+        courseRunner.skipIntermission(
+            roomId,
+            principal.participantId(),
+            request.finishedSessionSeq()
+        );
+        return ResponseEntity.noContent().build();
     }
 
     // 코스 종합 결과에서 참가자가 "방으로 돌아가기"를 누르는 지점 — 방장 전용이 아니라 각자

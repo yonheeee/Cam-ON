@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 // 코스 진행 상태를 구독하는 훅. 방 하나의 /topic/rooms/{roomId}에서 코스 관련 이벤트만 골라 본다.
 //
 // - game:started        코스의 다음 게임이 열렸다 (게임별 패널 전환의 유일한 신호)
+// - course:intermission 게임 사이 대기가 시작됐다 — 다음 게임 룰 설명과 자동 재개 시각이 온다
 // - course:session-skipped  인원이 안 맞아 그 게임을 건너뛰었다
 // - course:finished     코스의 마지막 게임까지 끝났다 → 종합 결과
 // - course:member-returned  누군가 종합 결과에서 대기방 복귀를 눌렀다. 복귀는 개별 행동이라
@@ -45,11 +46,29 @@ export interface SessionSkippedData {
   reason: string;
 }
 
+// 게임 사이 대기 안내. "다음에 뭘 하는지"는 서버가 고른다 — 인원이 안 맞는 코스 칸은 건너뛰므로
+// 프론트가 코스만 보고 다음 게임을 알 수 없다. 룰 설명(nextGameDescription)의 원본은 MySQL
+// games.description이라 프론트에 문구를 두지 않는다.
+export interface IntermissionData {
+  finishedSessionSeq: number;
+  nextSessionSeq: number | null;
+  nextGameId: number | null;
+  nextGameName: string | null;
+  nextGameDescription: string | null;
+  nextRoundCount: number | null;
+  /** 이 시각에 다음 게임이 자동으로 열린다 (ISO 8601) */
+  resumesAt: string;
+  /** 방장이 대기를 건너뛸 수 있는가. 남은 게임이 없으면 false */
+  skippable: boolean;
+}
+
 interface UseCourseProgressResult {
   /** 지금 열려 있는 게임. null이면 아직 게임이 시작되지 않았다 */
   activeSession: GameStartedData | null;
   /** 코스가 전부 끝났을 때의 종합 결과. null이면 아직 진행 중 */
   finished: CourseFinishedData | null;
+  /** 진행 중인 게임 사이 대기 안내. 다음 게임이 열리거나 코스가 끝나면 null로 돌아간다 */
+  intermission: IntermissionData | null;
   /** 방금 건너뛴 게임 안내 (표시 후 호출자가 지운다) */
   skipped: SessionSkippedData | null;
   clearSkipped: () => void;
@@ -63,6 +82,7 @@ export function useCourseProgress(
 ): UseCourseProgressResult {
   const [activeSession, setActiveSession] = useState<GameStartedData | null>(null);
   const [finished, setFinished] = useState<CourseFinishedData | null>(null);
+  const [intermission, setIntermission] = useState<IntermissionData | null>(null);
   const [skipped, setSkipped] = useState<SessionSkippedData | null>(null);
 
   useEffect(() => {
@@ -84,7 +104,12 @@ export function useCourseProgress(
               // 코스의 첫 게임이든 다음 게임이든 같은 이벤트로 온다 — 세션 정보를 갈아끼우면
               // 상위에서 그에 맞는 게임 패널로 전환된다.
               setActiveSession(event.data as GameStartedData);
+              // 다음 게임이 열렸으니 대기 안내는 내린다(방장이 건너뛴 경우도 이 경로로 닫힌다).
+              setIntermission(null);
               setSkipped(null);
+              break;
+            case 'course:intermission':
+              setIntermission(event.data as IntermissionData);
               break;
             case 'course:session-skipped':
               setSkipped(event.data as SessionSkippedData);
@@ -92,6 +117,7 @@ export function useCourseProgress(
             case 'course:finished':
               setFinished(event.data as CourseFinishedData);
               setActiveSession(null);
+              setIntermission(null);
               break;
             case 'course:member-returned': {
               // 복귀는 개별 행동이다 — 돌아간 사람이 나일 때만 결과 화면을 접고 대기방으로
@@ -119,6 +145,7 @@ export function useCourseProgress(
   return {
     activeSession,
     finished,
+    intermission,
     skipped,
     clearSkipped: () => setSkipped(null),
   };

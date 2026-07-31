@@ -4,6 +4,7 @@ import com.camon.domain.course.domain.CourseItem;
 import com.camon.domain.course.repository.CourseRepository;
 import com.camon.domain.course.ws.CourseEventPublisher;
 import com.camon.domain.course.ws.payload.CourseFinishedPayload;
+import com.camon.domain.course.ws.payload.CourseIntermissionPayload;
 import com.camon.domain.course.ws.payload.CourseScoreEntry;
 import com.camon.domain.course.ws.payload.CourseSessionSkippedPayload;
 import com.camon.domain.course.ws.payload.MemberReturnedPayload;
@@ -157,11 +158,70 @@ public class CourseRunner {
             return;
         }
 
+        Instant resumesAt = Instant.now().plus(SESSION_INTERMISSION);
         log.info("[Course] scheduleAdvance : roomCode={} seq={} 종료 — {}초 후 다음 진행",
             room.roomCode(), finishedSeq, SESSION_INTERMISSION.toSeconds());
-        taskScheduler.schedule(
-            () -> advance(roomId, finishedSeq),
-            Instant.now().plus(SESSION_INTERMISSION)
+        // 인터미션 화면에 "다음에 뭘 하는지"를 알린다. 다음 칸이 곧 다음 게임인 것은 아니라
+        // (인원이 안 맞는 칸은 건너뛴다) 서버가 직접 골라서 내려준다.
+        courseEventPublisher.publishIntermission(
+            roomId,
+            buildIntermission(room, finishedSeq, resumesAt)
+        );
+        taskScheduler.schedule(() -> advance(roomId, finishedSeq), resumesAt);
+    }
+
+    // 인터미션 화면의 "바로 시작"(방장 전용). 남은 대기 시간을 건너뛰고 다음 게임을 즉시 연다.
+    // 스케줄된 타이머는 그대로 두고 seq compare-and-set으로 경쟁을 정리한다 — 먼저 진행 권한을
+    // 얻은 쪽만 세션을 열고, 늦게 깬 타이머는 seq가 이미 바뀌어 있어 조용히 아무것도 하지 않는다.
+    public void skipIntermission(UUID roomId, UUID requesterId, int finishedSeq) {
+        Room room = requireRoom(roomId);
+        if (!room.hostParticipantId().equals(requesterId)) {
+            throw new BusinessException(ErrorCode.ROOM_NOT_HOST);
+        }
+        if (room.status() != RoomStatus.PLAYING) {
+            throw new BusinessException(ErrorCode.COURSE_NOT_IN_INTERMISSION);
+        }
+        // 이미 다음 게임이 열렸거나(타이머가 먼저 돌았다) 엉뚱한 인터미션을 가리키는 요청.
+        if (finishedSeq != room.currentSessionSeq()) {
+            throw new BusinessException(ErrorCode.COURSE_NOT_IN_INTERMISSION);
+        }
+
+        log.info("[Course] skipIntermission : roomCode={} seq={} 방장이 대기 건너뜀",
+            room.roomCode(), finishedSeq);
+        advance(roomId, finishedSeq);
+    }
+
+    // 인터미션 안내용으로 "다음에 열릴 게임"을 미리 계산한다. 실제 진행(advance)과 달리 상태를
+    // 바꾸지 않고 건너뛰기 이벤트도 쏘지 않는다 — 순수 조회다.
+    private CourseIntermissionPayload buildIntermission(
+        Room room,
+        int finishedSeq,
+        Instant resumesAt
+    ) {
+        List<CourseItem> items = courseRepository.findAll(room.roomId(), room.roomCode());
+        int playerCount = connectedParticipants(room.roomId()).size();
+        for (int seq = finishedSeq + 1; seq <= items.size(); seq++) {
+            CourseItem item = items.get(seq - 1);
+            if (findSkipReason(item, playerCount).isPresent()) {
+                continue;
+            }
+            Game next = gameCatalogService.requireSelectableGame(item.gameId());
+            return new CourseIntermissionPayload(
+                finishedSeq,
+                seq,
+                item.gameId(),
+                next.getName(),
+                // 룰 설명의 원본은 MySQL games.description이다 — 프론트에 문구를 두지 않아
+                // 배포 없이 DB만 고쳐도 화면이 바뀐다.
+                next.getDescription(),
+                item.roundCount(),
+                resumesAt,
+                true
+            );
+        }
+        // 남은 칸이 없다 — 곧 종합 결과로 넘어간다. 건너뛸 게임이 없으니 스킵도 막는다.
+        return new CourseIntermissionPayload(
+            finishedSeq, null, null, null, null, null, resumesAt, false
         );
     }
 
@@ -169,6 +229,15 @@ public class CourseRunner {
         Room room = roomRepository.findById(roomId).orElse(null);
         if (room == null || room.status() != RoomStatus.PLAYING
             || finishedSeq != room.currentSessionSeq()) {
+            return;
+        }
+
+        // 진행 권한을 원자적으로 딱 한 번만 가져온다. 인터미션 타이머와 방장의 "바로 시작"이
+        // 겹칠 수 있어서, 위의 조회 기반 검사만으로는 둘 다 통과해 같은 게임을 두 번 여는 창이
+        // 생긴다. seq를 다음 칸으로 올리는 CAS에 성공한 쪽만 아래를 실행한다.
+        if (!roomRepository.tryAdvanceSessionSeq(roomId, finishedSeq, finishedSeq + 1)) {
+            log.info("[Course] advance : roomCode={} seq={} 진행 권한 없음 — 이미 넘어갔다",
+                room.roomCode(), finishedSeq);
             return;
         }
 
@@ -181,6 +250,7 @@ public class CourseRunner {
             CourseItem item = items.get(seq - 1);
             Optional<String> skipReason = findSkipReason(item, participants.size());
             if (skipReason.isEmpty()) {
+                // 권한은 위에서 이미 잡았으므로 여기선 단순 기록이면 된다(경쟁자가 없다).
                 roomRepository.updateCurrentSessionSeq(roomId, seq);
                 try {
                     openSession(room, seq, item, participants);

@@ -14,6 +14,7 @@ import com.camon.domain.course.domain.CourseItem;
 import com.camon.domain.course.repository.CourseRepository;
 import com.camon.domain.course.ws.CourseEventPublisher;
 import com.camon.domain.course.ws.payload.CourseFinishedPayload;
+import com.camon.domain.course.ws.payload.CourseIntermissionPayload;
 import com.camon.domain.course.ws.payload.CourseSessionSkippedPayload;
 import com.camon.domain.course.ws.payload.MemberReturnedPayload;
 import com.camon.domain.game.common.Game;
@@ -237,6 +238,134 @@ class CourseRunnerTest {
     }
 
     @Test
+    void announcesIntermissionWithNextGameRulesFromDatabase() {
+        // 인터미션 화면이 띄울 다음 게임 이름·룰 설명은 서버가 games 테이블에서 읽어 내려준다.
+        // (프론트에 설명 문구를 두지 않기 위한 것 — DB만 고쳐도 화면이 바뀌어야 한다)
+        givenRoom(RoomStatus.PLAYING, 1);
+        givenConnected(4);
+        givenCourse(
+            new CourseItem(1, NINJA_ID, 3, null),
+            new CourseItem(2, CHARADES_ID, 2, TOPIC_ID)
+        );
+        givenGame(CHARADES_ID, "CHARADES", 3, 4, "표현자가 말없이 몸으로 설명합니다.");
+
+        runner.scheduleAdvance(roomId, 1);
+
+        ArgumentCaptor<CourseIntermissionPayload> captor = ArgumentCaptor.captor();
+        verify(courseEventPublisher).publishIntermission(eq(roomId), captor.capture());
+        CourseIntermissionPayload payload = captor.getValue();
+        assertThat(payload.finishedSessionSeq()).isEqualTo(1);
+        assertThat(payload.nextSessionSeq()).isEqualTo(2);
+        assertThat(payload.nextGameName()).isEqualTo("CHARADES");
+        assertThat(payload.nextGameDescription())
+            .isEqualTo("표현자가 말없이 몸으로 설명합니다.");
+        assertThat(payload.nextRoundCount()).isEqualTo(2);
+        assertThat(payload.skippable()).isTrue();
+    }
+
+    @Test
+    void announcesIntermissionWithoutNextGameWhenCourseIsAboutToEnd() {
+        // 마지막 게임 뒤의 인터미션 — 건너뛸 다음 게임이 없으므로 스킵도 막아야 한다.
+        givenRoom(RoomStatus.PLAYING, 1);
+        givenConnected(2);
+        givenCourse(new CourseItem(1, NINJA_ID, 3, null));
+
+        runner.scheduleAdvance(roomId, 1);
+
+        ArgumentCaptor<CourseIntermissionPayload> captor = ArgumentCaptor.captor();
+        verify(courseEventPublisher).publishIntermission(eq(roomId), captor.capture());
+        assertThat(captor.getValue().nextSessionSeq()).isNull();
+        assertThat(captor.getValue().nextGameDescription()).isNull();
+        assertThat(captor.getValue().skippable()).isFalse();
+    }
+
+    @Test
+    void intermissionAnnouncementSkipsGameThatPlayerCountCannotRun() {
+        // 다음 칸이 곧 다음 게임인 게 아니다 — 인원이 안 맞는 칸은 건너뛴 결과를 알려야
+        // 프론트가 코스를 보고 추측하지 않는다.
+        givenRoom(RoomStatus.PLAYING, 1);
+        givenConnected(2);
+        givenCourse(
+            new CourseItem(1, NINJA_ID, 3, null),
+            new CourseItem(2, CHARADES_ID, 2, TOPIC_ID),
+            new CourseItem(3, NINJA_ID, 2, null)
+        );
+        givenGame(CHARADES_ID, "CHARADES", 3, 4);
+        givenGame(NINJA_ID, "NINJA", 2, 4, "손동작 콤보를 가장 빨리 완성하세요.");
+
+        runner.scheduleAdvance(roomId, 1);
+
+        ArgumentCaptor<CourseIntermissionPayload> captor = ArgumentCaptor.captor();
+        verify(courseEventPublisher).publishIntermission(eq(roomId), captor.capture());
+        assertThat(captor.getValue().nextSessionSeq()).isEqualTo(3);
+        assertThat(captor.getValue().nextGameName()).isEqualTo("NINJA");
+        assertThat(captor.getValue().nextGameDescription())
+            .isEqualTo("손동작 콤보를 가장 빨리 완성하세요.");
+        // 안내는 순수 조회다 — 건너뛰기 이벤트를 쏘거나 seq를 건드리면 안 된다.
+        verify(courseEventPublisher, never()).publishSessionSkipped(any(), any());
+        verify(roomRepository, never()).updateCurrentSessionSeq(any(), anyInt());
+    }
+
+    @Test
+    void hostCanSkipIntermissionToOpenNextGameImmediately() {
+        givenRoom(RoomStatus.PLAYING, 1);
+        givenConnected(4);
+        givenCourse(
+            new CourseItem(1, NINJA_ID, 3, null),
+            new CourseItem(2, CHARADES_ID, 2, TOPIC_ID)
+        );
+        givenGame(CHARADES_ID, "CHARADES", 3, 4);
+
+        runner.skipIntermission(roomId, hostId, 1);
+
+        assertThat(charadesStarter.specs).containsExactly(
+            new GameSessionSpec(CHARADES_ID, 2, TOPIC_ID)
+        );
+        verify(roomRepository).updateCurrentSessionSeq(roomId, 2);
+    }
+
+    @Test
+    void rejectsIntermissionSkipByNonHost() {
+        givenRoom(RoomStatus.PLAYING, 1);
+
+        assertBusinessError(
+            () -> runner.skipIntermission(roomId, UUID.randomUUID(), 1),
+            ErrorCode.ROOM_NOT_HOST
+        );
+        assertThat(charadesStarter.specs).isEmpty();
+        assertThat(ninjaStarter.specs).isEmpty();
+    }
+
+    @Test
+    void rejectsIntermissionSkipForAlreadyPassedIntermission() {
+        // 타이머가 먼저 돌아 2번 게임이 이미 열린 뒤의 늦은 클릭. 그냥 "지금 넘겨"로 처리하면
+        // 방금 시작한 게임을 날려버린다.
+        givenRoom(RoomStatus.PLAYING, 2);
+
+        assertBusinessError(
+            () -> runner.skipIntermission(roomId, hostId, 1),
+            ErrorCode.COURSE_NOT_IN_INTERMISSION
+        );
+        assertThat(charadesStarter.specs).isEmpty();
+        assertThat(ninjaStarter.specs).isEmpty();
+    }
+
+    @Test
+    void opensNothingWhenAdvancePermitIsLostToTheOtherTrigger() {
+        // 타이머와 방장 클릭이 겹쳐 CAS에서 밀린 쪽. 조회 기반 검사는 통과했더라도 여기서
+        // 멈춰야 같은 게임이 두 번 열리지 않는다.
+        givenRoom(RoomStatus.PLAYING, 1);
+        givenAdvanceLost();
+
+        runner.advance(roomId, 1);
+
+        assertThat(charadesStarter.specs).isEmpty();
+        assertThat(ninjaStarter.specs).isEmpty();
+        verify(roomRepository, never()).updateCurrentSessionSeq(any(), anyInt());
+        verify(courseEventPublisher, never()).publishCourseFinished(any(), any());
+    }
+
+    @Test
     void skipsGameThatCurrentPlayerCountCannotRun() {
         givenRoom(RoomStatus.PLAYING, 1);
         // 4명으로 시작했지만 2명만 남았다 → 몸으로 말해요(3~4명)는 건너뛰고 닌자로 넘어간다.
@@ -428,6 +557,15 @@ class CourseRunnerTest {
             currentSessionSeq,
             Instant.parse("2026-07-28T00:00:00Z")
         )));
+        // 기본은 "진행 권한을 얻었다" — 경쟁에서 밀리는 경우는 givenAdvanceLost()로 따로 만든다.
+        lenient().when(roomRepository.tryAdvanceSessionSeq(eq(roomId), anyInt(), anyInt()))
+            .thenReturn(true);
+    }
+
+    /** 인터미션 타이머와 방장의 "바로 시작"이 겹쳐 이 호출자가 진행 권한을 못 얻은 상황. */
+    private void givenAdvanceLost() {
+        when(roomRepository.tryAdvanceSessionSeq(eq(roomId), anyInt(), anyInt()))
+            .thenReturn(false);
     }
 
     private void givenParticipant(UUID participantId) {
@@ -444,10 +582,22 @@ class CourseRunnerTest {
     }
 
     private void givenGame(Long gameId, String name, int minPlayers, int maxPlayers) {
+        givenGame(gameId, name, minPlayers, maxPlayers, null);
+    }
+
+    // description은 인터미션 안내에 실려 나가는 룰 설명(games.description)이다.
+    private void givenGame(
+        Long gameId,
+        String name,
+        int minPlayers,
+        int maxPlayers,
+        String description
+    ) {
         lenient().when(gameCatalogService.requireSelectableGame(gameId)).thenReturn(
             Game.builder()
                 .gameId(gameId)
                 .name(name)
+                .description(description)
                 .minPlayers(minPlayers)
                 .maxPlayers(maxPlayers)
                 .minRounds(1)
