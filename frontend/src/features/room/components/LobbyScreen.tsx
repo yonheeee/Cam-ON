@@ -6,6 +6,7 @@ import type { ChatMessage } from '../../chat/hooks/useRoomChat';
 import { BackgroundMusic } from '../../sound/components/BackgroundMusic';
 import { PixelConfirmModal } from '../../system/components/PixelConfirmModal';
 import { roomApi, RoomApiError } from '../api/roomApi';
+import { SettingsModal } from './SettingsModal';
 import { StartPreflightModal } from './StartPreflightModal';
 import { useRoomLobby } from '../hooks/useRoomLobby';
 import { CourseEditorModal } from '../../course/components/CourseEditorModal';
@@ -83,6 +84,7 @@ export function LobbyScreen({
   const [toast, setToast] = useState<string | null>(null);
   const [courseCollapsed, setCourseCollapsed] = useState(false);
   const [confirmLeave, setConfirmLeave] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [readyPending, setReadyPending] = useState(false);
   // 강퇴 확인 팝업 대상. 닉네임은 팝업 문구용.
   const [kickTarget, setKickTarget] = useState<{ participantId: string; nickname: string } | null>(
@@ -523,12 +525,12 @@ export function LobbyScreen({
           </div>
 
           <div className="lobby-screen__actions">
-            {/* 환경설정은 톱니 아이콘만 (준비 중), 주 액션이 나머지 너비를 다 가진다 */}
+            {/* 환경설정은 톱니 아이콘만, 주 액션이 나머지 너비를 다 가진다 */}
             <button
               type="button"
               className="pap-pixel-btn lobby-screen__settings-btn"
-              disabled
-              title="환경설정 — 카메라/마이크/인식 테스트 (준비 중)"
+              onClick={() => setSettingsOpen(true)}
+              title="환경설정 — 카메라/마이크/인식 테스트"
               aria-label="환경설정"
             >
               {GearIcon}
@@ -616,6 +618,7 @@ export function LobbyScreen({
       </div>
 
       {toast && <div className="pap-toast">{toast}</div>}
+      {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
       {courseEditorOpen && (
         <CourseEditorModal
           games={games}
