@@ -26,7 +26,6 @@ export function CourseResultPreview() {
         totalSessions={3}
         nicknameById={NICKNAMES}
         participantId="p2"
-        isHost
         onReturnToLobby={() => {}}
         returning={false}
         returnError={null}

@@ -41,6 +41,14 @@ interface MemberConnectionPayload {
   connectionStatus: 'CONNECTED' | 'DISCONNECTED';
 }
 
+// 코스 종합 결과에서 한 명이 "방으로 돌아가기"를 눌렀다. 개별 복귀라 이 사람 타일만 "게임 중"을
+// 떼면 된다(내 화면 전환은 useCourseProgress가 따로 담당).
+interface MemberReturnedPayload {
+  participantId: string;
+  ready: boolean;
+  roomReopened: boolean;
+}
+
 export function useRoomLobby(roomId: string, accessToken: string, participantId: string) {
   const [room, setRoom] = useState<RoomSnapshotResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -99,6 +107,8 @@ export function useRoomLobby(roomId: string, accessToken: string, participantId:
                   role: 'MEMBER',
                   ready: false,
                   connectionStatus: 'CONNECTED',
+                  // 새로 입장하면 대기방에 있다 — 방이 WAITING일 때만 입장이 열린다.
+                  inLobby: true,
                 };
                 return { ...prev, participants: [...prev.participants, joined] };
               }
@@ -133,6 +143,25 @@ export function useRoomLobby(roomId: string, accessToken: string, participantId:
                   ...prev,
                   participants: prev.participants.map((p) =>
                     p.participantId === data.participantId ? { ...p, ready: data.ready } : p,
+                  ),
+                };
+              }
+              case 'course:member-returned': {
+                // 한 명이 결과 화면을 접고 대기방으로 들어왔다 — 그 타일의 "게임 중"을 뗀다.
+                // ready도 payload로 함께 온다(방장은 true, 나머지는 false로 리셋됨).
+                const data = event.data as MemberReturnedPayload;
+                return {
+                  ...prev,
+                  // 가장 먼저 돌아온 사람이 방을 WAITING으로 되돌렸다. 상태를 같이 갱신하지
+                  // 않으면 스냅샷의 FINISHED가 남아 다음 코스 시작 판단이 어긋난다.
+                  status: data.roomReopened ? 'WAITING' : prev.status,
+                  participants: prev.participants.map((p) =>
+                    p.participantId === data.participantId
+                      ? { ...p, inLobby: true, ready: data.ready }
+                      : // 방이 재개방되는 순간 서버가 전원 준비를 해제하므로 함께 반영한다.
+                        data.roomReopened
+                        ? { ...p, ready: false }
+                        : p,
                   ),
                 };
               }

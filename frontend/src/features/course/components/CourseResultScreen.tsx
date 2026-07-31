@@ -12,9 +12,10 @@ interface CourseResultScreenProps {
   nicknameById: Map<string, string>;
   /** 내 participantId — 내 줄을 강조하려고 */
   participantId: string;
-  /** 방장인가 — 대기방 복귀 버튼은 방장만 누를 수 있다(서버도 검증) */
-  isHost: boolean;
-  /** [방장 전용] 대기방 복귀 요청. 화면 전환은 서버의 course:reset 브로드캐스트가 담당 */
+  /**
+   * 대기방 복귀 요청. 방장 전용이 아니라 전원이 각자 누른다 — 화면 전환은 서버의
+   * course:member-returned가 내 id로 돌아올 때 이뤄진다(누른 사람만 넘어간다).
+   */
   onReturnToLobby: () => void;
   returning: boolean;
   returnError: string | null;
@@ -34,14 +35,15 @@ const RANK_COLORS = [
 // 배경 그림(시상대 무대)의 칸에 맞춰: 가운데 큰 화면 = 우승자 캠, 아래 3칸 = 2~4위 캠,
 // 오른쪽 = 최종 순위표와 버튼.
 //
-// 방장이 "대기방으로"를 누르면 서버가 점수를 초기화하고 방을 WAITING으로 되돌려
-// 전원이 함께 대기방으로 돌아간다(course:reset). 개별로 떠나려면 "방 나가기".
+// "대기방으로"는 전원이 각자 누르며, 누른 사람만 대기방으로 넘어간다 — 한 번에 전원이
+// 들어오지 않으므로 결과를 더 보고 싶은 사람은 남아 있을 수 있다. 아직 안 돌아온 사람도 방을
+// 떠난 게 아니라서 대기방 타일에 "게임 중"으로 자리가 남는다(방장 자격·입장 순서 유지).
+// 방을 아예 떠나려면 "방 나가기".
 export function CourseResultScreen({
   ranking,
   totalSessions,
   nicknameById,
   participantId,
-  isHost,
   onReturnToLobby,
   returning,
   returnError,
@@ -128,20 +130,20 @@ export function CourseResultScreen({
           </ol>
         </section>
 
-        {/* 오른쪽 아래 — 버튼. 대기방 복귀는 방장만, 나가기는 누구나 */}
+        {/* 오른쪽 아래 — 버튼. 대기방 복귀는 전원이 각자 누르고 누른 사람만 넘어간다
+            (예전엔 방장 전용이었다). 방을 아예 떠나려면 "방 나가기". */}
         <div className="course-result__actions">
-          {isHost ? (
-            <button
-              type="button"
-              className="pap-pixel-btn course-result__btn course-result__btn--lobby"
-              onClick={onReturnToLobby}
-              disabled={returning}
-            >
-              {returning ? '돌아가는 중...' : '대기방으로'} {!returning && <span aria-hidden>→</span>}
-            </button>
-          ) : (
-            <p className="course-result__wait-host">방장이 누르면 함께 대기방으로 이동해요</p>
-          )}
+          <button
+            type="button"
+            className="pap-pixel-btn course-result__btn course-result__btn--lobby"
+            onClick={onReturnToLobby}
+            disabled={returning}
+          >
+            {returning ? '돌아가는 중...' : '대기방으로'} {!returning && <span aria-hidden>→</span>}
+          </button>
+          <p className="course-result__wait-host">
+            먼저 가도 괜찮아요. 남은 사람은 대기방에 "게임 중"으로 표시돼요
+          </p>
           <button type="button" className="pap-pixel-btn course-result__btn" onClick={onLeave}>
             방 나가기
           </button>

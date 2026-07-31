@@ -17,7 +17,6 @@ import { useNinjaRound } from '../hooks/useNinjaRound';
 import { gestureImage } from '../lib/gestureImages';
 import { skillEffect, skillShake } from '../lib/skillEffects';
 import { PixelConfirmModal } from '../../system/components/PixelConfirmModal';
-import { NinjaEffectOverlay } from './NinjaEffectOverlay';
 import './NinjaBattleScreen.css';
 
 const ATTACK_TARGET_TIMER_SECONDS = 30;
@@ -96,6 +95,7 @@ export function NinjaBattleScreen({
     hp,
     currentAttackerToken,
     isMyAttack,
+    isEliminated,
     roundTimerSeconds,
     attackTimerSeconds,
     requiredSkill,
@@ -223,10 +223,13 @@ export function NinjaBattleScreen({
           {/* 내 손 스켈레톤은 내 캠 위에 직접 그린다 — 랜드마크는 내 카메라에서만 나오므로
               (남의 랜드마크는 전송되지 않는다) 각자 자기 타일에서만 보인다. 이 컴포넌트가
               인식 루프를 소유하므로 게임 중 정확히 한 번만 마운트된다. */}
-          {isMe && <GesturePanel variant="overlay" />}
-          {/* 이펙트는 이 타일 안에서만 재생된다 — 컴포넌트가 호스트 div 크기에 맞춰 그린다 */}
-          {effectTargetId === id &&
-            (pixelEffect ?? (requiredSkill && <NinjaEffectOverlay effect={requiredSkill.effect} />))}
+          {/* 탈락하면 인식 루프와 브로드캐스트를 끊는다 — 판정에 쓰이지 않는 추론을 매 프레임
+              돌릴 이유가 없다(제출도 훅에서 이미 막혀 있다). 다음 판이 열리면 다시 켜진다. */}
+          {isMe && <GesturePanel variant="overlay" active={!isEliminated} />}
+          {/* 이펙트는 이 타일 안에서만 재생된다 — 컴포넌트가 호스트 div 크기에 맞춰 그린다.
+              시드의 모든 스킬이 skillEffects의 BY_SKILL_ID에 있어서 폴백 파티클은 없앴다 —
+              매핑이 빠진 스킬이 생기면 이펙트 없이 진동만 남으니 스킬 추가 시 표를 함께 고친다. */}
+          {effectTargetId === id && pixelEffect}
           {/* 닉네임은 전원 같은 방식(픽셀 스티커)으로 캠 위에 얹는다 — 내 것만 노란색 */}
           <span className={`ninja-tile__badge ninja-tile__badge--name${isMe ? ' ninja-tile__badge--me' : ''}`}>
             {nicknameOf(id)}
@@ -337,6 +340,17 @@ export function NinjaBattleScreen({
                       ))}
                     </ol>
                   </>
+                )}
+              </div>
+            ) : isEliminated ? (
+              /* 탈락자는 손동작이 판정되지 않는다(훅이 콤보 추적을 끊는다). 콤보 트래커를 그대로
+                 두면 눌러도 반응이 없는 화면이 되므로, 관전 중임을 분명히 보여준다. */
+              <div className="ninja-board__body ninja-board__body--eliminated">
+                <p className="ninja-board__label">탈락</p>
+                <p className="ninja-board__skill pap-pixel-title">관전 중</p>
+                <p className="ninja-board__hint">이 판은 끝났어요. 손동작은 판정되지 않아요.</p>
+                {requiredSkill && (
+                  <p className="ninja-board__hint">지금 술법: {requiredSkill.skillName}</p>
                 )}
               </div>
             ) : (

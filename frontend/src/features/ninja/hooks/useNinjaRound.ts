@@ -65,13 +65,23 @@ export function useNinjaRound(
   // 공격권 획득 시 서버가 내려주는 대상 지정 데드라인(attack-won의 targetDeadlineAt).
   const [targetDeadline, setTargetDeadline] = useState<number | null>(null);
 
+  // 이 판에서 내가 탈락했는가. alivePlayers가 비어 있는 동안(스냅샷 도착 전)은 판단하지 않는다 —
+  // 안 그러면 입장 직후 전원이 탈락으로 보인다.
+  const isEliminated =
+    participantId !== null && alivePlayers.length > 0 && !alivePlayers.includes(participantId);
+
   // requiredSkill이 실제로 바뀔 때만(=라운드 전환) 새 배열이 되도록 메모.
   // 그냥 매 렌더 .map()을 새로 만들면 참조가 매번 달라져서, useSequenceProgress의
   // "시퀀스가 바뀌면 초기화" 이펙트가 폴링/콤보 갱신 때마다 오작동해 진행도가 0.7초를
   // 못 채우고 계속 리셋되는 버그가 있었다.
+  //
+  // 탈락하면 시퀀스를 null로 내려 콤보 추적 자체를 멈춘다 — 탈락자가 손동작을 해도 판정되지
+  // 않아야 한다. 서버도 NINJA_NOT_ALIVE로 거부하지만(그게 상태의 최종 방어선이다) 그것만
+  // 믿으면 탈락자 화면에서 콤보가 완성되고 제출까지 갔다가 에러만 뜬다.
   const requiredSequence = useMemo(
-    () => requiredSkill?.gestures.map((g) => g.gestureName) ?? null,
-    [requiredSkill],
+    () =>
+      isEliminated ? null : (requiredSkill?.gestures.map((g) => g.gestureName) ?? null),
+    [isEliminated, requiredSkill],
   );
   const { stepIndex, completed, holdProgress, reset } = useSequenceProgress(
     requiredSequence,
@@ -243,6 +253,9 @@ export function useNinjaRound(
     if (armedKeyRef.current !== key) return; // 전환 직후 넘어온 이전 교환의 stale 완성 → 무시.
     // 인터미션(이펙트/카운트다운) 중엔 입력을 받지 않는다(선입력 방지).
     if (phase !== 'ROUND' || !participantId || !requiredSkill) return;
+    // 탈락자는 제출하지 않는다. 위에서 시퀀스를 끊어 completed가 뜰 일이 없지만, 탈락 직전에
+    // 완성해 둔 stale 완성이 남아 있을 수 있어 제출 지점에서 한 번 더 막는다.
+    if (isEliminated) return;
     if (attackedKeyRef.current === key) return;
     attackedKeyRef.current = key;
 
@@ -257,7 +270,17 @@ export function useNinjaRound(
         // 이미 다른 참가자가 선점(NINJA_ALREADY_CLAIMED)한 것도 정상적인 결과라 에러로만 표시.
         setError(err instanceof NinjaApiError ? err.message : '공격 제출 실패');
       });
-  }, [completed, participantId, requiredSkill, round, exchange, phase, gameId, accessToken]);
+  }, [
+    completed,
+    participantId,
+    requiredSkill,
+    round,
+    exchange,
+    phase,
+    isEliminated,
+    gameId,
+    accessToken,
+  ]);
 
   const submitTarget = useCallback(
     async (targetToken: string) => {
@@ -367,6 +390,8 @@ export function useNinjaRound(
     hp,
     currentAttackerToken,
     isMyAttack,
+    /** 이 판에서 내가 탈락했는가. true면 손동작 인식 결과를 판정에 쓰지 않는다(관전) */
+    isEliminated,
     roundTimerSeconds,
     attackTimerSeconds,
     requiredSkill,
