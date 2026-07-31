@@ -22,6 +22,7 @@ import {
   FetchGameIcon,
   GearIcon,
   HandGameIcon,
+  InResultIcon,
   KickIcon,
   LinkIcon,
   MicOffIcon,
@@ -102,6 +103,11 @@ export function LobbyScreen({
     room.participants
       .filter((p) => p.participantId !== room.hostParticipantId)
       .every((p) => p.ready);
+  // 이전 코스 결과 화면에 아직 남아 있는 사람. 방을 떠난 게 아니라 자리를 지키고 있을 뿐이라
+  // 타일에 "게임 중"으로 표시되고, 전원이 돌아오기 전엔 다음 코스를 시작할 수 없다
+  // (서버도 ROOM_NOT_ALL_RETURNED로 거부한다).
+  const stillInResult = room?.participants.filter((p) => !p.inLobby) ?? [];
+  const allReturned = stillInResult.length === 0;
   // 타일 map 안에서 isHost가 "이 타일 주인이 방장인가"로 섀도잉되므로, "내가 방장인가"는 별칭으로 들고 간다.
   const amHost = isHost;
   // 타일 테두리·표시에 쓸 참가자 정보 (LiveKit identity == participantId)
@@ -113,6 +119,7 @@ export function LobbyScreen({
         ready: p.ready,
         isHost: p.participantId === room?.hostParticipantId,
         offline: p.connectionStatus === 'DISCONNECTED',
+        inResult: !p.inLobby,
         colorIndex: (index % 4) + 1,
       },
     ]),
@@ -223,6 +230,10 @@ export function LobbyScreen({
           showToast('코스를 정해주세요!');
           return;
         }
+        if (!allReturned) {
+          showToast('아직 결과 화면을 보고 있는 참가자가 있어요!');
+          return;
+        }
         if (!allOthersReady) {
           showToast('모든 참가자가 준비를 완료해야 해요!');
           return;
@@ -295,9 +306,12 @@ export function LobbyScreen({
               const info = infoByIdentity.get(identity);
               const isHost = info?.isHost ?? false;
               const ready = info?.ready ?? false;
+              // 아직 코스 결과 화면에 있는 사람 — 자리·순서·방장 자격은 그대로 두고 "게임 중"만
+              // 덮는다. 준비 배지는 의미가 없으니 이 사람에겐 띄우지 않는다.
+              const inResult = info?.inResult ?? false;
               // 방장은 게임 시작 게이트를 위해 내부적으로 ready=true지만, 대기방 UI엔 준비 배지·
               // 상태를 표시하지 않는다 — 방장은 준비 대상이 아니라 게임을 시작하는 주체이기 때문.
-              const showReady = ready && !isHost;
+              const showReady = ready && !isHost && !inResult;
               const isMe = identity === participantId;
               // 연결이 끊긴 참가자는 재접속 유예(15초) 동안 자리를 지킨 채 회색으로만 표시된다.
               // 유예가 끝나면 서버가 member:left를 보내고 그때 타일이 사라진다(방장이면 위임까지).
@@ -307,7 +321,9 @@ export function LobbyScreen({
                   key={identity}
                   className={`lobby-tile${info ? ` lobby-tile--p${info.colorIndex}` : ''}${
                     showReady ? ' lobby-tile--ready' : ''
-                  }${offline ? ' lobby-tile--offline' : ''}`}
+                  }${offline ? ' lobby-tile--offline' : ''}${
+                    inResult ? ' lobby-tile--in-result' : ''
+                  }`}
                 >
                   <ParticipantTile trackRef={trackRef} disableSpeakingIndicator />
                   {/* 타일이 입장 순서로 고정돼 더는 "좌측 상단 = 나"가 아니므로 내 타일을 표시해준다.
@@ -317,6 +333,13 @@ export function LobbyScreen({
                     <div className="lobby-tile__offline">
                       {DisconnectedIcon}
                       <span>연결 끊김</span>
+                    </div>
+                  )}
+                  {/* 결과 화면에 남아 있는 사람. 연결 끊김이 더 급한 상태라 그때는 양보한다. */}
+                  {inResult && !offline && (
+                    <div className="lobby-tile__in-result">
+                      {InResultIcon}
+                      <span>게임 중</span>
                     </div>
                   )}
                   {showReady && <span className="lobby-tile__ready-badge">READY!</span>}
@@ -368,7 +391,7 @@ export function LobbyScreen({
                         </button>
                       </span>
                     )}
-                    {!isHost && (
+                    {!isHost && !inResult && (
                       <span
                         className={`lobby-tile__status${ready ? ' lobby-tile__status--ready' : ''}`}
                         title={ready ? '준비 완료' : '대기 중'}
@@ -480,22 +503,36 @@ export function LobbyScreen({
                 data-hint={
                   course && course.items.length === 0
                     ? '코스를 정해주세요!'
-                    : allOthersReady
-                      ? undefined
-                      : '모든 참가자가 준비를 완료해야 해요!'
+                    : !allReturned
+                      ? '아직 결과 화면을 보고 있는 참가자가 있어요!'
+                      : allOthersReady
+                        ? undefined
+                        : '모든 참가자가 준비를 완료해야 해요!'
                 }
               >
                 <button
                   type="button"
                   className="pap-pixel-btn pap-pixel-btn--coral"
                   // 코스가 비면 시작할 게 없고(서버도 COURSE_EMPTY로 거부), 전원 준비 전에도
-                  // 서버가 거부하므로(ROOM_NOT_ALL_READY) 둘 다 미리 막는다.
+                  // 서버가 거부하므로(ROOM_NOT_ALL_READY) 둘 다 미리 막는다. 이전 코스 결과
+                  // 화면에 남아 있는 사람이 있을 때도 마찬가지(ROOM_NOT_ALL_RETURNED).
                   disabled={
-                    starting || !room || !course || course.items.length === 0 || !allOthersReady
+                    starting ||
+                    !room ||
+                    !course ||
+                    course.items.length === 0 ||
+                    !allReturned ||
+                    !allOthersReady
                   }
                   onClick={() => onStartGame()}
                 >
-                  {starting ? '시작 중...' : allOthersReady ? '게임 시작 (Space)' : '준비 대기 중...'}
+                  {starting
+                    ? '시작 중...'
+                    : !allReturned
+                      ? '복귀 대기 중...'
+                      : allOthersReady
+                        ? '게임 시작 (Space)'
+                        : '준비 대기 중...'}
                 </button>
               </span>
             ) : (

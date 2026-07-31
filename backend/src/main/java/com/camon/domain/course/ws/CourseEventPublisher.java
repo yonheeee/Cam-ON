@@ -2,8 +2,8 @@ package com.camon.domain.course.ws;
 
 import com.camon.domain.course.dto.CourseResponse;
 import com.camon.domain.course.ws.payload.CourseFinishedPayload;
-import com.camon.domain.course.ws.payload.CourseResetPayload;
 import com.camon.domain.course.ws.payload.CourseSessionSkippedPayload;
+import com.camon.domain.course.ws.payload.MemberReturnedPayload;
 import com.camon.global.ws.StompBroadcaster;
 import com.camon.global.ws.StompEvent;
 import java.time.Instant;
@@ -36,9 +36,13 @@ public class CourseEventPublisher {
         publish(roomId, "course:finished", payload);
     }
 
-    // 방장이 코스 종합 결과에서 대기방 복귀를 눌렀다 — 전원이 결과 화면을 접고 대기방으로 돌아간다.
-    public void publishCourseReset(UUID roomId, CourseResetPayload payload) {
-        publish(roomId, "course:reset", payload);
+    // 참가자 한 명이 코스 종합 결과에서 대기방 복귀를 눌렀다. 복귀는 개별 행동이라 이 이벤트로
+    // 화면을 접는 건 payload의 당사자뿐이고, 나머지는 그 사람 타일의 "게임 중" 표시만 뗀다.
+    public void publishMemberReturned(
+        UUID roomId,
+        MemberReturnedPayload payload
+    ) {
+        publish(roomId, "course:member-returned", payload);
     }
 
     public void publishSessionSkipped(

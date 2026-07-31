@@ -7,7 +7,8 @@ import { useEffect, useState } from 'react';
 // - game:started        코스의 다음 게임이 열렸다 (게임별 패널 전환의 유일한 신호)
 // - course:session-skipped  인원이 안 맞아 그 게임을 건너뛰었다
 // - course:finished     코스의 마지막 게임까지 끝났다 → 종합 결과
-// - course:reset        방장이 종합 결과에서 대기방 복귀를 눌렀다 → 대기방으로
+// - course:member-returned  누군가 종합 결과에서 대기방 복귀를 눌렀다. 복귀는 개별 행동이라
+//                       내 id일 때만 결과 화면을 접는다(남의 복귀로 내 화면이 넘어가면 안 된다).
 interface RoomEvent<T> {
   event: string;
   data: T;
@@ -30,6 +31,13 @@ export interface CourseFinishedData {
   ranking: CourseScoreEntry[];
 }
 
+export interface MemberReturnedData {
+  participantId: string;
+  ready: boolean;
+  /** 이 복귀가 방을 WAITING으로 되돌렸는가(= 가장 먼저 누른 사람인가) */
+  roomReopened: boolean;
+}
+
 export interface SessionSkippedData {
   sessionSeq: number;
   gameId: number;
@@ -50,6 +58,8 @@ interface UseCourseProgressResult {
 export function useCourseProgress(
   roomId: string,
   accessToken: string,
+  /** 내 participantId — 복귀 이벤트가 내 것인지 가려내 내 화면만 전환한다 */
+  participantId: string,
 ): UseCourseProgressResult {
   const [activeSession, setActiveSession] = useState<GameStartedData | null>(null);
   const [finished, setFinished] = useState<CourseFinishedData | null>(null);
@@ -83,12 +93,16 @@ export function useCourseProgress(
               setFinished(event.data as CourseFinishedData);
               setActiveSession(null);
               break;
-            case 'course:reset':
-              // 방장이 종합 결과에서 "방으로 돌아가기"를 눌렀다 — 방이 WAITING으로 돌아갔으니
-              // 결과 화면을 접고 대기방으로 전환한다(대기방이 스냅샷을 새로 읽는다).
+            case 'course:member-returned': {
+              // 복귀는 개별 행동이다 — 돌아간 사람이 나일 때만 결과 화면을 접고 대기방으로
+              // 전환한다(대기방이 스냅샷을 새로 읽는다). 남이 돌아간 건 내 화면과 무관하고,
+              // 대기방 쪽 훅(useRoomLobby)이 그 사람 타일 표시만 갱신한다.
+              const data = event.data as MemberReturnedData;
+              if (data.participantId !== participantId) break;
               setFinished(null);
               setActiveSession(null);
               break;
+            }
             default:
               break;
           }
@@ -100,7 +114,7 @@ export function useCourseProgress(
     return () => {
       void client.deactivate();
     };
-  }, [roomId, accessToken]);
+  }, [roomId, accessToken, participantId]);
 
   return {
     activeSession,

@@ -41,8 +41,9 @@ public class GameStartController {
         )));
     }
 
-    // 코스 종합 결과에서 방장이 "방으로 돌아가기"를 누르는 지점. 점수를 초기화하고 방을
-    // WAITING으로 되돌린다 — 전파는 서비스가 course:reset 이벤트로 한다.
+    // 코스 종합 결과에서 참가자가 "방으로 돌아가기"를 누르는 지점 — 방장 전용이 아니라 각자
+    // 누르며, 부르는 사람만 대기방으로 돌아간다. 가장 먼저 부른 요청이 점수를 초기화하고 방을
+    // WAITING으로 되돌린다 — 전파는 서비스가 course:member-returned 이벤트로 한다.
     @PostMapping("/{roomId}/return")
     public ResponseEntity<Void> returnToLobby(
         @AuthenticationPrincipal GuestPrincipal principal,

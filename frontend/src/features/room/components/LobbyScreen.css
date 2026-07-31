@@ -211,6 +211,30 @@
   color: rgb(43 24 51 / 0.45);
 }
 
+/* 아직 코스 결과 화면에 남아 있는 참가자 — 방을 떠난 게 아니라 자리를 지키고 있는 상태이므로
+   연결 끊김(회색 처리)과 달리 캠 화면을 살려 두고, 진행 중임을 알리는 색만 얹는다. */
+.lobby-tile--in-result {
+  border-color: var(--pap-accent-coral, #f2795f);
+}
+
+.lobby-tile__in-result {
+  position: absolute;
+  /* 이름 바(z-index 4)는 덮지 않아서 누가 아직 결과를 보는지 계속 읽힌다 — offline과 같은 규칙 */
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: rgb(43 24 51 / 0.5);
+  color: var(--pap-white);
+  font-family: var(--pap-font-pixel);
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  pointer-events: none;
+}
+
 .lobby-tile__ready-badge {
   position: absolute;
   top: 8px;

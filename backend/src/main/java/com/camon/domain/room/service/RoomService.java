@@ -293,7 +293,8 @@ public class RoomService {
                     ? "HOST"
                     : "MEMBER",
                 participant.ready(),
-                participant.connectionStatus()
+                participant.connectionStatus(),
+                participant.inLobby()
             ))
             .toList();
         return new RoomSnapshotResponse(

@@ -4,9 +4,9 @@ import com.camon.domain.course.domain.CourseItem;
 import com.camon.domain.course.repository.CourseRepository;
 import com.camon.domain.course.ws.CourseEventPublisher;
 import com.camon.domain.course.ws.payload.CourseFinishedPayload;
-import com.camon.domain.course.ws.payload.CourseResetPayload;
 import com.camon.domain.course.ws.payload.CourseScoreEntry;
 import com.camon.domain.course.ws.payload.CourseSessionSkippedPayload;
+import com.camon.domain.course.ws.payload.MemberReturnedPayload;
 import com.camon.domain.game.common.Game;
 import com.camon.domain.game.common.service.GameCatalogService;
 import com.camon.domain.game.common.service.GameScoreService;
@@ -41,9 +41,11 @@ import org.springframework.stereotype.Service;
 // 다음 칸의 게임 세션을 연다. 마지막 칸까지 끝나면 코스 종합 결과를 발행하고 방을 끝낸다.
 //
 // 세션 번호(seq)는 코스의 위치(idx)와 1:1이다. 코스가 끝난 방은 FINISHED로 닫히고,
-// 방장이 "방으로 돌아가기"(returnToLobby)를 누르면 점수 키(session:{seq}:*, course:totals)를
-// 전부 지우고 WAITING으로 되돌린다 — 점수가 HINCRBY로 누적되므로 지우지 않고 seq를
-// 재사용하면 이전 코스 점수가 그대로 얹힌다.
+// 참가자가 각자 "방으로 돌아가기"(returnToLobby)를 누르면 대기방으로 돌아온다. 그중 가장 먼저
+// 누른 한 명이 점수 키(session:{seq}:*, course:totals)를 전부 지우고 방을 WAITING으로
+// 되돌린다 — 점수가 HINCRBY로 누적되므로 지우지 않고 seq를 재사용하면 이전 코스 점수가
+// 그대로 얹힌다. 아직 안 돌아온 사람은 방에 남아 있는 채(inLobby=false) 대기방 타일에
+// "게임 중"으로 표시되고, 전원이 돌아와 준비해야 다음 코스를 시작할 수 있다.
 @Slf4j
 @Service
 public class CourseRunner {
@@ -102,6 +104,12 @@ public class CourseRunner {
         }
 
         List<Participant> participants = participantRepository.findAll(roomId);
+        // 이전 코스 결과 화면에 아직 남아 있는 사람이 있으면 시작하지 않는다 — 그대로 열면
+        // 결과를 읽는 중에 게임 화면으로 끌려 들어간다. ready만 봐도 대개 걸리지만(복귀 전엔
+        // 준비할 방법이 없다) 방장은 복귀 시 ready=true가 되므로 별도 검증이 필요하다.
+        if (participants.stream().anyMatch(participant -> !participant.inLobby())) {
+            throw new BusinessException(ErrorCode.ROOM_NOT_ALL_RETURNED);
+        }
         // 방장은 방 생성 시 ready=true로 시작하므로(시작 버튼이 곧 준비 의사) 특별취급 없이
         // 전원이 ready인지만 본다.
         if (participants.isEmpty()
@@ -120,13 +128,17 @@ public class CourseRunner {
         // status를 먼저 PLAYING으로 올려, game:started가 나갈 시점엔 이미 PLAYING이 되도록 한다
         // (늦게 붙은 클라이언트가 방 status 조회로 게임 화면을 복구할 수 있게).
         roomRepository.updateStatus(roomId, RoomStatus.PLAYING);
+        // 게임 중엔 아무도 대기방에 없다. 코스가 끝나면 각자 "방으로 돌아가기"로 다시 true가 된다.
+        participantRepository.updateAllInLobby(roomId, false);
         try {
             CourseItem first = items.getFirst();
             openSession(room, firstSeq, first, participants);
             return new StartedSession(first.gameId(), firstSeq, first.roundCount());
         } catch (RuntimeException e) {
-            // 세션 오픈 실패 시 대기방으로 되돌려 재시작이 가능하게 한다.
+            // 세션 오픈 실패 시 대기방으로 되돌려 재시작이 가능하게 한다. inLobby도 함께
+            // 되돌리지 않으면 전원이 "게임 중"으로 굳어 재시작 자체가 막힌다.
             roomRepository.updateStatus(roomId, RoomStatus.WAITING);
+            participantRepository.updateAllInLobby(roomId, true);
             throw e;
         }
     }
@@ -230,33 +242,52 @@ public class CourseRunner {
         );
     }
 
-    // 코스 종합 결과 화면에서 방장이 "방으로 돌아가기"를 누르는 지점. 이전 코스의 점수 기록을
-    // 지우고 방을 WAITING으로 되돌려, 같은 방에서 코스를 다시 시작할 수 있게 한다.
-    // 코스 항목(room:{code}:course:{idx})은 남긴다 — 같은 구성으로 다시 놀거나 대기방에서 고친다.
+    // 코스 종합 결과 화면에서 참가자가 "방으로 돌아가기"를 누르는 지점 — 방장 전용이 아니라
+    // 전원이 각자 누른다. 복귀는 개별 행동이므로 한 명이 눌러도 나머지는 결과 화면에 남고,
+    // 대기방에서는 아직 안 돌아온 사람의 타일이 "게임 중"으로 자리를 지킨다(방장 자격·입장
+    // 순서 모두 유지 — 아무도 방을 떠나지 않기 때문).
+    //
+    // 방을 WAITING으로 되돌리고 점수를 지우는 일은 가장 먼저 누른 한 명에게만 일어난다(그
+    // 뒤엔 이미 WAITING이라 건너뛴다). 코스 항목(room:{code}:course:{idx})은 남긴다 —
+    // 같은 구성으로 다시 놀거나 대기방에서 고친다.
     public void returnToLobby(UUID roomId, UUID requesterId) {
         Room room = requireRoom(roomId);
-        if (!room.hostParticipantId().equals(requesterId)) {
-            throw new BusinessException(ErrorCode.ROOM_NOT_HOST);
-        }
-        if (room.status() != RoomStatus.FINISHED) {
+        participantRepository.findById(roomId, requesterId)
+            .orElseThrow(() -> new BusinessException(
+                ErrorCode.ROOM_PARTICIPANT_NOT_FOUND
+            ));
+
+        // 코스가 끝난 방(FINISHED)이거나, 먼저 누른 사람이 이미 되돌려 놓은 방(WAITING)에서만
+        // 돌아올 수 있다. 진행 중(PLAYING)에는 돌아갈 대기방이 없다.
+        boolean reopenRoom = room.status() == RoomStatus.FINISHED;
+        if (!reopenRoom && room.status() != RoomStatus.WAITING) {
             throw new BusinessException(ErrorCode.ROOM_NOT_FINISHED);
         }
 
-        log.info("[Course] returnToLobby : roomCode={} 점수 초기화 후 대기방 복귀",
-            room.roomCode());
-        // 점수를 먼저 지우고 나서 WAITING으로 되돌린다 — 순서가 반대면 새 코스가 시작될 수
-        // 있는 상태에서 이전 점수가 잠깐 남는다.
-        gameScoreService.clearCourseResults(roomId);
-        // 전원 준비 해제(카메라/인식 테스트를 다시 거치게) 후 방장만 준비 상태로 복원한다 —
-        // 방장은 준비 토글 대신 "게임 시작" 버튼을 쓴다는 방 생성 시 불변식과 맞춘다.
-        participantRepository.resetAllReady(roomId);
-        roomRepository.updateCurrentSessionSeq(roomId, 1);
-        roomRepository.updateStatus(roomId, RoomStatus.WAITING);
-        participantRepository.updateReady(roomId, requesterId, true);
+        if (reopenRoom) {
+            log.info("[Course] returnToLobby : roomCode={} 첫 복귀 — 점수 초기화 후 방 재개방",
+                room.roomCode());
+            // 점수를 먼저 지우고 나서 WAITING으로 되돌린다 — 순서가 반대면 새 코스가 시작될 수
+            // 있는 상태에서 이전 점수가 잠깐 남는다.
+            gameScoreService.clearCourseResults(roomId);
+            // 전원 준비 해제 — 카메라/인식 테스트를 다시 거치게 한다. 각자 복귀하는 시점에
+            // 아래에서 자기 준비 상태를 받으므로, 여기서 방장을 특별취급하지 않는다.
+            participantRepository.resetAllReady(roomId);
+            roomRepository.updateCurrentSessionSeq(roomId, 1);
+            roomRepository.updateStatus(roomId, RoomStatus.WAITING);
+        }
 
-        courseEventPublisher.publishCourseReset(
+        // 방장은 준비 토글 대신 "게임 시작" 버튼을 쓴다는 방 생성 시 불변식에 맞춰, 복귀하는
+        // 순간 준비 상태로 복원한다. 방장이 먼저 누르든 나중에 누르든 같게 동작한다.
+        boolean isHost = room.hostParticipantId().equals(requesterId);
+        participantRepository.updateInLobby(roomId, requesterId, true);
+        participantRepository.updateReady(roomId, requesterId, isHost);
+        log.info("[Course] returnToLobby : roomCode={} participantId={} 대기방 복귀 (방장={})",
+            room.roomCode(), requesterId, isHost);
+
+        courseEventPublisher.publishMemberReturned(
             roomId,
-            new CourseResetPayload(requesterId)
+            new MemberReturnedPayload(requesterId, isHost, reopenRoom)
         );
     }
 

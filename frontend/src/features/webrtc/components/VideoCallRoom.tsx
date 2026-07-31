@@ -169,15 +169,13 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
   const { activeSession, finished, skipped, clearSkipped } = useCourseProgress(
     roomId,
     accessToken,
+    participantId,
   );
   // 이벤트로 받은 세션이 우선이고, 놓친 경우(늦은 접속/재접속)엔 아래 복구 경로가 채운다.
   const [recoveredSession, setRecoveredSession] = useState<GameStartedData | null>(null);
   const session = activeSession ?? recoveredSession;
   // 종합 결과 payload에는 participantId만 있어서 이름을 붙이려면 방 스냅샷이 필요하다.
   const [participants, setParticipants] = useState<ParticipantResponse[]>([]);
-  // 종합 결과의 "방으로 돌아가기"는 방장 전용 — 게임 도중 방장이 바뀔 수 있어(연쇄 위임)
-  // 마운트 시점 값이 아니라 course:finished 도착 시점에 스냅샷을 다시 읽어 갱신한다.
-  const [hostParticipantId, setHostParticipantId] = useState<string | null>(null);
   const nicknameById = useMemo(
     () => new Map(participants.map((p) => [p.participantId, p.nickname])),
     [participants],
@@ -221,7 +219,6 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
       .then(([room, course]) => {
         if (cancelled) return;
         setParticipants(room.participants);
-        setHostParticipantId(room.hostParticipantId);
         if (room.status !== 'PLAYING') return;
         const current = course.items.find((item) => item.idx === course.currentSessionSeq);
         if (current) {
@@ -258,8 +255,8 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
   const [returning, setReturning] = useState(false);
   const [returnError, setReturnError] = useState<string | null>(null);
 
-  // 종합 결과가 뜨는 순간 방장/참가자 스냅샷을 다시 읽는다 — 게임 도중의 방장 위임·퇴장이
-  // 반영된 최신 값으로 "방으로 돌아가기" 버튼 노출 여부와 닉네임 표를 그리기 위함.
+  // 종합 결과가 뜨는 순간 참가자 스냅샷을 다시 읽는다 — 게임 도중의 퇴장이 반영된 최신
+  // 닉네임 표로 순위를 그리기 위함(payload에는 participantId만 있다).
   useEffect(() => {
     // 결과 화면이 뜨거나 접힐 때 복귀 요청 상태를 초기화 — 두 번째 코스의 결과에서
     // 이전 코스의 "돌아가는 중..."이 남아 버튼이 죽은 것처럼 보이지 않게.
@@ -272,7 +269,6 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
       .then((room) => {
         if (cancelled) return;
         setParticipants(room.participants);
-        setHostParticipantId(room.hostParticipantId);
       })
       .catch(() => {
         // 실패해도 마운트 시점 스냅샷으로 그린다.
@@ -282,8 +278,9 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
     };
   }, [finished, roomId, accessToken]);
 
-  // [방장 전용] 종합 결과 → 대기방 복귀. 성공 시 화면 전환은 서버의 course:reset이 담당하므로
-  // 여기선 요청만 보낸다(전원이 같은 이벤트로 함께 돌아간다).
+  // 종합 결과 → 대기방 복귀. 방장 전용이 아니라 전원이 각자 누른다. 성공 시 화면 전환은 서버가
+  // 쏘는 course:member-returned가 내 id로 돌아올 때 이뤄지므로 여기선 요청만 보낸다 — 남이
+  // 눌러도 내 화면은 그대로다(한 번에 전원이 들어오지 않는다).
   const returnToLobby = useCallback(async () => {
     setReturning(true);
     setReturnError(null);
@@ -293,7 +290,7 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
       setReturnError(err instanceof RoomApiError ? err.message : '대기방 복귀 실패');
       setReturning(false);
     }
-    // 성공 시 returning을 유지한다 — course:reset이 오면 이 화면 자체가 사라진다.
+    // 성공 시 returning을 유지한다 — 내 복귀 이벤트가 오면 이 화면 자체가 사라진다.
   }, [roomId, accessToken]);
 
   const activeGameName = gameNameOf(session?.gameId);
@@ -395,7 +392,6 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
           totalSessions={finished.totalSessions}
           nicknameById={nicknameById}
           participantId={participantId}
-          isHost={hostParticipantId === participantId}
           onReturnToLobby={() => void returnToLobby()}
           returning={returning}
           returnError={returnError}

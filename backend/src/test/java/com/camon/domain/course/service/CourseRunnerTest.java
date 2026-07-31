@@ -14,8 +14,8 @@ import com.camon.domain.course.domain.CourseItem;
 import com.camon.domain.course.repository.CourseRepository;
 import com.camon.domain.course.ws.CourseEventPublisher;
 import com.camon.domain.course.ws.payload.CourseFinishedPayload;
-import com.camon.domain.course.ws.payload.CourseResetPayload;
 import com.camon.domain.course.ws.payload.CourseSessionSkippedPayload;
+import com.camon.domain.course.ws.payload.MemberReturnedPayload;
 import com.camon.domain.game.common.Game;
 import com.camon.domain.game.common.service.GameCatalogService;
 import com.camon.domain.game.common.service.GameScoreService;
@@ -142,6 +142,35 @@ class CourseRunnerTest {
             ErrorCode.ROOM_NOT_ALL_READY
         );
         verify(roomRepository, never()).updateStatus(any(), eq(RoomStatus.PLAYING));
+    }
+
+    @Test
+    void rejectsStartWhenSomeoneIsStillOnTheResultScreen() {
+        // 이전 코스 결과를 아직 보고 있는 사람(inLobby=false)이 있으면 시작하지 않는다 —
+        // 그대로 열면 결과를 읽는 중에 게임 화면으로 끌려 들어간다. 방장은 복귀 시 ready=true가
+        // 되므로 ready 검증만으로는 이 경우가 안 걸린다.
+        givenRoom(RoomStatus.WAITING, 1);
+        List<Participant> participants = new ArrayList<>(readyParticipants(2));
+        participants.add(stillOnResultScreen());
+        when(participantRepository.findAll(roomId)).thenReturn(participants);
+
+        assertBusinessError(
+            () -> runner.startCourse(roomId, hostId),
+            ErrorCode.ROOM_NOT_ALL_RETURNED
+        );
+        verify(roomRepository, never()).updateStatus(any(), eq(RoomStatus.PLAYING));
+    }
+
+    @Test
+    void clearsInLobbyForEveryoneWhenCourseStarts() {
+        givenRoom(RoomStatus.WAITING, 1);
+        when(participantRepository.findAll(roomId)).thenReturn(readyParticipants(4));
+        givenCourse(new CourseItem(1, NINJA_ID, 3, null));
+        givenGame(NINJA_ID, "NINJA", 2, 4);
+
+        runner.startCourse(roomId, hostId);
+
+        verify(participantRepository).updateAllInLobby(roomId, false);
     }
 
     @Test
@@ -303,8 +332,9 @@ class CourseRunnerTest {
     // --- fixtures ---
 
     @Test
-    void returnToLobby_clearsScoresAndReopensRoom() {
+    void returnToLobby_firstReturnerClearsScoresAndReopensRoom() {
         givenRoom(RoomStatus.FINISHED, 3);
+        givenParticipant(hostId);
 
         runner.returnToLobby(roomId, hostId);
 
@@ -317,29 +347,50 @@ class CourseRunnerTest {
         order.verify(participantRepository).resetAllReady(roomId);
         order.verify(roomRepository).updateCurrentSessionSeq(roomId, 1);
         order.verify(roomRepository).updateStatus(roomId, RoomStatus.WAITING);
+        order.verify(participantRepository).updateInLobby(roomId, hostId, true);
         order.verify(participantRepository).updateReady(roomId, hostId, true);
 
-        ArgumentCaptor<CourseResetPayload> payload =
-            ArgumentCaptor.forClass(CourseResetPayload.class);
-        verify(courseEventPublisher).publishCourseReset(eq(roomId), payload.capture());
-        assertThat(payload.getValue().byParticipantId()).isEqualTo(hostId);
+        MemberReturnedPayload payload = capturedReturnPayload();
+        assertThat(payload.participantId()).isEqualTo(hostId);
+        assertThat(payload.roomReopened()).isTrue();
+        assertThat(payload.ready()).isTrue();
     }
 
     @Test
-    void returnToLobby_rejectsNonHost() {
+    void returnToLobby_allowsNonHostAndLeavesThemUnready() {
+        // 방장 전용이 아니다 — 팀원도 각자 돌아온다. 다만 준비는 다시 해야 하므로 ready=false.
+        UUID memberId = UUID.randomUUID();
         givenRoom(RoomStatus.FINISHED, 3);
+        givenParticipant(memberId);
 
-        assertBusinessError(
-            () -> runner.returnToLobby(roomId, UUID.randomUUID()),
-            ErrorCode.ROOM_NOT_HOST
-        );
-        verify(roomRepository, never()).updateStatus(any(), any());
-        verify(gameScoreService, never()).clearCourseResults(any());
+        runner.returnToLobby(roomId, memberId);
+
+        verify(participantRepository).updateInLobby(roomId, memberId, true);
+        verify(participantRepository).updateReady(roomId, memberId, false);
+        assertThat(capturedReturnPayload().ready()).isFalse();
     }
 
     @Test
-    void returnToLobby_rejectsWhenCourseNotFinished() {
+    void returnToLobby_laterReturnerDoesNotClearScoresAgain() {
+        // 먼저 누른 사람이 이미 WAITING으로 되돌려 놓은 방. 두 번째 사람은 자기 자리만 바꾼다 —
+        // 여기서 또 초기화하면 먼저 돌아와 준비까지 마친 사람들의 준비가 풀린다.
+        UUID memberId = UUID.randomUUID();
+        givenRoom(RoomStatus.WAITING, 1);
+        givenParticipant(memberId);
+
+        runner.returnToLobby(roomId, memberId);
+
+        verify(gameScoreService, never()).clearCourseResults(any());
+        verify(participantRepository, never()).resetAllReady(any());
+        verify(roomRepository, never()).updateStatus(any(), any());
+        verify(participantRepository).updateInLobby(roomId, memberId, true);
+        assertThat(capturedReturnPayload().roomReopened()).isFalse();
+    }
+
+    @Test
+    void returnToLobby_rejectsWhileCourseIsPlaying() {
         givenRoom(RoomStatus.PLAYING, 2);
+        givenParticipant(hostId);
 
         assertBusinessError(
             () -> runner.returnToLobby(roomId, hostId),
@@ -347,6 +398,24 @@ class CourseRunnerTest {
         );
         verify(roomRepository, never()).updateStatus(any(), any());
         verify(gameScoreService, never()).clearCourseResults(any());
+    }
+
+    @Test
+    void returnToLobby_rejectsSomeoneWhoIsNotInTheRoom() {
+        givenRoom(RoomStatus.FINISHED, 3);
+
+        assertBusinessError(
+            () -> runner.returnToLobby(roomId, UUID.randomUUID()),
+            ErrorCode.ROOM_PARTICIPANT_NOT_FOUND
+        );
+        verify(gameScoreService, never()).clearCourseResults(any());
+    }
+
+    private MemberReturnedPayload capturedReturnPayload() {
+        ArgumentCaptor<MemberReturnedPayload> payload =
+            ArgumentCaptor.forClass(MemberReturnedPayload.class);
+        verify(courseEventPublisher).publishMemberReturned(eq(roomId), payload.capture());
+        return payload.getValue();
     }
 
     private void givenRoom(RoomStatus status, int currentSessionSeq) {
@@ -359,6 +428,11 @@ class CourseRunnerTest {
             currentSessionSeq,
             Instant.parse("2026-07-28T00:00:00Z")
         )));
+    }
+
+    private void givenParticipant(UUID participantId) {
+        when(participantRepository.findById(roomId, participantId))
+            .thenReturn(Optional.of(participantWithId(participantId)));
     }
 
     private void givenCourse(CourseItem... items) {
@@ -393,6 +467,18 @@ class CourseRunnerTest {
 
     private Participant participant(boolean ready) {
         return participantWithId(UUID.randomUUID(), ready);
+    }
+
+    /** 준비는 됐지만 아직 코스 결과 화면에 남아 있는 참가자. */
+    private Participant stillOnResultScreen() {
+        return new Participant(
+            UUID.randomUUID(),
+            "watching",
+            true,
+            ConnectionStatus.CONNECTED,
+            Instant.parse("2026-07-28T00:00:00Z"),
+            false
+        );
     }
 
     private Participant participantWithId(UUID participantId) {

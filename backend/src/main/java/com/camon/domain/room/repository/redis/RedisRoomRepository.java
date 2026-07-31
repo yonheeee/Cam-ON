@@ -63,7 +63,8 @@ public class RedisRoomRepository implements RoomRepository {
                 'nickname', ARGV[7],
                 'ready', ARGV[8],
                 'connection_status', ARGV[9],
-                'joined_at', ARGV[10])
+                'joined_at', ARGV[10],
+                'in_lobby', ARGV[11])
             redis.call('SADD', KEYS[5], ARGV[7])
             redis.call('SET', KEYS[6], ARGV[1])
             return 1
@@ -153,7 +154,8 @@ public class RedisRoomRepository implements RoomRepository {
             host.nickname(),
             Boolean.toString(host.ready()),
             host.connectionStatus().name(),
-            Long.toString(host.joinedAt().toEpochMilli())
+            Long.toString(host.joinedAt().toEpochMilli()),
+            Boolean.toString(host.inLobby())
         );
         return Long.valueOf(1L).equals(result);
     }

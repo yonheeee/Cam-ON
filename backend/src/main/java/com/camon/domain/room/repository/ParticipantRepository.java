@@ -23,6 +23,18 @@ public interface ParticipantRepository {
 
     void resetAllReady(UUID roomId);
 
+    /**
+     * 한 참가자의 대기방 체류 여부를 바꾼다. 코스 종합 결과에서 각자 "방으로 돌아가기"를
+     * 누르는 지점(true)에서 쓴다.
+     */
+    void updateInLobby(UUID roomId, UUID participantId, boolean inLobby);
+
+    /**
+     * 전원의 대기방 체류 여부를 한 번에 바꾼다. 코스를 시작할 때 전원 false로 내린다 —
+     * 게임 중엔 아무도 대기방에 없기 때문.
+     */
+    void updateAllInLobby(UUID roomId, boolean inLobby);
+
     void updateConnectionStatus(
         UUID roomId,
         UUID participantId,
