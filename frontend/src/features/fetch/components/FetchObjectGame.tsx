@@ -11,18 +11,23 @@ import { CamOffIcon, CamOnIcon, MicOffIcon, MicOnIcon } from '../../room/compone
 import { BackgroundMusic } from '../../sound/components/BackgroundMusic';
 import { useCountdownSound } from '../../sound/hooks/useCountdownSound';
 import { useFetchDetection } from '../hooks/useFetchDetection';
-import { COUNTDOWN_MS, ROUND_DURATION_MS, type FetchGameState } from '../hooks/useFetchGame';
+import type { DetectionResult } from '../api/aiApi';
+import {
+  COUNTDOWN_MS,
+  ROUND_DURATION_MS,
+  type FetchGameState,
+} from '../types/fetchGame';
 import './FetchObjectGame.css';
 
 interface FetchObjectGameProps {
   state: FetchGameState;
   myNickname: string;
-  onReportSuccess: (elapsedMs: number) => void;
-  /** 라운드 마감/다음/퇴장 콜백 — /dev/fetch mock(방장 주도)에서만 넘긴다.
-   *  안 넘기면 "서버 주도" 모드: 진행은 백엔드가 하므로 진행 버튼 대신 대기 문구를 보여준다. */
-  onEndRound?: () => void;
-  onNextRound?: () => void;
-  onExit?: () => void;
+  onReportSuccess: (
+    elapsedMs: number,
+    result: DetectionResult,
+  ) => boolean | void | Promise<boolean | void>;
+  /** AI 인식 후 Spring 제출 단계에서 발생한 오류. 인식 오류와 구분해 화면에 보여준다. */
+  submissionError?: string | null;
   /** 로고 클릭 → 확인 팝업 → 방 나가기 (확정안: 방 안에서 로고는 항상 확인 팝업 경유) */
   onLeave: () => void;
 }
@@ -33,9 +38,7 @@ export function FetchObjectGame({
   state,
   myNickname,
   onReportSuccess,
-  onEndRound,
-  onNextRound,
-  onExit,
+  submissionError,
   onLeave,
 }: FetchObjectGameProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -47,15 +50,13 @@ export function FetchObjectGame({
   // 방장이 방에 없으면 입장 순서(P1→P2→...)상 가장 앞선 참가자가 진행권을 이어받는다.
   // joinedAt은 LiveKit 서버 기준 시각이라 모든 클라이언트가 같은 순서를 본다.
   // 대기방의 방장 연쇄 위임(입장 순서 연쇄)과 동일한 규칙 — course 도메인 생기면 Spring이 담당.
-  const presentNames = [...participants]
-    .sort((a, b) => (a.joinedAt?.getTime() ?? 0) - (b.joinedAt?.getTime() ?? 0))
-    .map((p) => p.name ?? '')
-    .filter(Boolean);
-  const hostPresent = state.hostNickname !== null && presentNames.includes(state.hostNickname);
-  const actingHost = hostPresent ? state.hostNickname : presentNames[0] ?? myNickname;
-  const isHost = actingHost === myNickname;
-  const mySuccess = state.successes.find((s) => s.nickname === myNickname);
-  const myRank = state.successes.findIndex((s) => s.nickname === myNickname);
+  const isMySuccess = (success: FetchGameState['successes'][number]) =>
+    success.participantId
+      ? success.participantId === localParticipant.identity
+      : success.nickname === myNickname;
+  const mySuccess = state.successes.find(isMySuccess);
+  const myRank = state.successes.findIndex(isMySuccess);
+  const hasMySuccess = mySuccess !== undefined;
   const playing = state.phase === 'playing';
 
   // 라운드 시계 — startedAt(방장 브로드캐스트 기준) 하나로 카운트다운/제한시간을 전부 계산
@@ -103,49 +104,53 @@ export function FetchObjectGame({
 
   // 성공 순간 셀레브레이션 — 잠깐 크게 띄웠다가 사라진다
   const [celebrating, setCelebrating] = useState(false);
+  const [otherSuccess, setOtherSuccess] = useState<
+    FetchGameState['successes'][number] | null
+  >(null);
+  const observedRoundRef = useRef(state.round);
+  const observedSuccessCountRef = useRef(state.successes.length);
+
   useEffect(() => {
-    if (!mySuccess) {
+    if (!hasMySuccess) {
       setCelebrating(false);
       return;
     }
     setCelebrating(true);
     const timer = setTimeout(() => setCelebrating(false), 1800);
     return () => clearTimeout(timer);
-  }, [!!mySuccess]);
+  }, [hasMySuccess]);
+
+  useEffect(() => {
+    if (observedRoundRef.current !== state.round) {
+      observedRoundRef.current = state.round;
+      observedSuccessCountRef.current = state.successes.length;
+      setOtherSuccess(null);
+      return;
+    }
+
+    if (state.successes.length <= observedSuccessCountRef.current) {
+      observedSuccessCountRef.current = state.successes.length;
+      return;
+    }
+
+    observedSuccessCountRef.current = state.successes.length;
+    const latestSuccess = state.successes[state.successes.length - 1];
+    if (latestSuccess.participantId === localParticipant.identity) return;
+
+    setOtherSuccess(latestSuccess);
+    const timer = setTimeout(() => setOtherSuccess(null), 2200);
+    return () => clearTimeout(timer);
+  }, [state.round, state.successes, localParticipant.identity]);
 
   // [방장] 라운드 마감 판단. 같은 라운드 중복 마감은 라운드 번호로 가드.
   // 두 경우를 분리한 이유: 전원 성공 마감은 셀레브레이션(1.8초)이 결과 팝업에 덮이지 않게
   // 2초 여유를 주고, 타임아웃 마감은 즉시. (remainingMs는 200ms마다 바뀌어서 타이머를 거는
   // effect에 넣으면 계속 리셋되므로 effect를 둘로 쪼갠다)
-  const endedRoundRef = useRef(0);
-
   // 케이스 1: 타임아웃 — "시간 초과!" 연출이 보일 시간(1.5초)을 주고 마감.
   // (remainingMs는 0에 도달하면 그대로 0에 머물러서 타이머가 리셋되지 않는다)
-  // 서버 주도 모드(onEndRound 없음)에서는 백엔드 타임아웃이 round:end를 밀어주므로 하지 않는다.
-  useEffect(() => {
-    if (!onEndRound || !isHost || !playing || endedRoundRef.current === state.round) return;
-    if (remainingMs > 0) return;
-    const timer = setTimeout(() => {
-      if (endedRoundRef.current === state.round) return;
-      endedRoundRef.current = state.round;
-      onEndRound();
-    }, 1500);
-    return () => clearTimeout(timer);
-  }, [isHost, playing, state.round, remainingMs, onEndRound]);
-
   // 케이스 2: 전원 성공 — 마지막 성공자의 셀레브레이션이 끝날 시간을 주고 마감
-  useEffect(() => {
-    if (!onEndRound || !isHost || !playing || endedRoundRef.current === state.round) return;
-    if (state.successes.length < participants.length) return;
-    const timer = setTimeout(() => {
-      if (endedRoundRef.current === state.round) return;
-      endedRoundRef.current = state.round;
-      onEndRound();
-    }, 2000);
-    return () => clearTimeout(timer);
-  }, [isHost, playing, state.round, state.successes.length, participants.length, onEndRound]);
-
   const nearMatch = streak > 0;
+  const recognitionAccepted = streak >= requiredStreak && !mySuccess;
   // 타일 순서는 모든 참가자 화면에서 같아야 한다("왼쪽 위에 있는 사람!" 같은 말이 통하려면).
   // 내 타일을 항상 앞에 두는 방식은 서로 다른 배치를 보게 되므로, 닌자와 같은 규칙으로
   // identity 문자열 정렬(전 클라이언트 결정적)을 쓴다. 카메라 트랙이 없는 참가자도
@@ -163,8 +168,12 @@ export function FetchObjectGame({
       ? '제시어를 확인하세요!'
       : !isCameraEnabled
         ? '카메라를 켜야 참여할 수 있어요!'
-        : error
+        : submissionError
+          ? `⚠ ${submissionError}`
+          : error
           ? `⚠ ${error}`
+          : recognitionAccepted
+            ? '인식 성공! 서버 확인 중...'
           : nearMatch
             ? `거의 다 왔어요! (${streak}/${requiredStreak})`
             : lastResult?.detectedValue
@@ -215,7 +224,11 @@ export function FetchObjectGame({
             const seatNickname = seat.name ?? '';
             if (!seat.isLocal) {
               const trackRef = trackByIdentity.get(seat.identity);
-              const successIndex = state.successes.findIndex((s) => s.nickname === seatNickname);
+              const successIndex = state.successes.findIndex((success) =>
+                success.participantId
+                  ? success.participantId === seat.identity
+                  : success.nickname === seatNickname,
+              );
               const done = successIndex >= 0;
               return (
                 <div
@@ -335,49 +348,14 @@ export function FetchObjectGame({
                 ))}
                 {state.successes.length === 0 && <li>성공자 없음 😢</li>}
               </ol>
-              {!onNextRound ? (
-                <p className="fetch-game__wait">잠시 후 다음 라운드가 시작돼요...</p>
-              ) : isHost ? (
-                <button
-                  type="button"
-                  className="pap-pixel-btn pap-pixel-btn--primary"
-                  onClick={() => void onNextRound()}
-                >
-                  다음 라운드
-                </button>
-              ) : (
-                <p className="fetch-game__wait">방장이 다음 라운드를 시작하길 기다리는 중...</p>
-              )}
+              <p className="fetch-game__wait">잠시 후 다음 라운드가 시작돼요...</p>
             </div>
           </div>
         </div>
       )}
 
-      {/* 최종 결과 팝업 — 코스로 진행할 땐 공통 중간 결과 화면(SetResultScreen)이 대신하므로
-          띄우지 않는다. /dev/fetch mock(onExit가 있는 경우)만 자체 결과를 보여준다. */}
-      {state.phase === 'ended' && onExit && (
-        <div className="pap-modal-backdrop">
-          <div className="pap-modal">
-            <div className="fetch-game__result pap-pixel-card">
-              <h2 className="pap-pixel-title">🏆 최종 결과</h2>
-              <ol>
-                {ranking.map(([nickname, score], i) => (
-                  <li key={nickname} className={i === 0 ? 'fetch-game__winner' : ''}>
-                    {i + 1}위 — {nickname} ({score}점)
-                  </li>
-                ))}
-              </ol>
-              {isHost ? (
-                <button type="button" className="pap-pixel-btn pap-pixel-btn--primary" onClick={onExit}>
-                  대기방으로
-                </button>
-              ) : (
-                <p className="fetch-game__wait">곧 대기방으로 돌아갑니다...</p>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      {/* 세트가 끝난 뒤 순위 발표는 코스 공통 중간 결과 화면(SetResultScreen)이 한다 —
+          여기서 팝업을 또 띄우면 두 겹으로 겹친다(닌자도 같은 이유로 자체 종료 화면을 없앴다). */}
 
       {/* 3·2·1 카운트다운 → GO! (제시어 읽는 시간 + 인식 팁) */}
       {inCountdown && (
@@ -400,6 +378,24 @@ export function FetchObjectGame({
       {playing && !inCountdown && remainingMs <= 0 && !mySuccess && (
         <div className="fetch-game__timeout">
           <span className="pap-pixel-title">시간 초과! ⏰</span>
+        </div>
+      )}
+
+      {/* AI는 통과했지만 Spring의 순위 확정 이벤트를 기다리는 아주 짧은 구간. 예전에는 이때
+          "거의 다 왔어요 (2/2)"만 남아 사용자가 정답 처리 여부를 알 수 없었다. */}
+      {recognitionAccepted && (
+        <div className="fetch-game__recognized">
+          <span className="pap-pixel-title">물건 인식 성공!</span>
+          <span>순위를 확인하고 있어요...</span>
+        </div>
+      )}
+
+      {otherSuccess && (
+        <div className="fetch-game__other-success" role="status" aria-live="polite">
+          <span className="pap-pixel-title">{otherSuccess.nickname}님 성공!</span>
+          <span>
+            {otherSuccess.rank}위 · +{otherSuccess.score}점
+          </span>
         </div>
       )}
 

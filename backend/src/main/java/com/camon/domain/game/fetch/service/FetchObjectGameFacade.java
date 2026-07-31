@@ -1,5 +1,6 @@
 package com.camon.domain.game.fetch.service;
 
+import com.camon.domain.game.fetch.dto.FetchObjectStateResponse;
 import com.camon.domain.game.fetch.dto.FetchSubmissionRequest;
 import com.camon.domain.game.fetch.dto.FetchSubmissionResponse;
 import com.camon.domain.game.fetch.repository.FetchObjectRedisRepository;
@@ -37,6 +38,20 @@ public class FetchObjectGameFacade {
         FetchSubmissionRequest request
     ) {
         Room room = resolveRoom(participantId);
+        requireCurrentGame(room, gameId);
+        return fetchObjectGameService.submit(room, participantId, request);
+    }
+
+    public FetchObjectStateResponse getState(
+        Long gameId,
+        UUID participantId
+    ) {
+        Room room = resolveRoom(participantId);
+        requireCurrentGame(room, gameId);
+        return fetchObjectGameService.getState(room);
+    }
+
+    private void requireCurrentGame(Room room, Long gameId) {
         Long currentGameId = fetchRedis.getGameId(
             room.roomCode(),
             room.currentSessionSeq()
@@ -49,7 +64,6 @@ public class FetchObjectGameFacade {
         if (!currentGameId.equals(gameId)) {
             throw new BusinessException(ErrorCode.GAME_NOT_CURRENT);
         }
-        return fetchObjectGameService.submit(room, participantId, request);
     }
 
     private Room resolveRoom(UUID participantId) {

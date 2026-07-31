@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router';
-import { LiveKitRoom, useConnectionState, useParticipants } from '@livekit/components-react';
-import { ConnectionState, VideoPresets, type RoomOptions } from 'livekit-client';
+import { useNavigate } from 'react-router';
+import { LiveKitRoom, useParticipants } from '@livekit/components-react';
+import { VideoPresets, type RoomOptions } from 'livekit-client';
 import { CharadesMicrophoneController } from '../../charades/components/CharadesMicrophoneController';
 import { CharadesGamePanel } from '../../charades/components/CharadesGamePanel';
 import { NinjaBattleScreen } from '../../ninja/components/NinjaBattleScreen';
@@ -16,9 +16,7 @@ import { useRoomChat } from '../../chat/hooks/useRoomChat';
 import { PixelConfirmModal } from '../../system/components/PixelConfirmModal';
 import { useRoomHeartbeat } from '../../room/hooks/useRoomHeartbeat';
 import { clearRoom } from '../../room/lib/roomStorage';
-import { FetchObjectGame } from '../../fetch/components/FetchObjectGame';
 import { FetchCoursePanel } from '../../fetch/components/FetchCoursePanel';
-import { useFetchGame } from '../../fetch/hooks/useFetchGame';
 import { roomApi, RoomApiError, type ParticipantResponse } from '../../room/api/roomApi';
 import '@livekit/components-styles';
 import './VideoCallRoom.css';
@@ -218,25 +216,8 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
     }
   }, [activeSession]);
 
-  // [개발 전용] /dev/fetch 진입로의 데이터채널 mock 상태 — 백엔드 없이 화면만 확인하는 용도.
   // 코스가 연 실제 물건 가져오기는 아래 FetchCoursePanel(서버 주도, useFetchRound)이 담당한다.
-  const fetchGame = useFetchGame();
-  const fetchActive = fetchGame.state.phase !== 'idle';
-
-  // [개발 전용] /dev/fetch로 들어오면(?autostart=fetch) LiveKit 연결 완료 시 게임을 자동 시작 —
   // 랜딩부터 클릭해 들어오는 번거로움 없이 게임 화면을 바로 확인하기 위함.
-  const [searchParams] = useSearchParams();
-  const connectionState = useConnectionState();
-  const autoStartedRef = useRef(false);
-  useEffect(() => {
-    if (autoStartedRef.current) return;
-    if (searchParams.get('autostart') !== 'fetch') return;
-    if (connectionState !== ConnectionState.Connected) return;
-    autoStartedRef.current = true;
-    // ?target=휴대폰 이 붙어 있으면 제시어 고정 (물건 없는 개발 환경용), 없으면 랜덤
-    void fetchGame.startGame(undefined, searchParams.get('target') ?? undefined);
-  }, [searchParams, connectionState, fetchGame.startGame]);
-
   // game:started를 놓친 클라이언트 복구: 방이 PLAYING이면 코스의 current_session_seq가 가리키는
   // 칸이 곧 지금 진행 중인 게임이다. (예전엔 진행 중 gameId를 알 방법이 없어 닌자로 고정했다.)
   useEffect(() => {
@@ -327,12 +308,17 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
     // 중간 결과의 "다음 세트 시작하기"도 방장 전용이라 같은 시점에 스냅샷을 새로 읽는다.
     if (!finished && !finishedSet) return;
     let cancelled = false;
-    roomApi
-      .getRoom(roomId, accessToken)
-      .then((room) => {
+    // 코스도 같이 다시 읽는다 — 마운트 시점(방 생성 직후)엔 코스가 비어 있고 대기방에서 짜므로,
+    // 한 번만 읽으면 "다음 세트"를 못 찾아 마지막 세트인 것처럼 보인다.
+    Promise.all([
+      roomApi.getRoom(roomId, accessToken),
+      courseApi.getCourse(roomId, accessToken),
+    ])
+      .then(([room, course]) => {
         if (cancelled) return;
         setParticipants(room.participants);
         setHostParticipantId(room.hostParticipantId);
+        setCourseItems(course.items);
       })
       .catch(() => {
         // 실패해도 마운트 시점 스냅샷으로 그린다.
@@ -371,7 +357,7 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
         participantId={participantId}
         onPresenterChange={setIsCharadesPresenter}
       />
-      {!inGame && !finished && !fetchActive && (
+      {!inGame && !finished && (
         <LobbyScreen
           roomId={roomId}
           accessToken={accessToken}
@@ -385,18 +371,6 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
         />
       )}
 
-      {/* [개발 전용] /dev/fetch 진입로로 시작한 물건 가져오기 mock 화면 — 코스 흐름과 무관 */}
-      {fetchActive && (
-        <FetchObjectGame
-          state={fetchGame.state}
-          myNickname={fetchGame.myNickname}
-          onReportSuccess={fetchGame.reportSuccess}
-          onEndRound={fetchGame.endRound}
-          onNextRound={() => void fetchGame.nextRound()}
-          onExit={fetchGame.exitGame}
-          onLeave={onLeave}
-        />
-      )}
       {/* 몸으로 말해요는 자체 전체화면(.charades-screen)에 캠 타일·정답 채팅까지 다 그리므로
           VideoConference 그리드/손동작 패널을 띄우지 않는다. 표현자 마이크 음소거는 위
           CharadesMicrophoneController가 계속 담당한다. */}
@@ -409,8 +383,7 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
           onLeave={onLeave}
         />
       )}
-      {/* 코스가 연 물건 가져오기 — 서버 주도 진행(round:start/end를 STOMP로 수신).
-          위의 fetchActive(/dev/fetch mock)와는 진입로가 다르다. */}
+      {/* 코스가 연 물건 가져오기 — 서버 주도 진행(round:start/end를 STOMP로 수신). */}
       {inGame && session && activeGameName === 'FETCH_OBJECT' && (
         <FetchCoursePanel
           roomId={roomId}

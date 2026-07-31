@@ -415,6 +415,84 @@
   animation: fetch-celebrate-pop 300ms ease-out;
 }
 
+.fetch-game__other-success {
+  position: fixed;
+  top: 15%;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 86;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 20px;
+  color: var(--pap-white);
+  background: rgb(43 24 51 / 0.92);
+  border: 3px solid var(--pap-success-lime);
+  border-radius: 8px;
+  box-shadow: 4px 4px 0 rgb(0 0 0 / 0.45);
+  pointer-events: none;
+  animation: fetch-other-success 2200ms ease both;
+}
+
+.fetch-game__other-success .pap-pixel-title {
+  color: var(--pap-success-lime);
+  font-size: 24px;
+}
+
+.fetch-game__other-success > span:last-child {
+  font-family: var(--pap-font-pixel);
+  font-size: 16px;
+}
+
+@keyframes fetch-other-success {
+  0% {
+    transform: translate(-50%, -16px) scale(0.9);
+    opacity: 0;
+  }
+  12%,
+  82% {
+    transform: translate(-50%, 0) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -8px) scale(0.96);
+    opacity: 0;
+  }
+}
+
+/* AI 연속 판정은 통과했지만 Spring round:success를 아직 받지 못한 짧은 구간 */
+.fetch-game__recognized {
+  position: fixed;
+  top: 38%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  z-index: 84;
+  pointer-events: none;
+  color: var(--pap-white);
+  animation: fetch-celebrate-pop 300ms ease-out;
+}
+
+.fetch-game__recognized .pap-pixel-title {
+  font-size: 48px;
+  color: var(--pap-success-lime);
+  text-shadow:
+    3px 3px 0 var(--pap-ink),
+    -3px 3px 0 var(--pap-ink),
+    3px -3px 0 var(--pap-ink),
+    -3px -3px 0 var(--pap-ink);
+}
+
+.fetch-game__recognized > span:last-child {
+  font-weight: 800;
+  background: rgb(43 24 51 / 0.8);
+  border-radius: 6px;
+  padding: 6px 12px;
+}
+
 .fetch-game__celebrate .pap-pixel-title {
   font-size: 64px;
   color: var(--pap-success-lime);
@@ -469,6 +547,7 @@
 @media (prefers-reduced-motion: reduce) {
   .fetch-game__countdown .pap-pixel-title,
   .fetch-game__celebrate,
+  .fetch-game__recognized,
   .fetch-game__timeout,
   .fetch-game__badge,
   .fetch-game__tile--done {

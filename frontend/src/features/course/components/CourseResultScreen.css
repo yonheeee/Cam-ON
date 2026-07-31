@@ -50,9 +50,9 @@
   inset: 0;
   background: radial-gradient(
     ellipse 62% 62% at 45% 55%,
-    rgb(10 14 40 / 0.15) 0%,
-    rgb(10 14 40 / 0.5) 55%,
-    rgb(10 14 40 / 0.78) 100%
+    rgb(10 14 40 / 0.06) 0%,
+    rgb(10 14 40 / 0.3) 55%,
+    rgb(10 14 40 / 0.55) 100%
   );
   pointer-events: none;
 }
@@ -100,6 +100,7 @@
 }
 
 .course-result__podium-tile {
+  position: relative; /* 닉네임 스티커의 기준 박스 */
   overflow: hidden;
   border-radius: calc(var(--u) * 0.6);
   /* 캠이 아직 없을 때 보이는 자리색 = 그 사람의 등수 색 (중간 결과 화면과 같은 색 순서) */
@@ -114,11 +115,39 @@
   background: transparent;
 }
 
+/* LiveKit 기본 이름표(좌하단 반투명 바)는 끈다 — 닉네임은 위 스티커 하나로만 보여준다
+   (닌자·몸으로말해요·대기방도 같은 처리) */
+.course-result__winner .lk-participant-metadata,
+.course-result__podium-tile .lk-participant-metadata {
+  display: none;
+}
+
 .course-result__winner video,
 .course-result__podium-tile video {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+/* 닉네임 — 닌자 화면(.ninja-tile__badge--name)과 같은 픽셀 스티커. 배경은 그 사람의 등수 색,
+   살짝 기울여 스티커처럼 보이게 한다. 내 것만 강조하는 흰 링은 여기선 쓰지 않는다. */
+.course-result__cam-name {
+  position: absolute;
+  left: calc(var(--u) * 0.6);
+  top: calc(var(--u) * 0.6);
+  z-index: 2;
+  max-width: calc(100% - var(--u) * 1.2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: calc(var(--u) * 0.2) calc(var(--u) * 0.45);
+  font-family: var(--pap-font-pixel);
+  font-size: calc(var(--u) * 0.9);
+  color: var(--pap-ink);
+  background: var(--c, var(--pap-white));
+  border: 2px solid var(--pap-ink);
+  border-radius: calc(var(--u) * 0.3);
+  transform: rotate(-3deg);
 }
 
 /* 캠이 없을 때 닉네임 첫 글자 */

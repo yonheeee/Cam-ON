@@ -6,9 +6,11 @@ import java.util.UUID;
 // 첫 정답이 나오면 남은 시간을 그레이스(수 초)로 줄여, 먼저 맞춘 사람이 타이머를 통째로
 // 기다리지 않게 한다. null이면 마감 변경 없음(클라이언트 타이머 유지).
 public record FetchRoundSuccessPayload(
+    int round,
     UUID participantId,
     int rank,
     long score,
+    long submittedAt,
     Long roundDeadlineAt
 ) {
 }

@@ -7,9 +7,13 @@ import com.camon.domain.game.common.repository.SaveRoundResult;
 import com.camon.domain.game.common.service.GameScoreService;
 import com.camon.domain.game.common.ws.GameEventPublisher;
 import com.camon.domain.game.fetch.domain.FetchObjectMissionCatalog;
+import com.camon.domain.game.fetch.dto.FetchObjectStateResponse;
+import com.camon.domain.game.fetch.dto.FetchObjectSuccessEntry;
 import com.camon.domain.game.fetch.dto.FetchSubmissionRequest;
 import com.camon.domain.game.fetch.dto.FetchSubmissionResponse;
+import com.camon.domain.game.fetch.repository.FetchObjectRoundState;
 import com.camon.domain.game.fetch.repository.FetchObjectRedisRepository;
+import com.camon.domain.game.fetch.repository.FetchObjectSubmissionRecord;
 import com.camon.domain.game.fetch.repository.FetchSubmissionClaimResult;
 import com.camon.domain.game.fetch.repository.FetchSubmissionStatus;
 import com.camon.domain.game.fetch.ws.FetchObjectEventPublisher;
@@ -137,12 +141,13 @@ public class FetchObjectGameService {
         FetchSubmissionRequest request
     ) {
         int sessionSeq = room.currentSessionSeq();
+        Instant receivedAt = clock.instant();
         FetchSubmissionClaimResult result = fetchRedis.claimSubmission(
             room.roomCode(),
             sessionSeq,
             request.round(),
             participantId,
-            clock.instant()
+            receivedAt
         );
         validateSubmission(result.status());
 
@@ -152,7 +157,7 @@ public class FetchObjectGameService {
         Long shortenedDeadlineAt = null;
         if (result.rank() == 1 && !result.allParticipantsSubmitted()) {
             Instant currentDeadline = Instant.ofEpochMilli(result.deadlineAt());
-            Instant graceDeadline = clock.instant().plus(FIRST_SUBMISSION_GRACE);
+            Instant graceDeadline = receivedAt.plus(FIRST_SUBMISSION_GRACE);
             if (graceDeadline.isBefore(currentDeadline)) {
                 fetchRedis.shortenRoundDeadline(
                     room.roomCode(),
@@ -170,9 +175,11 @@ public class FetchObjectGameService {
             room.roomId(),
             "round:success",
             new FetchRoundSuccessPayload(
+                request.round(),
                 participantId,
                 result.rank(),
                 score,
+                receivedAt.toEpochMilli(),
                 shortenedDeadlineAt
             )
         );
@@ -199,6 +206,89 @@ public class FetchObjectGameService {
             participantId,
             result.rank(),
             score
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public FetchObjectStateResponse getState(Room room) {
+        int sessionSeq = room.currentSessionSeq();
+        FetchObjectRoundState state = fetchRedis.findCurrentRoundState(
+            room.roomCode(),
+            sessionSeq
+        ).orElseThrow(() ->
+            new BusinessException(ErrorCode.FETCH_OBJECT_SESSION_NOT_FOUND)
+        );
+        ensureRoundTimeoutScheduled(room, sessionSeq, state);
+
+        List<FetchObjectSuccessEntry> successes = state.submissions().stream()
+            .map(submission -> new FetchObjectSuccessEntry(
+                submission.participantId(),
+                submission.rank(),
+                fetchRedis.scoreForRank(submission.rank()),
+                submission.submittedAt().toEpochMilli()
+            ))
+            .toList();
+
+        Map<UUID, Long> savedTotals = gameScoreService.getSessionTotals(
+            room.roomId(),
+            sessionSeq
+        );
+        LinkedHashMap<UUID, Long> currentTotals = new LinkedHashMap<>();
+        fetchRedis.getParticipants(room.roomCode(), sessionSeq).stream()
+            .sorted()
+            .forEach(participantId ->
+                currentTotals.put(
+                    participantId,
+                    savedTotals.getOrDefault(participantId, 0L)
+                )
+            );
+        // 진행 중 라운드의 점수는 round:end에서만 공통 점수 저장소에 기록된다. 상태 조회는
+        // 그 전에도 현재 화면을 복구해야 하므로 Redis 제출 순위의 임시 점수를 합쳐 내려준다.
+        if ("PLAYING".equals(state.status())) {
+            for (FetchObjectSubmissionRecord submission : state.submissions()) {
+                currentTotals.computeIfPresent(
+                    submission.participantId(),
+                    (ignored, total) ->
+                        total + fetchRedis.scoreForRank(submission.rank())
+                );
+            }
+        }
+
+        return new FetchObjectStateResponse(
+            state.round(),
+            state.totalRounds(),
+            state.target(),
+            state.startedAt().toEpochMilli(),
+            state.deadlineAt().toEpochMilli(),
+            state.status(),
+            successes,
+            buildScoreEntries(currentTotals)
+        );
+    }
+
+    private void ensureRoundTimeoutScheduled(
+        Room room,
+        int sessionSeq,
+        FetchObjectRoundState state
+    ) {
+        if (!"PLAYING".equals(state.status())) {
+            return;
+        }
+        // 라운드 마감 예약은 JVM 메모리에 있으므로 서버 재시작 시 사라진다. 프론트가 연결할 때
+        // 호출하는 /state에서 Redis deadline을 읽어 예약을 복원한다. 이미 예약이 있으면
+        // computeIfAbsent가 유지하고, 과거 deadline이면 TaskScheduler가 즉시 실행한다.
+        pendingTimeouts.computeIfAbsent(
+            timerKey(room.roomCode(), sessionSeq),
+            ignored -> taskScheduler.schedule(
+                () -> handleRoundTimeout(
+                    room,
+                    sessionSeq,
+                    state.round(),
+                    state.totalRounds(),
+                    state.deadlineAt()
+                ),
+                state.deadlineAt()
+            )
         );
     }
 

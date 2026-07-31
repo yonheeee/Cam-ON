@@ -19,48 +19,63 @@ export interface FetchSubmissionResponse {
   score: number;
 }
 
-/** 진행 상태 스냅샷. 닌자(GET .../ninja/state)·몸으로말해요(GET .../charades/state)와 같은 역할 —
- *  구독 직후/재접속 직후에 한 번 읽어 이벤트 공백을 메운다.
- *  [백엔드 미구현] 이 엔드포인트가 생기기 전까지 조회는 조용히 실패하고 이벤트만으로 진행한다. */
-export interface FetchStateResponse {
-  /** 아직 첫 라운드가 안 열렸으면 0 */
+export interface FetchSuccessEntry {
+  participantId: string;
+  rank: number;
+  score: number;
+  submittedAt: number;
+}
+
+export interface FetchScoreEntry {
+  participantId: string;
+  score: number;
+  rank: number;
+}
+
+export interface FetchObjectStateResponse {
   round: number;
   totalRounds: number;
-  /** 현재 라운드 제시어. 라운드가 없으면 null */
-  target: string | null;
-  /** epoch ms — 이 시각 기준 3초 카운트다운 + 20초 플레이 (round:start와 같은 값) */
-  startedAt: number | null;
-  status: 'READY' | 'PLAYING' | 'ROUND_ENDED' | 'FINISHED';
-  /** 이번 라운드에 이미 성공한 사람들(도착 순) */
-  successes: { participantId: string; rank: number }[];
-  /** 세션 누적 점수 */
-  totals: { participantId: string; score: number }[];
+  target: string;
+  startedAt: number;
+  deadlineAt: number;
+  status: 'PLAYING' | 'ENDED';
+  successes: FetchSuccessEntry[];
+  totals: FetchScoreEntry[];
 }
 
 export const fetchGameApi = {
-  /** 현재 라운드/제시어 스냅샷. 마운트 직후와 STOMP (재)연결 직후에 부른다. */
-  async getState(gameId: number, accessToken: string): Promise<FetchStateResponse> {
+  /** STOMP 이벤트를 놓치거나 재연결한 경우 Redis의 현재 라운드 원본으로 화면을 복구한다. */
+  async getState(gameId: number, accessToken: string): Promise<FetchObjectStateResponse> {
     const response = await fetch(`${BASE_URL}/api/games/${gameId}/fetch-object/state`, {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
     const body = await response.json().catch(() => null);
     if (!response.ok) {
       if (isSessionDead(response.status)) handleExpiredSession();
-      throw new FetchGameApiError(body?.message ?? `조회 실패 (HTTP ${response.status})`, body?.code);
+      throw new FetchGameApiError(
+        body?.message ?? `게임 상태 조회 실패 (HTTP ${response.status})`,
+        body?.code,
+      );
     }
-    return body.data as FetchStateResponse;
+    return body.data as FetchObjectStateResponse;
   },
 
   /** 인식 성공 보고. 서버가 도착 순서로 순번/점수를 원자적으로 확정한다.
    *  라운드가 이미 닫혔거나(타임아웃 직후 경합) 중복 제출이면 409 — 호출부에서 조용히 무시. */
-  async submit(gameId: number, round: number, accessToken: string): Promise<FetchSubmissionResponse> {
+  async submit(
+    gameId: number,
+    round: number,
+    accessToken: string,
+    confidence?: number,
+    targetScore?: number,
+  ): Promise<FetchSubmissionResponse> {
     const response = await fetch(`${BASE_URL}/api/games/${gameId}/fetch-object/submissions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${accessToken}`,
       },
-      body: JSON.stringify({ round }),
+      body: JSON.stringify({ round, confidence, targetScore }),
     });
     const body = await response.json().catch(() => null);
     if (!response.ok) {

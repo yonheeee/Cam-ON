@@ -21,9 +21,10 @@ interface CourseResultScreenProps {
   onLeave: () => void;
 }
 
-// 2~4위 단상 타일 색(1위는 가운데 큰 화면이라 색을 안 쓴다). 중간 결과(SetResultScreen)의
-// 등수 색 배열과 같은 순서 — 두 화면에서 같은 사람이 같은 색으로 보인다.
-const PODIUM_COLORS = [
+// 등수별 색. 중간 결과(SetResultScreen)의 RANK_COLORS와 같은 순서 — 두 화면에서 같은 사람이
+// 같은 색으로 보인다. 1위(가운데 큰 화면)는 코랄, 2~4위 단상은 노랑/민트/보라.
+const RANK_COLORS = [
+  'var(--pap-festival-coral)',
   'var(--pap-play-yellow)',
   'var(--pap-arcade-teal)',
   'var(--pap-lavender)',
@@ -64,12 +65,18 @@ export function CourseResultScreen({
   const nicknameOf = (id: string) => nicknameById.get(id) ?? '알 수 없음';
 
   // 캠이 아직 안 붙었거나 카메라를 끈 참가자는 닉네임 첫 글자를 아바타로 보여준다.
+  // 닉네임은 닌자 화면과 같은 방식(캠 위 픽셀 스티커, 배경 = 그 사람의 등수 색)으로 얹는다.
   const renderCam = (id: string) => {
     const trackRef = trackByIdentity.get(id);
-    return trackRef ? (
-      <ParticipantTile trackRef={trackRef} disableSpeakingIndicator />
-    ) : (
-      <span className="course-result__avatar pap-pixel-title">{nicknameOf(id).slice(0, 1)}</span>
+    return (
+      <>
+        {trackRef ? (
+          <ParticipantTile trackRef={trackRef} disableSpeakingIndicator />
+        ) : (
+          <span className="course-result__avatar pap-pixel-title">{nicknameOf(id).slice(0, 1)}</span>
+        )}
+        <span className="course-result__cam-name">{nicknameOf(id)}</span>
+      </>
     );
   };
 
@@ -82,7 +89,10 @@ export function CourseResultScreen({
         <p className="course-result__plate">오늘의 우승자!</p>
 
         {/* 가운데 큰 화면 — 우승자 캠 */}
-        <div className="course-result__winner">
+        <div
+          className="course-result__winner"
+          style={{ '--c': RANK_COLORS[0] } as React.CSSProperties}
+        >
           {winner ? renderCam(winner.participantId) : null}
         </div>
 
@@ -92,7 +102,7 @@ export function CourseResultScreen({
             <div
               key={entry.participantId}
               className="course-result__podium-tile"
-              style={{ '--c': PODIUM_COLORS[index] } as React.CSSProperties}
+              style={{ '--c': RANK_COLORS[index + 1] } as React.CSSProperties}
             >
               {renderCam(entry.participantId)}
             </div>

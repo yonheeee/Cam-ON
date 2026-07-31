@@ -164,6 +164,19 @@ class FetchObjectRedisRepositoryIntegrationTest {
             .isEqualTo(FetchSubmissionStatus.ALREADY_SUBMITTED);
         assertThat(repository.getSubmissionOrder(roomCode, sessionSeq, 1))
             .containsExactly(first, second);
+        FetchObjectRoundState state = repository.findCurrentRoundState(
+            roomCode,
+            sessionSeq
+        ).orElseThrow();
+        assertThat(state.round()).isEqualTo(1);
+        assertThat(state.target()).isEqualTo("마우스");
+        assertThat(state.startedAt()).isEqualTo(startedAt);
+        assertThat(state.submissions())
+            .extracting(FetchObjectSubmissionRecord::participantId)
+            .containsExactly(first, second);
+        assertThat(state.submissions())
+            .extracting(FetchObjectSubmissionRecord::submittedAt)
+            .containsOnly(receivedAt);
         assertThat(repository.getGameId(roomCode, sessionSeq)).isEqualTo(2L);
         assertThat(repository.getTotalRounds(roomCode, sessionSeq))
             .isEqualTo(2);
