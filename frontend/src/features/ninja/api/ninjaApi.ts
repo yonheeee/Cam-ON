@@ -27,11 +27,6 @@ export interface EffectDto {
   speedMax: number;
 }
 
-export interface NextSkillPreview {
-  skillId: number;
-  skillName: string;
-  gestures: GestureStep[];
-}
 
 export interface RoundSkillResponse {
   round: number;
@@ -42,8 +37,6 @@ export interface RoundSkillResponse {
   skillDesc: string | null;
   gestures: GestureStep[];
   effect: EffectDto;
-  // 바로 다음 교환에 나올 스킬 예고 — 없으면 null.
-  nextSkill: NextSkillPreview | null;
 }
 
 export interface AttackResponse {

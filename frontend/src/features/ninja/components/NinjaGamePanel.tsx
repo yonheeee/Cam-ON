@@ -251,16 +251,6 @@ export function NinjaGamePanel({ roomId, gameId, accessToken, onActiveChange }: 
             </div>
           )}
 
-          {!isIntermission && requiredSkill?.nextSkill && (
-            <div className="ninja-panel__next-skill">
-              <p className="ninja-panel__next-skill-label">다음 라운드 예고</p>
-              <p className="ninja-panel__next-skill-name">{requiredSkill.nextSkill.skillName}</p>
-              <p className="ninja-panel__next-skill-gestures">
-                {requiredSkill.nextSkill.gestures.map((step) => step.gestureLabelKr).join(' → ')}
-              </p>
-            </div>
-          )}
-
           {!isIntermission && currentAttackerToken && !isMyAttack && (
             <p className="ninja-panel__attacker-info">
               {displayName(currentAttackerToken)} 님이 공격권을 먼저 획득했습니다
