@@ -17,7 +17,6 @@ import { useNinjaRound } from '../hooks/useNinjaRound';
 import { gestureImage } from '../lib/gestureImages';
 import { skillEffect, skillShake } from '../lib/skillEffects';
 import { PixelConfirmModal } from '../../system/components/PixelConfirmModal';
-import { NinjaEffectOverlay } from './NinjaEffectOverlay';
 import './NinjaBattleScreen.css';
 
 const ATTACK_TARGET_TIMER_SECONDS = 30;
@@ -228,9 +227,10 @@ export function NinjaBattleScreen({
           {/* 탈락하면 인식 루프와 브로드캐스트를 끊는다 — 판정에 쓰이지 않는 추론을 매 프레임
               돌릴 이유가 없다(제출도 훅에서 이미 막혀 있다). 다음 판이 열리면 다시 켜진다. */}
           {isMe && <GesturePanel variant="overlay" active={!isEliminated} />}
-          {/* 이펙트는 이 타일 안에서만 재생된다 — 컴포넌트가 호스트 div 크기에 맞춰 그린다 */}
-          {effectTargetId === id &&
-            (pixelEffect ?? (requiredSkill && <NinjaEffectOverlay effect={requiredSkill.effect} />))}
+          {/* 이펙트는 이 타일 안에서만 재생된다 — 컴포넌트가 호스트 div 크기에 맞춰 그린다.
+              시드의 모든 스킬이 skillEffects의 BY_SKILL_ID에 있어서 폴백 파티클은 없앴다 —
+              매핑이 빠진 스킬이 생기면 이펙트 없이 진동만 남으니 스킬 추가 시 표를 함께 고친다. */}
+          {effectTargetId === id && pixelEffect}
           {/* 닉네임은 전원 같은 방식(픽셀 스티커)으로 캠 위에 얹는다 — 내 것만 노란색 */}
           <span className={`ninja-tile__badge ninja-tile__badge--name${isMe ? ' ninja-tile__badge--me' : ''}`}>
             {nicknameOf(id)}
