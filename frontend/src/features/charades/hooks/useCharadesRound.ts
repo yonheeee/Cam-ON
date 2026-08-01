@@ -6,17 +6,18 @@ import {
   CharadesApiError,
   type CharadesStateResponse,
 } from '../api/charadesApi';
+import { remainingResultHoldMs } from '../lib/resultBannerHold';
 import { useCharadesAnswerSound } from './useCharadesAnswerSound';
 
 // 표현자가 정답을 확인하고 있는 시간(라운드 시작 직후 잠깐 "다음 표현자는 OOO입니다" 예고를 보여주는 시간).
 const PREVIEW_DURATION_MS = 2200;
 
-// "정답!" 배너를 최소 이만큼 보여준다. 백엔드가 정답 처리 직후 딜레이 없이 바로 다음 턴을 열어버려서
-// (CharadesGameService.submitGuess → advanceAfterTerminalTurn 동기 호출) turn-started가 거의 즉시
-// 도착한다 — 그걸 이 시간만큼 붙잡아뒀다가 반영해서 배너가 잘리지 않게 한다.
-const CORRECT_BANNER_HOLD_MS = 5000;
-
 export type CharadesPhase = 'preview' | 'playing' | 'correct' | 'timeout' | 'invalidated';
+
+// "이번 턴이 이렇게 끝났다"를 보여주는 구간 — 다음 턴/게임 종료를 이 동안은 붙잡아둔다.
+function isResultPhase(phase: CharadesPhase | null): boolean {
+  return phase === 'correct' || phase === 'timeout' || phase === 'invalidated';
+}
 
 export interface CharadesChatEntry {
   id: string;
@@ -88,6 +89,9 @@ export function useCharadesRound(
   const [lastInvalidReason, setLastInvalidReason] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [gameEnded, setGameEnded] = useState(false);
+  // charades:game-ended가 도착했지만 정답 배너 때문에 아직 반영을 미루고 있는 상태 —
+  // 이 동안 배너는 "다음 제시어" 대신 "결과가 공개됩니다"로 안내한다.
+  const [gameEndPending, setGameEndPending] = useState(false);
   const playAnswerSound = useCharadesAnswerSound();
 
   // turn-started 처리를 지연시키기 위한 참조 — phase는 클로저 밖(STOMP 콜백)에서 최신값을 읽어야 해서 ref로 미러링한다.
@@ -97,12 +101,28 @@ export function useCharadesRound(
   roundRef.current = round;
   const turnRef = useRef<number | null>(null);
   turnRef.current = turn;
-  const correctShownAtRef = useRef<number | null>(null);
-  const pendingTurnTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const resultShownAtRef = useRef<number | null>(null);
+  const pendingAfterResultRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const stateEventVersionRef = useRef(0);
   const syncRequestIdRef = useRef(0);
 
   const isPresenter = participantId !== null && presenterId === participantId;
+
+  // 턴 결과 배너가 최소 노출 시간을 못 채웠으면 그만큼 기다렸다가 실행한다. 다음 턴 전환(turn-started)과
+  // 게임 종료(game-ended) 둘 다 배너를 덮어버리므로 같은 유예를 태운다 — 특히 마지막 턴에서는
+  // 결과 이벤트 직후 game-ended가 따라와서, 유예가 없으면 배너가 아예 안 보인다.
+  //
+  // 정답뿐 아니라 시간 초과·무효도 "이번 턴 결과"를 알려주는 화면이라 똑같이 붙잡는다.
+  const runAfterResultBanner = useCallback((apply: () => void) => {
+    if (pendingAfterResultRef.current) clearTimeout(pendingAfterResultRef.current);
+    const phase = phaseRef.current;
+    const remaining = isResultPhase(phase) ? remainingResultHoldMs(resultShownAtRef.current) : 0;
+    if (remaining > 0) {
+      pendingAfterResultRef.current = setTimeout(apply, remaining);
+      return;
+    }
+    apply();
+  }, []);
 
   const handleTurnStarted = useCallback((data: TurnStartedData) => {
     roundRef.current = data.round;
@@ -117,11 +137,12 @@ export function useCharadesRound(
     setLastAnswererId(null);
     setLastInvalidReason(null);
     setGameEnded(false);
+    setGameEndPending(false);
     setError(null);
     setPhase('preview');
   }, []);
 
-  const applyStateSnapshot = useCallback((state: CharadesStateResponse) => {
+  const applyStateSnapshotNow = useCallback((state: CharadesStateResponse) => {
     const snapshotRound = state.round || null;
     const snapshotTurn = state.turn || null;
     const turnChanged =
@@ -159,6 +180,7 @@ export function useCharadesRound(
         break;
       case 'FINISHED':
         setGameEnded(true);
+        setGameEndPending(false);
         setPhase(null);
         break;
       case 'READY':
@@ -167,6 +189,20 @@ export function useCharadesRound(
         break;
     }
   }, []);
+
+  // 스냅샷도 게임 종료를 담아 올 수 있다(정답 직후 재연결 등) — 이벤트와 같은 유예를 태워서
+  // 그 경로로 배너가 잘리지 않게 한다. 배너가 안 떠 있으면 유예 없이 바로 반영된다.
+  const applyStateSnapshot = useCallback(
+    (state: CharadesStateResponse) => {
+      if (state.status === 'FINISHED') {
+        setGameEndPending(true);
+        runAfterResultBanner(() => applyStateSnapshotNow(state));
+        return;
+      }
+      applyStateSnapshotNow(state);
+    },
+    [applyStateSnapshotNow, runAfterResultBanner],
+  );
 
   const syncState = useCallback(async () => {
     if (!participantId) return;
@@ -222,15 +258,7 @@ export function useCharadesRound(
             }
             case 'charades:turn-started': {
               const data = event.data as TurnStartedData;
-              if (pendingTurnTimerRef.current) clearTimeout(pendingTurnTimerRef.current);
-              if (phaseRef.current === 'correct' && correctShownAtRef.current !== null) {
-                const remaining = CORRECT_BANNER_HOLD_MS - (Date.now() - correctShownAtRef.current);
-                if (remaining > 0) {
-                  pendingTurnTimerRef.current = setTimeout(() => handleTurnStarted(data), remaining);
-                  break;
-                }
-              }
-              handleTurnStarted(data);
+              runAfterResultBanner(() => handleTurnStarted(data));
               break;
             }
             case 'chat:message-received': {
@@ -249,25 +277,33 @@ export function useCharadesRound(
             case 'charades:answer-revealed': {
               const data = event.data as AnswerRevealedData;
               setLastAnswererId(data.answererId);
-              correctShownAtRef.current = Date.now();
+              resultShownAtRef.current = Date.now();
               playAnswerSound(true);
               setPhase('correct');
               break;
             }
             case 'charades:round-timeout': {
-              // payload에서 쓸 값이 없다 — 시간 초과 사실만 화면에 반영하면 된다.
+              // payload에 제시어가 없다(round/turn뿐) — 정답 공개는 표현자 본인의 myWord로만 가능하다.
+              resultShownAtRef.current = Date.now();
               setPhase('timeout');
               break;
             }
             case 'charades:round-invalidated': {
               const data = event.data as RoundInvalidatedData;
               setLastInvalidReason(data.reason);
+              resultShownAtRef.current = Date.now();
               setPhase('invalidated');
               break;
             }
             case 'charades:game-ended': {
-              setGameEnded(true);
-              setPhase(null);
+              // 마지막 턴의 정답이면 answer-revealed 바로 뒤에 이 이벤트가 붙어 온다 — 배너를
+              // 다 보여준 뒤에 종료를 반영해야 제시어가 공개된다(중간 턴의 turn-started와 같은 유예).
+              setGameEndPending(true);
+              runAfterResultBanner(() => {
+                setGameEnded(true);
+                setGameEndPending(false);
+                setPhase(null);
+              });
               break;
             }
             default:
@@ -281,9 +317,9 @@ export function useCharadesRound(
     client.activate();
     return () => {
       void client.deactivate();
-      if (pendingTurnTimerRef.current) clearTimeout(pendingTurnTimerRef.current);
+      if (pendingAfterResultRef.current) clearTimeout(pendingAfterResultRef.current);
     };
-  }, [roomId, accessToken, handleTurnStarted, syncState, playAnswerSound]);
+  }, [roomId, accessToken, handleTurnStarted, syncState, playAnswerSound, runAfterResultBanner]);
 
   useEffect(() => {
     if (!participantId) return;
@@ -345,6 +381,7 @@ export function useCharadesRound(
     lastInvalidReason,
     timeLeftSeconds,
     gameEnded,
+    gameEndPending,
     error,
     submitGuess,
   };
