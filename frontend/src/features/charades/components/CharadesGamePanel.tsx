@@ -6,6 +6,7 @@ import { BackgroundMusic } from '../../sound/components/BackgroundMusic';
 import { useCountdownSound } from '../../sound/hooks/useCountdownSound';
 import { PixelConfirmModal } from '../../system/components/PixelConfirmModal';
 import { useCharadesRound } from '../hooks/useCharadesRound';
+import { RESULT_BANNER_HOLD_MS } from '../lib/resultBannerHold';
 import './CharadesGamePanel.css';
 
 interface CharadesGamePanelProps {
@@ -52,6 +53,7 @@ export function CharadesGamePanel({
     expiresAt,
     timeLeftSeconds,
     gameEnded,
+    gameEndPending,
     error,
     submitGuess,
   } = useCharadesRound(roomId, gameId, accessToken, myParticipantId);
@@ -125,6 +127,31 @@ export function CharadesGamePanel({
   const otherIds = rosterIds.filter((id) => id !== presenterId);
 
   const [guessText, setGuessText] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // 턴이 열리면 입력창에 바로 포커스를 준다 — 매 턴 입력칸을 클릭할 필요가 없게.
+  useEffect(() => {
+    if (phase !== 'playing' || isPresenter || confirmLeave) return;
+    inputRef.current?.focus();
+  }, [phase, isPresenter, confirmLeave]);
+
+  // 포커스를 잃은 뒤에도(제출 버튼 클릭 등) 글자를 치기 시작하면 입력창이 받아가게 한다.
+  // keydown 시점에 focus()를 옮기면 그 글자부터 입력창에 들어간다.
+  useEffect(() => {
+    if (phase !== 'playing' || isPresenter || confirmLeave) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      // 단축키(⌘/Ctrl/Alt)와 기능키는 건드리지 않는다 — 문자 한 글자짜리 키만 가로챈다.
+      if (e.ctrlKey || e.metaKey || e.altKey || e.key.length !== 1) return;
+      const input = inputRef.current;
+      const active = document.activeElement;
+      if (!input || active === input) return;
+      // 다른 입력 요소(채팅 등)에 이미 타이핑 중이면 뺏지 않는다.
+      if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) return;
+      input.focus();
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [phase, isPresenter, confirmLeave]);
 
   // 사이드 캠 우측 여백 = 메인 캠 좌측 여백. 메인 캠은 16:9라 창 크기에 따라 좌우로 남는 여백이
   // 달라져서 CSS만으로는 그 값을 알 수 없다 — 실측해 --edge-shift(여백 - 화면 padding)로 넘긴다.
@@ -147,12 +174,16 @@ export function CharadesGamePanel({
   const submitDisabled = phase !== 'playing';
   // 제시어(표현자)와 입력창(맞추는 사람)은 같은 자리의 직사각형 카드 하나로 합친다. 턴이 진행되는
   // 동안(playing~결과)엔 항상 이 카드가 뜨고, 그 밑에 제한시간 바가 붙는다.
-  const showPrompt =
-    phase === 'playing' || phase === 'correct' || phase === 'timeout' || phase === 'invalidated';
+  //
+  // preview 구간에도 카드를 "숨기되 자리는 남긴다"(--ghost). 언마운트하면 좌측 컬럼 높이가 줄고
+  // → 16:9 메인 캠이 커지고 → --edge-shift 재측정으로 사이드바까지 좌우로 튄다.
+  const promptGhost = phase === 'preview';
 
   return (
-    <div className="charades-screen">
-      <div className="charades-topbar">
+    // .camon-stage = 뷰포트를 덮는 전체 화면 껍데기(스크롤 없음). 픽셀 폰트 상속과
+    // letter-spacing: 0 리셋(Mona12는 자간 0이 원본)이 여기서 온다 — 대기방과 같은 방식.
+    <div className="charades-screen camon-stage">
+      <header className="charades-topbar">
         {/* 확정안: 방 안에서 로고 클릭 = 바로 이동이 아니라 나가기 확인 팝업 */}
         <img
           className="charades-topbar__logo"
@@ -171,7 +202,7 @@ export function CharadesGamePanel({
             TURN {turn} / {totalTurnsInRound}
           </span>
         </div>
-      </div>
+      </header>
 
       {phase === 'preview' && (
         <div className="charades-preview-overlay">
@@ -181,20 +212,31 @@ export function CharadesGamePanel({
         </div>
       )}
 
-      {phase === 'correct' && (
-        <CharadesCorrectBanner
-          word={isPresenter ? myWord : (latestGuessByParticipant[lastAnswererId ?? ''] ?? null)}
-          answererName={displayName(lastAnswererId)}
+      {/* 정답/시간 초과 모두 같은 팝업으로 이번 턴 제시어를 공개한다.
+          제시어 출처: 표현자는 자기가 받아둔 myWord, 그 외 참가자는
+           - 정답: 최초 정답자가 친 채팅 텍스트(= 정답)
+           - 시간 초과: 알 수 있는 경로가 없다(GET /word는 표현자·PLAYING 상태로 제한) → null */}
+      {(phase === 'correct' || phase === 'timeout') && (
+        <CharadesResultBanner
+          tone={phase}
+          word={
+            isPresenter
+              ? myWord
+              : phase === 'correct'
+                ? (latestGuessByParticipant[lastAnswererId ?? ''] ?? null)
+                : null
+          }
+          answererName={phase === 'correct' ? displayName(lastAnswererId) : null}
+          isFinalTurn={gameEndPending}
         />
       )}
 
       {/* 좌측: 제시어/입력 카드 + 제한시간 바 + 메인 캠 / 우측: 참가자 사이드바 (황금비 컬럼) */}
       <div className="charades-main">
         <div className="charades-stage-col">
-          {showPrompt && (
-            <div
-              className={`charades-prompt-card${phase === 'correct' ? ' charades-prompt-card--correct' : ''}${phase === 'timeout' || phase === 'invalidated' ? ' charades-prompt-card--alert' : ''}`}
-            >
+          <div
+            className={`charades-prompt-card${phase === 'correct' ? ' charades-prompt-card--correct' : ''}${phase === 'timeout' || phase === 'invalidated' ? ' charades-prompt-card--alert' : ''}${promptGhost ? ' charades-prompt-card--ghost' : ''}`}
+          >
               {isPresenter ? (
                 <div className="charades-prompt-card__word-wrap">
                   <span className="charades-prompt-card__label">제시어</span>
@@ -212,19 +254,22 @@ export function CharadesGamePanel({
                     if (!guessText.trim()) return;
                     void submitGuess(guessText);
                     setGuessText('');
+                    // 버튼 클릭으로 제출하면 포커스가 버튼으로 가버린다 — 바로 다음 답을 칠 수 있게 되돌린다.
+                    inputRef.current?.focus();
                   }}
                 >
-                  {/* 입력창 폭 = 제한시간 바 폭 (버튼 열은 따로 빼서 입력창 높이에만 맞춘다) */}
+                  {/* 왼쪽 열(입력창 + 제한시간 바), 오른쪽 열(제출 버튼) */}
                   <div className="charades-prompt-card__input-col">
                     <input
+                      ref={inputRef}
                       className="pap-input charades-prompt-card__input"
                       value={guessText}
                       onChange={(e) => setGuessText(e.target.value)}
-                      placeholder={submitDisabled ? '이번 턴은 마감됐어요' : '정답을 입력하세요 (20자 이내)'}
+                      placeholder={submitDisabled ? '이번 턴은 마감됐어요' : '정답을 입력하세요'}
                       disabled={submitDisabled}
                       maxLength={GUESS_MAX_LENGTH}
                     />
-                    {/* 시계는 버튼 열로 빼서 바가 입력창 폭을 그대로 쓰게 한다 */}
+                    {/* 바는 숫자를 빼고 입력창 폭을 그대로 쓴다(둘이 정확히 같은 길이) */}
                     {phase === 'playing' && (
                       <CharadesTimeBar
                         expiresAt={expiresAt}
@@ -241,6 +286,8 @@ export function CharadesGamePanel({
                     >
                       제출
                     </button>
+                    {/* 남은 시간 숫자는 제출 버튼 아래. 폭이 고정돼 있어(아래 CSS) 초가 바뀌어도
+                        버튼 열 크기가 흔들리지 않는다. */}
                     {phase === 'playing' && (
                       <span className="charades-timebar__clock">{formatMmSs(timeLeftSeconds)}</span>
                     )}
@@ -248,21 +295,22 @@ export function CharadesGamePanel({
                 </form>
               )}
 
-              {phase === 'timeout' && (
-                <p className="charades-prompt-card__note charades-prompt-card__note--warn">
-                  {isPresenter ? `⏰ 시간 초과! 정답은 '${myWord ?? '???'}' 였어요` : '⏰ 시간 초과! 아무도 못 맞혔어요'}
-                </p>
-              )}
+              {/* 시간 초과 안내는 위 CharadesResultBanner 팝업이 담당한다(카드 안에 또 쓰면 중복). */}
               {phase === 'invalidated' && (
                 <p className="charades-prompt-card__note charades-prompt-card__note--warn">
                   🔌 표현자 연결이 끊겨 라운드가 무효 처리됐어요 {lastInvalidReason ? `(${lastInvalidReason})` : ''}
                 </p>
-              )}
-            </div>
-          )}
+            )}
+          </div>
 
           <div className="charades-stage">
-            <div className="charades-stage__box" ref={stageBoxRef}>
+            {/* 출제자도 다른 참가자와 똑같이 자기 좌석색을 쓴다("출제자 = 골드" 규칙 없음).
+                --seat을 프레임에 걸어두면 안쪽 이름표·이니셜 아바타가 같이 상속받는다. */}
+            <div
+              className="charades-stage__box"
+              ref={stageBoxRef}
+              style={presenterId ? ({ '--seat': seatColor(presenterId) } as CSSProperties) : undefined}
+            >
               <div className="charades-stage__screen">
                 {presenterTrack ? (
                   <ParticipantTile trackRef={presenterTrack} disableSpeakingIndicator />
@@ -270,7 +318,10 @@ export function CharadesGamePanel({
                   <span className="charades-stage__avatar">{displayName(presenterId).slice(0, 1)}</span>
                 )}
               </div>
-              <span className="charades-cam-name charades-cam-name--stage">{displayName(presenterId)}</span>
+              {/* --seat는 위 .charades-stage__box에서 상속받는다 */}
+              <span className="charades-cam-name charades-cam-name--stage">
+                {displayName(presenterId)}
+              </span>
               <span className="charades-stage__role">👑 출제자</span>
             </div>
           </div>
@@ -349,20 +400,31 @@ function formatMmSs(totalSeconds: number | null): string {
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 }
 
-const CORRECT_BANNER_SECONDS = 5;
+const RESULT_BANNER_SECONDS = RESULT_BANNER_HOLD_MS / 1000;
 
-// 정답 공개 배너 — 화면 중앙, 5초 카운트다운 뒤 다음 턴 이벤트(charades:turn-started)로 자연히
-// 사라진다. 강제로 닫지 않고 phase가 'correct'인 동안만 마운트되므로 언마운트 = 자동 종료.
-// (useCharadesRound가 turn-started를 CORRECT_BANNER_HOLD_MS만큼 붙잡아두는 것과 짝을 이룬다 — 둘 다 5초로 맞춰둘 것.)
+// 턴 결과 배너 — 화면 중앙, 카운트다운 뒤 다음 턴 이벤트(charades:turn-started)나 게임 종료
+// (charades:game-ended)로 자연히 사라진다. 강제로 닫지 않고 결과 phase인 동안만 마운트되므로
+// 언마운트 = 자동 종료. (useCharadesRound가 그 둘을 RESULT_BANNER_HOLD_MS만큼 붙잡아두는 것과
+// 짝을 이룬다 — 그래서 표시되는 초도 같은 상수에서 가져온다.)
+//
+// 정답과 시간 초과가 같은 카드를 쓴다 — 둘 다 "이번 턴 제시어가 뭐였는지" 공개하는 자리다.
+//
 // ponytail: 점수(+N점)는 아직 백엔드가 턴 단위로 안 내려줘서(라운드 끝나야 charades:round-scored 발행) 표시 안 함 — 나중에 붙이려면 answer-revealed에 점수 필드 추가 필요.
-function CharadesCorrectBanner({
+function CharadesResultBanner({
+  tone,
   word,
   answererName,
+  isFinalTurn,
 }: {
+  tone: 'correct' | 'timeout';
+  /** 이번 턴 제시어. 시간 초과일 때 표현자가 아니면 알 수 없어 null이 온다(아래 주석 참고). */
   word: string | null | undefined;
-  answererName: string;
+  /** 정답일 때만 쓰는 최초 정답자 이름 */
+  answererName: string | null;
+  /** 마지막 턴이라 이 배너 다음이 다음 제시어가 아니라 세트 결과 화면인 경우 */
+  isFinalTurn: boolean;
 }) {
-  const [countdown, setCountdown] = useState(CORRECT_BANNER_SECONDS);
+  const [countdown, setCountdown] = useState(RESULT_BANNER_SECONDS);
   useCountdownSound(
     countdown <= 3,
     'charades:next-prompt',
@@ -375,14 +437,29 @@ function CharadesCorrectBanner({
     return () => clearTimeout(timer);
   }, [countdown]);
 
+  const isTimeout = tone === 'timeout';
+
   return (
     <div className="charades-correct-overlay">
-      <div className="charades-correct-card">
-        <p className="charades-correct-card__title">정답!</p>
-        <p className="charades-correct-card__word">{word ?? '???'}</p>
+      <div className={`charades-correct-card${isTimeout ? ' charades-correct-card--timeout' : ''}`}>
+        <p className="charades-correct-card__title">{isTimeout ? '시간 초과!' : '정답!'}</p>
+        {/* 시간 초과인데 제시어를 모르는 사람(표현자가 아닌 참가자)에겐 가짜 '???' 대신
+            정답을 못 받았다는 사실을 그대로 보여준다 — 백엔드가 round-timeout payload에
+            제시어를 실어주면 이 분기는 사라진다. */}
+        {word ? (
+          <p className="charades-correct-card__word">{word}</p>
+        ) : (
+          <p className="charades-correct-card__word charades-correct-card__word--unknown">
+            {isTimeout ? '아무도 못 맞혔어요' : '???'}
+          </p>
+        )}
         <div className="charades-correct-card__divider" />
-        <p className="charades-correct-card__names">{answererName}님 정답!</p>
-        <p className="charades-correct-card__footer">{countdown}초 후 다음 제시어가 공개됩니다</p>
+        <p className="charades-correct-card__names">
+          {isTimeout ? '이번 턴은 점수 없이 넘어갑니다' : `${answererName ?? '???'}님 정답!`}
+        </p>
+        <p className="charades-correct-card__footer">
+          {countdown}초 후 {isFinalTurn ? '결과가' : '다음 제시어가'} 공개됩니다
+        </p>
       </div>
     </div>
   );
@@ -399,6 +476,7 @@ function CharadesTimeBar({
 }: {
   expiresAt: string | null;
   timeLeftSeconds: number | null;
+  /** false면 바만 그린다 — 맞추는 사람 화면은 숫자를 제출 버튼 아래에 따로 두기 때문. */
   showClock?: boolean;
 }) {
   // 서버는 종료 시각만 주므로 턴 전체 길이는 이 바가 처음 뜬 시점의 남은 시간으로 잡는다.
