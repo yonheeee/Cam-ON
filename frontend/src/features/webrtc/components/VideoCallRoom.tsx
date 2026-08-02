@@ -485,6 +485,7 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
           gameId={session.gameId}
           accessToken={accessToken}
           nicknameById={nicknameById}
+          joinOrder={participants.map((participant) => participant.participantId)}
           onLeave={onLeave}
         />
       )}
