@@ -10,6 +10,8 @@ interface FetchCoursePanelProps {
   accessToken: string;
   /** participantId → 닉네임 (방 스냅샷 기준 — round:success 등 이벤트가 id만 주므로 필요) */
   nicknameById: Map<string, string>;
+  /** 입장 순서대로의 participantId. 대기방에서 배정된 색·자리를 그대로 이어받는다. */
+  joinOrder: string[];
   onLeave: () => void;
 }
 
@@ -19,6 +21,7 @@ export function FetchCoursePanel({
   gameId,
   accessToken,
   nicknameById,
+  joinOrder,
   onLeave,
 }: FetchCoursePanelProps) {
   const { localParticipant } = useLocalParticipant();
@@ -64,6 +67,7 @@ export function FetchCoursePanel({
     <FetchObjectGame
       state={state}
       myNickname={myNickname}
+      joinOrder={joinOrder}
       onReportSuccess={(_, result) =>
         submit(result.confidence, result.targetScore ?? undefined)
       }

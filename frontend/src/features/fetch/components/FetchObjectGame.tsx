@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
 import {
   ParticipantTile,
   useLocalParticipant,
@@ -7,7 +7,7 @@ import {
 } from '@livekit/components-react';
 import { Track } from 'livekit-client';
 import { PixelConfirmModal } from '../../system/components/PixelConfirmModal';
-import { CamOffIcon, CamOnIcon, MicOffIcon, MicOnIcon } from '../../room/components/lobbyIcons';
+import { CamOffIcon } from '../../room/components/lobbyIcons';
 import { BackgroundMusic } from '../../sound/components/BackgroundMusic';
 import { useCountdownSound } from '../../sound/hooks/useCountdownSound';
 import { useFetchDetection } from '../hooks/useFetchDetection';
@@ -22,6 +22,8 @@ import './FetchObjectGame.css';
 interface FetchObjectGameProps {
   state: FetchGameState;
   myNickname: string;
+  /** 입장 순서대로의 participantId — 자리 배치와 색을 대기방과 똑같이 맞추는 기준 */
+  joinOrder: string[];
   onReportSuccess: (
     elapsedMs: number,
     result: DetectionResult,
@@ -32,24 +34,23 @@ interface FetchObjectGameProps {
   onLeave: () => void;
 }
 
-// 물건 가져오기 게임 화면 — 로비와 같은 골격(비디오 그리드 + 우측 사이드바).
-// 상단 바: 로고 · 제시어 · 라운드/타이머 / 순위 로그는 타일 배지 + 성공 칩 + 결과 팝업으로.
+// 물건 가져오기 게임 화면 — 거실 배경 위에 [좌 캠열][가운데 엄마·순위표][우 캠열].
+// 화면의 주인공은 제시어다: 엄마가 소리치는 말풍선이 정중앙에 있고, 카운트다운(3·2·1)도
+// 같은 말풍선 안에서 일어난다(오버레이를 따로 띄우지 않는다 — 시선이 한 곳에 머문다).
+// 순위표는 인원수만큼 빈칸으로 시작해 도착 순서대로 채워진다. 참가자 색(대기방에서 배정된
+// 입장 순서 색)이 캠 테두리 · 닉네임 탭 · 순위 명패 세 곳에 반복돼, 색만 보고 등수를 읽을 수 있다.
 export function FetchObjectGame({
   state,
   myNickname,
+  joinOrder,
   onReportSuccess,
   submissionError,
   onLeave,
 }: FetchObjectGameProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const participants = useParticipants();
-  // 게임 중에도 캠/마이크는 끌 수 있어야 한다 (로비와 동일한 토글)
-  const { localParticipant, isCameraEnabled, isMicrophoneEnabled } = useLocalParticipant();
+  const { localParticipant, isCameraEnabled } = useLocalParticipant();
   const [confirmLeave, setConfirmLeave] = useState(false);
-  // 게임을 시작한 방장이 중간에 나가면 라운드 진행(마감/다음)이 멈춰 무한 대기가 된다 —
-  // 방장이 방에 없으면 입장 순서(P1→P2→...)상 가장 앞선 참가자가 진행권을 이어받는다.
-  // joinedAt은 LiveKit 서버 기준 시각이라 모든 클라이언트가 같은 순서를 본다.
-  // 대기방의 방장 연쇄 위임(입장 순서 연쇄)과 동일한 규칙 — course 도메인 생기면 Spring이 담당.
   const isMySuccess = (success: FetchGameState['successes'][number]) =>
     success.participantId
       ? success.participantId === localParticipant.identity
@@ -72,12 +73,14 @@ export function FetchObjectGame({
   const remainingMs = Math.max(0, roundEndsAt - nowMs);
   // 3·2·1 카운트다운 — 전원이 제시어를 읽고 동시에 출발 (인식도 이 동안 잠금)
   const inCountdown = playing && countdownLeft > 0;
-  const goFlash = playing && countdownLeft <= 0 && nowMs - (state.startedAt + COUNTDOWN_MS) < 700;
+  const countdownNumber = Math.ceil(countdownLeft / 1000);
   useCountdownSound(
     inCountdown,
     `fetch:${state.round}:${state.startedAt}`,
     (COUNTDOWN_MS - countdownLeft) / 1000,
   );
+  const secondsLeft = Math.ceil(Math.min(remainingMs, ROUND_DURATION_MS) / 1000);
+  const hurry = playing && !inCountdown && secondsLeft <= 5;
 
   // 내 카메라 트랙을 게임 화면의 비디오에 붙인다 (GesturePanel과 같은 패턴)
   const tracks = useTracks([{ source: Track.Source.Camera, withPlaceholder: false }], {
@@ -142,48 +145,122 @@ export function FetchObjectGame({
     return () => clearTimeout(timer);
   }, [state.round, state.successes, localParticipant.identity]);
 
-  // [방장] 라운드 마감 판단. 같은 라운드 중복 마감은 라운드 번호로 가드.
-  // 두 경우를 분리한 이유: 전원 성공 마감은 셀레브레이션(1.8초)이 결과 팝업에 덮이지 않게
-  // 2초 여유를 주고, 타임아웃 마감은 즉시. (remainingMs는 200ms마다 바뀌어서 타이머를 거는
-  // effect에 넣으면 계속 리셋되므로 effect를 둘로 쪼갠다)
-  // 케이스 1: 타임아웃 — "시간 초과!" 연출이 보일 시간(1.5초)을 주고 마감.
-  // (remainingMs는 0에 도달하면 그대로 0에 머물러서 타이머가 리셋되지 않는다)
-  // 케이스 2: 전원 성공 — 마지막 성공자의 셀레브레이션이 끝날 시간을 주고 마감
   const nearMatch = streak > 0;
   const recognitionAccepted = streak >= requiredStreak && !mySuccess;
-  // 타일 순서는 모든 참가자 화면에서 같아야 한다("왼쪽 위에 있는 사람!" 같은 말이 통하려면).
-  // 내 타일을 항상 앞에 두는 방식은 서로 다른 배치를 보게 되므로, 닌자와 같은 규칙으로
-  // identity 문자열 정렬(전 클라이언트 결정적)을 쓴다. 카메라 트랙이 없는 참가자도
-  // 자리를 유지해야 하므로 participants 기준으로 좌석을 만들고 트랙은 따로 붙인다.
-  const seats = [...participants].sort((a, b) => a.identity.localeCompare(b.identity));
+
+  // 자리와 색은 대기방의 입장 순서를 그대로 쓴다 — 대기방에서 노란색이던 사람이 게임에서
+  // 보라색이 되면 "노란 사람이 1등!" 같은 말이 안 통한다. 스냅샷에 아직 없는 참가자(방금
+  // 들어온 사람)는 뒤로 밀고, 스냅샷 자체가 비어 있으면 identity 정렬로 떨어뜨린다.
+  // (identity 정렬도 전 클라이언트에서 같은 결과라 자리만은 항상 일치한다)
+  const seats = useMemo(() => {
+    const orderOf = (identity: string) => {
+      const index = joinOrder.indexOf(identity);
+      return index < 0 ? Number.MAX_SAFE_INTEGER : index;
+    };
+    return [...participants].sort(
+      (a, b) =>
+        orderOf(a.identity) - orderOf(b.identity) || a.identity.localeCompare(b.identity),
+    );
+  }, [participants, joinOrder]);
+  // 짝수 자리는 왼쪽, 홀수 자리는 오른쪽 — 2인은 1:1, 3인은 2:1, 4인은 2:2가 된다.
+  const leftSeats = seats.filter((_, i) => i % 2 === 0);
+  const rightSeats = seats.filter((_, i) => i % 2 === 1);
+  const colorOf = (identity: string) => {
+    const index = joinOrder.indexOf(identity);
+    return ((index < 0 ? seats.findIndex((s) => s.identity === identity) : index) % 4) + 1;
+  };
+
   const trackByIdentity = new Map(tracks.map((t) => [t.participant.identity, t]));
-  const totalTiles = seats.length;
-  const ranking = Object.entries(state.totals).sort((a, b) => b[1] - a[1]);
-  // 누적 선두 — 타일 이름 바에 왕관으로 표시
-  const leader = ranking.length > 0 && ranking[0][1] > 0 ? ranking[0][0] : null;
-  const scoreOf = (nickname: string) => state.totals[nickname] ?? 0;
+  const successIndexOf = (seat: (typeof seats)[number]) =>
+    state.successes.findIndex((success) =>
+      success.participantId
+        ? success.participantId === seat.identity
+        : success.nickname === (seat.name ?? ''),
+    );
+
   const hint = mySuccess
     ? `${myRank + 1}등 · ${(mySuccess.elapsedMs / 1000).toFixed(1)}s 🎉`
-    : inCountdown
-      ? '제시어를 확인하세요!'
-      : !isCameraEnabled
-        ? '카메라를 켜야 참여할 수 있어요!'
-        : submissionError
-          ? `⚠ ${submissionError}`
-          : error
+    : !isCameraEnabled
+      ? '카메라를 켜야 참여할 수 있어요'
+      : submissionError
+        ? `⚠ ${submissionError}`
+        : error
           ? `⚠ ${error}`
           : recognitionAccepted
-            ? '인식 성공! 서버 확인 중...'
-          : nearMatch
-            ? `거의 다 왔어요! (${streak}/${requiredStreak})`
-            : lastResult?.detectedValue
-              ? `인식됨: ${lastResult.detectedValue}`
-              : '물건을 박스 안에!';
+            ? '인식 성공! 서버 확인 중'
+            : nearMatch
+              ? `거의 다 왔어요 ${streak}/${requiredStreak}`
+              : lastResult?.detectedValue
+                ? `인식됨: ${lastResult.detectedValue}`
+                : '물건을 네모 안에!';
+
+  const renderSeat = (seat: (typeof seats)[number]) => {
+    const seatNickname = seat.name ?? '';
+    const rank = successIndexOf(seat);
+    const done = rank >= 0;
+    const isMe = seat.isLocal;
+    const trackRef = trackByIdentity.get(seat.identity);
+    return (
+      <div
+        key={seat.identity}
+        className={`fetch-seat fetch-seat--p${colorOf(seat.identity)}${
+          done ? ' fetch-seat--done' : ''
+        }`}
+      >
+        <div className="fetch-seat__cam">
+          {isMe ? (
+            <video ref={videoRef} autoPlay playsInline muted className="fetch-seat__video" />
+          ) : trackRef ? (
+            <ParticipantTile trackRef={trackRef} disableSpeakingIndicator />
+          ) : null}
+
+          {/* 인식 영역은 네 귀퉁이 브래킷으로 — 점선 상자보다 화면을 덜 가린다 */}
+          {isMe && isCameraEnabled && !mySuccess && (
+            <span
+              className={`fetch-seat__aim${
+                recognitionAccepted
+                  ? ' fetch-seat__aim--hit'
+                  : nearMatch
+                    ? ' fetch-seat__aim--near'
+                    : ''
+              }`}
+            />
+          )}
+          {(isMe ? !isCameraEnabled : !trackRef) && (
+            <span className="fetch-seat__off">
+              <span className="fetch-seat__off-icon">{CamOffIcon}</span>
+              카메라가 꺼져 있어요
+            </span>
+          )}
+          {done && <span className="fetch-seat__stamp">{rank + 1}위</span>}
+
+          {/* 닉네임 배지 — 캠 좌측 상단 픽셀 스티커. 닌자와 같은 방식 */}
+          <span className={`fetch-seat__tag${isMe ? ' fetch-seat__tag--me' : ''}`}>
+            {isMe ? myNickname : seatNickname}
+          </span>
+        </div>
+
+        {isMe && (
+          <span className="fetch-seat__hint" role="status" aria-live="polite">
+            {hint}
+            {/* 진단용: 왕복 지연 + 제시어 점수 — dev 빌드에서만 (임계값 튜닝용) */}
+            {import.meta.env.DEV && latencyMs !== null && ` · ${latencyMs}ms`}
+            {import.meta.env.DEV &&
+              lastResult?.targetScore != null &&
+              ` · ${lastResult.targetScore.toFixed(2)}`}
+          </span>
+        )}
+      </div>
+    );
+  };
 
   return (
-    <div className="fetch-game">
-      {/* 상단 바 — 로비 헤더와 같은 결: 로고 · 제시어 · 라운드/타이머 */}
-      <header className="fetch-game__header">
+    <div
+      className={`fetch-game${inCountdown ? ' fetch-game--count' : ''}${
+        hurry ? ' fetch-game--hurry' : ''
+      }`}
+    >
+      <header className="fetch-game__head">
         <img
           className="fetch-game__logo pap-pixel-img"
           src="/assets/cam-on-logo.png"
@@ -194,144 +271,81 @@ export function FetchObjectGame({
           source="/assets/sounds/find-thing.mp3"
           className="fetch-game__music-toggle"
         />
-        <div className="fetch-game__mission">
-          <span className="fetch-game__mission-label">가져올 물건</span>
-          <span className="fetch-game__target pap-pixel-title">{state.target}</span>
-        </div>
-        <div className="fetch-game__status">
-          <span className="fetch-game__round pap-pixel-title">
-            R{state.round}/{state.totalRounds}
-          </span>
-          <span
-            className={`fetch-game__timer pap-pixel-title${
-              !inCountdown && remainingMs <= 5000 ? ' fetch-game__timer--danger' : ''
-            }`}
-          >
-            {/* 카운트다운 동안은 제한시간을 풀로 고정 표시 (23s처럼 보이지 않게) */}
-            {Math.ceil(Math.min(remainingMs, ROUND_DURATION_MS) / 1000)}s
-          </span>
-        </div>
       </header>
 
-      <div className="fetch-game__body">
-        {/* 비디오 그리드 — 로비와 동일 골격 */}
-        <section
-          className={`fetch-game__grid${totalTiles === 3 ? ' fetch-game__grid--3' : ''}${
-            totalTiles >= 4 ? ' fetch-game__grid--4' : ''
-          }`}
-        >
-          {seats.map((seat) => {
-            const seatNickname = seat.name ?? '';
-            if (!seat.isLocal) {
-              const trackRef = trackByIdentity.get(seat.identity);
-              const successIndex = state.successes.findIndex((success) =>
-                success.participantId
-                  ? success.participantId === seat.identity
-                  : success.nickname === seatNickname,
-              );
-              const done = successIndex >= 0;
-              return (
-                <div
-                  key={seat.identity}
-                  className={`fetch-game__tile${done ? ' fetch-game__tile--done' : ''}`}
-                >
-                  {trackRef ? (
-                    <ParticipantTile trackRef={trackRef} disableSpeakingIndicator />
-                  ) : (
-                    <div className="fetch-game__cam-off">
-                      <span className="fetch-game__cam-off-icon">{CamOffIcon}</span>
-                      <span>카메라가 꺼져 있어요</span>
-                    </div>
-                  )}
-                  {done && (
-                    <span className="fetch-game__badge pap-pixel-title">{successIndex + 1}위!</span>
-                  )}
-                  <div className="fetch-game__tile-bar">
-                    <span className="fetch-game__tile-name">
-                      {leader === seatNickname && '👑 '}
-                      {seatNickname}
-                    </span>
-                    <span className="fetch-game__score pap-pixel-title">
-                      {scoreOf(seatNickname)}점
-                    </span>
-                    {done && (
-                      <span className="fetch-game__rank">
-                        {successIndex + 1}등 ·{' '}
-                        {(state.successes[successIndex].elapsedMs / 1000).toFixed(1)}s
-                      </span>
-                    )}
-                  </div>
-                </div>
-              );
-            }
-            // 내 타일: 인식용 <video> + ROI + 판정 힌트 — 자리만 남들과 같은 정렬 규칙을 따른다
-            return (
-          <div
-            key={seat.identity}
-            className={`fetch-game__tile fetch-game__tile--me${
-              mySuccess ? ' fetch-game__tile--done' : ''
-            }`}
-          >
-            <video ref={videoRef} autoPlay playsInline muted className="fetch-game__video" />
-            {/* ROI는 카메라가 켜져 있을 때만 — 꺼진 검은 화면 위 박스는 어색하다 */}
-            {isCameraEnabled && (
-              <div
-                className={`fetch-game__roi${nearMatch || mySuccess ? ' fetch-game__roi--hot' : ''}`}
-              />
-            )}
-            {!isCameraEnabled && !mySuccess && (
-              <div className="fetch-game__cam-off">
-                <span className="fetch-game__cam-off-icon">{CamOffIcon}</span>
-                <span>카메라가 꺼져 있어요</span>
-              </div>
-            )}
-            {mySuccess && (
-              <span className="fetch-game__badge pap-pixel-title">{myRank + 1}위!</span>
-            )}
-            <div className="fetch-game__tile-bar">
-              <span className="fetch-game__tile-name">
-                {leader === myNickname && '👑 '}
-                {myNickname}
-              </span>
-              <span className="fetch-game__score pap-pixel-title">{scoreOf(myNickname)}점</span>
-              <span className="fetch-game__controls">
-                <button
-                  type="button"
-                  className={`fetch-game__control${isCameraEnabled ? '' : ' fetch-game__control--off'}`}
-                  data-button-sound={isCameraEnabled ? 'cancel' : 'basic'}
-                  onClick={() => void localParticipant.setCameraEnabled(!isCameraEnabled)}
-                  title={isCameraEnabled ? '카메라 끄기' : '카메라 켜기'}
-                  aria-label={isCameraEnabled ? '카메라 끄기' : '카메라 켜기'}
-                >
-                  {isCameraEnabled ? CamOnIcon : CamOffIcon}
-                </button>
-                <button
-                  type="button"
-                  className={`fetch-game__control${isMicrophoneEnabled ? '' : ' fetch-game__control--off'}`}
-                  data-button-sound={isMicrophoneEnabled ? 'cancel' : 'basic'}
-                  onClick={() => void localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled)}
-                  title={isMicrophoneEnabled ? '마이크 끄기' : '마이크 켜기'}
-                  aria-label={isMicrophoneEnabled ? '마이크 끄기' : '마이크 켜기'}
-                >
-                  {isMicrophoneEnabled ? MicOnIcon : MicOffIcon}
-                </button>
-              </span>
-              <span className="fetch-game__hint">
-                {hint}
-                {/* 진단용: 왕복 지연 + 제시어 점수 — dev 빌드에서만 (임계값 튜닝용) */}
-                {import.meta.env.DEV && latencyMs !== null && ` · ${latencyMs}ms`}
-                {import.meta.env.DEV &&
-                  lastResult?.targetScore != null &&
-                  ` · ${lastResult.targetScore.toFixed(2)}`}
-              </span>
+      <div className="fetch-game__floor">
+        <section className="fetch-game__side">{leftSeats.map(renderSeat)}</section>
+
+        <section className="fetch-game__center">
+          {/* 라운드·남은 시간 — 말풍선 바로 위 가운데 */}
+          <div className="fetch-game__meter">
+            <span className="fetch-game__round pap-pixel-title">
+              R{state.round}/{state.totalRounds}
+            </span>
+            <span className="fetch-game__clock pap-pixel-title">
+              {secondsLeft}
+              <small>s</small>
+            </span>
+          </div>
+
+          {/* 말풍선이 위, 엄마가 아래 — 꼬리가 엄마 머리를 가리킨다 */}
+          <div className="fetch-game__caller">
+            <CallerSprite />
+            <div className="fetch-game__bubble">
+              {inCountdown ? (
+                <span key={countdownNumber} className="fetch-game__count pap-pixel-title">
+                  {countdownNumber}
+                </span>
+              ) : celebrating && mySuccess ? (
+                /* 내 성공 순간은 전체화면 오버레이 대신 말풍선 안에서 — 제시어와 겹치지 않는다 */
+                <span className="fetch-game__cheer pap-pixel-title">{myRank + 1}등! 🎉</span>
+              ) : (
+                <span className="fetch-game__shout">
+                  엄마! 내{' '}
+                  <span className="fetch-game__word">
+                    <span className="pap-pixel-title">{state.target}</span>
+                  </span>
+                  <br />
+                  어딨어??
+                </span>
+              )}
             </div>
           </div>
-            );
-          })}
+
+          <ol className="fetch-game__board">
+            <li className="fetch-game__board-head">순위</li>
+            {seats.map((_, index) => {
+              const success = state.successes[index];
+              const owner = success
+                ? seats.find((seat) =>
+                    success.participantId
+                      ? seat.identity === success.participantId
+                      : (seat.name ?? '') === success.nickname,
+                  )
+                : undefined;
+              return (
+                <li
+                  key={index}
+                  className={
+                    success
+                      ? `fetch-slot fetch-slot--filled fetch-seat--p${
+                          owner ? colorOf(owner.identity) : 1
+                        }`
+                      : 'fetch-slot fetch-slot--empty'
+                  }
+                >
+                  <span className="fetch-slot__no pap-pixel-title">{index + 1}</span>
+                  <span className="fetch-slot__who">{success ? success.nickname : ''}</span>
+                  <span className="fetch-slot__time pap-pixel-title">
+                    {success ? `+${success.score}점` : '--'}
+                  </span>
+                </li>
+              );
+            })}
+          </ol>
         </section>
 
-        {/* 게임 중 채팅은 없음 — 물건 찾느라 바쁘고, 화상 크기를 최대로 확보하기 위함.
-            채팅이 필요한 대화는 라운드 결과/로비에서. */}
+        <section className="fetch-game__side">{rightSeats.map(renderSeat)}</section>
       </div>
 
       {/* 라운드 결과 팝업 */}
@@ -357,57 +371,24 @@ export function FetchObjectGame({
       {/* 세트가 끝난 뒤 순위 발표는 코스 공통 중간 결과 화면(SetResultScreen)이 한다 —
           여기서 팝업을 또 띄우면 두 겹으로 겹친다(닌자도 같은 이유로 자체 종료 화면을 없앴다). */}
 
-      {/* 3·2·1 카운트다운 → GO! (제시어 읽는 시간 + 인식 팁) */}
-      {inCountdown && (
-        <div className="fetch-game__countdown">
-          <span key={Math.ceil(countdownLeft / 1000)} className="pap-pixel-title">
-            {Math.ceil(countdownLeft / 1000)}
-          </span>
-          <span className="fetch-game__tip">
-            Tip. 물건이 잘 안 잡히면 다양한 각도로 돌려보세요!
-          </span>
-        </div>
-      )}
-      {goFlash && (
-        <div className="fetch-game__countdown fetch-game__countdown--go">
-          <span className="pap-pixel-title">GO!</span>
-        </div>
-      )}
-
       {/* 타임아웃 — 못 찾은 사람에게만 (성공자는 이미 기록이 있으니) */}
       {playing && !inCountdown && remainingMs <= 0 && !mySuccess && (
-        <div className="fetch-game__timeout">
+        <div className="fetch-game__flash fetch-game__flash--fail">
           <span className="pap-pixel-title">시간 초과! ⏰</span>
         </div>
       )}
 
-      {/* AI는 통과했지만 Spring의 순위 확정 이벤트를 기다리는 아주 짧은 구간. 예전에는 이때
-          "거의 다 왔어요 (2/2)"만 남아 사용자가 정답 처리 여부를 알 수 없었다. */}
-      {recognitionAccepted && (
-        <div className="fetch-game__recognized">
-          <span className="pap-pixel-title">물건 인식 성공!</span>
-          <span>순위를 확인하고 있어요...</span>
-        </div>
-      )}
+      {/* AI 통과 후 Spring 순위 확정을 기다리는 구간은 오버레이를 띄우지 않는다 — 곧바로
+          말풍선에 등수가 뜨므로 중간 안내가 화면만 가린다(상태는 캠 아래 힌트에 남아 있다). */}
 
       {otherSuccess && (
-        <div className="fetch-game__other-success" role="status" aria-live="polite">
-          <span className="pap-pixel-title">{otherSuccess.nickname}님 성공!</span>
-          <span>
-            {otherSuccess.rank}위 · +{otherSuccess.score}점
-          </span>
+        <div className="fetch-game__toast" role="status" aria-live="polite">
+          <b className="pap-pixel-title">{otherSuccess.nickname}</b>
+          {otherSuccess.rank}위 · +{otherSuccess.score}점
         </div>
       )}
 
-      {/* 내 성공 셀레브레이션 */}
-      {celebrating && mySuccess && (
-        <div className="fetch-game__celebrate">
-          <span className="pap-pixel-title">{myRank + 1}등! 🎉</span>
-          <span className="fetch-game__celebrate-time">
-            {(mySuccess.elapsedMs / 1000).toFixed(1)}초
-          </span>
-        </div>
-      )}
+      {/* 내 성공 셀레브레이션은 말풍선 안에서 한다 (위 fetch-game__cheer) */}
 
       {confirmLeave && (
         <PixelConfirmModal
@@ -421,5 +402,63 @@ export function FetchObjectGame({
         />
       )}
     </div>
+  );
+}
+
+// 소리치는 엄마 — 좌우 대칭이라 왼쪽 12칸만 정의하고 미러링한다(24×28 도트).
+// K 외곽선 · H 머리 · S 피부 · D 손(그늘) · M 벌린 입 · T 상의 · P 하의 · B 신발
+const CALLER_HALF = [
+  '....KKKKKKKK', '..KKHHHHHHHH', '..KHHHHHHHHH', '..KHHHHHHHHH',
+  '..KHHHSSSSSS', '..KHSSSSSSSS', '..KSSSSKKSSS', '..KSSSSKKSSS',
+  '..KSSSSSSSSS', '..KKDDDDSKMM', '..KKDDDDKMMM', '..KKDDDDKMMM',
+  '..KKDDDDSKMM', '...KKDDDKSSS', '....KKKKKSSS', '...KSSSKKSSS',
+  '...KSSSKTTTT', '...KSSSKTTTT', '...KSSSKTTTT', '...KTTTKTTTT',
+  '...KTTTTTTTT', '...KTTTTTTTT', '...KTTTTTTTT', '...KTTTTTTTT',
+  '....KPPPPPPP', '....KPPPPPKK', '....KPPPPPKK', '....KBBBBBKK',
+];
+const CALLER_PALETTE: Record<string, string> = {
+  K: '#2b1833', H: '#4a2d1c', S: '#ffd0a6', D: '#eeae7c',
+  M: '#7d1f38', T: '#c94f3d', P: '#3a2c3f', B: '#2b1833',
+};
+const CALLER_PX = 4;
+
+function CallerSprite() {
+  const rects: ReactElement[] = [];
+  CALLER_HALF.forEach((half, y) => {
+    const row = half + [...half].reverse().join('');
+    let x = 0;
+    while (x < row.length) {
+      const color = row[x];
+      let run = 1;
+      while (row[x + run] === color) run += 1;
+      if (color !== '.') {
+        rects.push(
+          <rect
+            key={`${x}-${y}`}
+            x={x * CALLER_PX}
+            y={y * CALLER_PX}
+            width={run * CALLER_PX}
+            height={CALLER_PX}
+            fill={CALLER_PALETTE[color]}
+          />,
+        );
+      }
+      x += run;
+    }
+  });
+  const width = 24 * CALLER_PX;
+  const height = CALLER_HALF.length * CALLER_PX;
+  return (
+    <svg
+      className="fetch-game__caller-sprite"
+      width={width}
+      height={height}
+      viewBox={`0 0 ${width} ${height}`}
+      shapeRendering="crispEdges"
+      role="img"
+      aria-label="손을 입에 모으고 소리치는 엄마"
+    >
+      {rects}
+    </svg>
   );
 }
