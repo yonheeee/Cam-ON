@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { LiveKitRoom, useParticipants } from '@livekit/components-react';
+import { LiveKitRoom, RoomAudioRenderer, useParticipants } from '@livekit/components-react';
 import { VideoPresets, type RoomOptions } from 'livekit-client';
 import { CharadesMicrophoneController } from '../../charades/components/CharadesMicrophoneController';
 import { CharadesGamePanel } from '../../charades/components/CharadesGamePanel';
@@ -132,6 +132,12 @@ export function VideoCallRoom({ accessToken, token, roomId, participantId }: Vid
         }}
         onError={(err) => setConnectionError(err.message)}
       >
+        {/* 원격 참가자의 마이크를 실제로 재생하는 유일한 지점. 대기방·닌자·몸으로말해요가 각자
+            캠 타일을 직접 그리게 되면서 VideoConference(안에 이게 들어있다)를 안 쓰게 됐고, 그
+            뒤로는 아무도 오디오를 렌더하지 않아 전원이 음소거처럼 들렸다 — 표현자만 음소거되어야
+            하는 몸으로말해요가 특히 깨졌다. 캠 타일은 Camera 트랙만 붙이므로 화면과 무관하게
+            여기서 한 번만 렌더한다(로컬 오디오는 제외되므로 자기 소리가 되울리지 않는다). */}
+        <RoomAudioRenderer />
         <RoomContent
           roomId={roomId}
           accessToken={accessToken}
