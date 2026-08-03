@@ -203,7 +203,7 @@ pipeline {
         success {
             script {
                 if (env.BRANCH_NAME == 'main') {
-                    mattermostSend(
+                    notifyMattermost(
                         color: 'good',
                         message: "✅ **Cam-ON 운영 배포 성공**\n- 브랜치: `${env.BRANCH_NAME}`\n- 빌드: #${env.BUILD_NUMBER}\n- 확인: ${env.BUILD_URL}"
                     )
@@ -214,12 +214,12 @@ pipeline {
         failure {
             script {
                 if (env.BRANCH_NAME == 'develop') {
-                    mattermostSend(
+                    notifyMattermost(
                         color: 'danger',
                         message: "❌ **develop 통합 빌드 실패**\n- 빌드: #${env.BUILD_NUMBER}\n- 로그: ${env.BUILD_URL}"
                     )
                 } else if (env.BRANCH_NAME == 'main') {
-                    mattermostSend(
+                    notifyMattermost(
                         color: 'danger',
                         text: '@here',
                         message: "🚨 **Cam-ON 운영 배포 실패**\n- 브랜치: `${env.BRANCH_NAME}`\n- 빌드: #${env.BUILD_NUMBER}\n- 로그: ${env.BUILD_URL}"
@@ -231,5 +231,23 @@ pipeline {
         always {
             deleteDir()
         }
+    }
+}
+
+// Mattermost 알림은 실패해도 빌드 결과를 바꾸지 않는다.
+//
+// Jenkins 전역 설정에 Mattermost Endpoint가 없으면 mattermostSend가 NPE를 던진다
+// (MattermostNotifier$DescriptorImpl.getEndpoint()가 null). 그게 post 블록에서 터지면
+// 빌드 결과를 통째로 뒤집어서, 배포가 멀쩡히 끝난 빌드도 FAILURE로 찍힌다 — 실제로 main #6이
+// "Cam-ON deployment succeeded."를 찍고도 이 NPE 때문에 실패로 기록됐다. 진짜 실패(테스트
+// 깨짐 등)와 구분이 안 되는 게 더 위험하다.
+//
+// 알림이 못 나가는 건 알림 문제일 뿐이므로 삼키고 로그만 남긴다. Endpoint를 제대로 채우면
+// 알림도 정상 동작한다 — 이 래퍼는 그때도 그대로 두면 된다.
+def notifyMattermost(Map args) {
+    try {
+        mattermostSend(args)
+    } catch (Exception e) {
+        echo "Mattermost 알림 실패(빌드 결과에는 반영하지 않음): ${e.message}"
     }
 }
