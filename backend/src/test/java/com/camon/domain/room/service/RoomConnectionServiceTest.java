@@ -1,5 +1,6 @@
 package com.camon.domain.room.service;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doReturn;
@@ -22,6 +23,7 @@ import com.camon.domain.room.repository.ParticipantRepository;
 import com.camon.domain.room.ws.RoomEventPublisher;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ScheduledFuture;
@@ -343,6 +345,150 @@ class RoomConnectionServiceTest {
         verify(applicationEventPublisher).publishEvent(
             new ParticipantLeftEvent(roomId, participantId, "TIMEOUT")
         );
+    }
+
+    // 창을 그냥 닫은 사람의 자리는 TTL이 만료돼도 예약 스윕이 돌기 전까지 방을 막는다.
+    // sweepExpired는 그 자리만 골라 즉시 회수하고, 하트비트가 살아 있는 사람은 건드리지 않는다.
+    @Test
+    void sweepRemovesOnlyParticipantsWhoseHeartbeatExpired() {
+        ConnectionRepository connectionRepository = mock(
+            ConnectionRepository.class
+        );
+        ParticipantRepository participantRepository = mock(
+            ParticipantRepository.class
+        );
+        RoomEventPublisher publisher = mock(RoomEventPublisher.class);
+        TaskScheduler scheduler = mock(TaskScheduler.class);
+        ApplicationEventPublisher applicationEventPublisher =
+            mock(ApplicationEventPublisher.class);
+        UUID roomId = UUID.randomUUID();
+        UUID aliveId = UUID.randomUUID();
+        UUID goneId = UUID.randomUUID();
+        when(participantRepository.findAll(roomId)).thenReturn(List.of(
+            // 입장 유예(TTL 15초)를 넘긴 시점이어야 스윕 판단 대상이 된다.
+            new Participant(
+                aliveId,
+                "남은사람",
+                false,
+                ConnectionStatus.CONNECTED,
+                Instant.now().minusSeconds(60)
+            ),
+            new Participant(
+                goneId,
+                "창닫은사람",
+                false,
+                ConnectionStatus.DISCONNECTED,
+                Instant.now().minusSeconds(59)
+            )
+        ));
+        when(connectionRepository.isAlive(aliveId)).thenReturn(true);
+        when(connectionRepository.isAlive(goneId)).thenReturn(false);
+        when(participantRepository.leaveIfHeartbeatExpired(roomId, goneId))
+            .thenReturn(new LeaveRoomResult(
+                LeaveRoomStatus.SUCCESS,
+                goneId,
+                aliveId,
+                aliveId,
+                false
+            ));
+        RoomConnectionService service = new RoomConnectionService(
+            connectionRepository,
+            participantRepository,
+            publisher,
+            new RoomConnectionProperties(Duration.ofSeconds(15)),
+            scheduler,
+            applicationEventPublisher
+        );
+
+        int removed = service.sweepExpired(roomId);
+
+        assertThat(removed).isEqualTo(1);
+        verify(participantRepository).leaveIfHeartbeatExpired(roomId, goneId);
+        verify(participantRepository, never())
+            .leaveIfHeartbeatExpired(roomId, aliveId);
+        verify(publisher).publishMemberLeft(roomId, goneId, null, "TIMEOUT");
+        verify(applicationEventPublisher).publishEvent(
+            new ParticipantLeftEvent(roomId, goneId, "TIMEOUT")
+        );
+    }
+
+    // 하트비트 키는 STOMP 연결 시점에 생기므로, join REST만 끝낸 참가자는 아직 키가 없다.
+    // 이 사람을 죽은 것으로 보고 치우면 "입장하는 중에 쫓겨나는" 일이 생긴다.
+    @Test
+    void sweepSparesParticipantWhoJustJoinedAndHasNotConnectedYet() {
+        ConnectionRepository connectionRepository = mock(
+            ConnectionRepository.class
+        );
+        ParticipantRepository participantRepository = mock(
+            ParticipantRepository.class
+        );
+        RoomEventPublisher publisher = mock(RoomEventPublisher.class);
+        UUID roomId = UUID.randomUUID();
+        UUID joiningId = UUID.randomUUID();
+        when(participantRepository.findAll(roomId)).thenReturn(List.of(
+            new Participant(
+                joiningId,
+                "입장중",
+                false,
+                ConnectionStatus.CONNECTED,
+                // 방금 입장 — 아직 하트비트를 보낼 기회가 없었다.
+                Instant.now()
+            )
+        ));
+        when(connectionRepository.isAlive(joiningId)).thenReturn(false);
+        RoomConnectionService service = new RoomConnectionService(
+            connectionRepository,
+            participantRepository,
+            publisher,
+            new RoomConnectionProperties(Duration.ofSeconds(15)),
+            mock(TaskScheduler.class),
+            mock(ApplicationEventPublisher.class)
+        );
+
+        int removed = service.sweepExpired(roomId);
+
+        assertThat(removed).isZero();
+        verify(participantRepository, never())
+            .leaveIfHeartbeatExpired(any(UUID.class), any(UUID.class));
+        verifyNoInteractions(publisher);
+    }
+
+    @Test
+    void sweepRemovesNothingWhenEveryoneIsAlive() {
+        ConnectionRepository connectionRepository = mock(
+            ConnectionRepository.class
+        );
+        ParticipantRepository participantRepository = mock(
+            ParticipantRepository.class
+        );
+        RoomEventPublisher publisher = mock(RoomEventPublisher.class);
+        UUID roomId = UUID.randomUUID();
+        UUID participantId = UUID.randomUUID();
+        when(participantRepository.findAll(roomId)).thenReturn(List.of(
+            new Participant(
+                participantId,
+                "참가자",
+                false,
+                ConnectionStatus.CONNECTED,
+                Instant.now().minusSeconds(60)
+            )
+        ));
+        when(connectionRepository.isAlive(participantId)).thenReturn(true);
+        RoomConnectionService service = new RoomConnectionService(
+            connectionRepository,
+            participantRepository,
+            publisher,
+            new RoomConnectionProperties(Duration.ofSeconds(15)),
+            mock(TaskScheduler.class),
+            mock(ApplicationEventPublisher.class)
+        );
+
+        int removed = service.sweepExpired(roomId);
+
+        assertThat(removed).isZero();
+        verify(participantRepository, never())
+            .leaveIfHeartbeatExpired(any(UUID.class), any(UUID.class));
+        verifyNoInteractions(publisher);
     }
 
     @Test

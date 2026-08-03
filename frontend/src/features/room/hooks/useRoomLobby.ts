@@ -1,8 +1,9 @@
 import { Client } from '@stomp/stompjs';
+import { handleExpiredSession } from '../../session/lib/sessionExpiry';
 import { useCallback, useEffect, useState } from 'react';
 import { roomApi, type ParticipantResponse, type RoomSnapshotResponse } from '../api/roomApi';
 
-// useRoomGameStarted.ts와 동일한 연결 패턴(brokerURL, connectHeaders, reconnectDelay) —
+// course/hooks/useCourseProgress.ts와 동일한 연결 패턴(brokerURL, connectHeaders, reconnectDelay) —
 // 백엔드가 /topic/rooms/{roomId} 하나에 이벤트 종류(event 필드)만 다르게 실어 보내므로
 // 대기방 전용 구독을 별도 훅으로 분리했다.
 interface RoomEvent<T> {
@@ -40,6 +41,14 @@ interface MemberConnectionPayload {
   connectionStatus: 'CONNECTED' | 'DISCONNECTED';
 }
 
+// 코스 종합 결과에서 한 명이 "방으로 돌아가기"를 눌렀다. 개별 복귀라 이 사람 타일만 "게임 중"을
+// 떼면 된다(내 화면 전환은 useCourseProgress가 따로 담당).
+interface MemberReturnedPayload {
+  participantId: string;
+  ready: boolean;
+  roomReopened: boolean;
+}
+
 export function useRoomLobby(roomId: string, accessToken: string, participantId: string) {
   const [room, setRoom] = useState<RoomSnapshotResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -71,6 +80,9 @@ export function useRoomLobby(roomId: string, accessToken: string, participantId:
         Authorization: `Bearer ${accessToken}`,
       },
       reconnectDelay: 3000,
+      // STOMP는 인증 실패에도 reconnectDelay로 재연결을 계속 시도한다 — 죽은 토큰으로는
+      // 영원히 실패하므로, 세션을 정리하고 첫 화면으로 되돌려 루프를 끊는다.
+      onStompError: () => handleExpiredSession(),
       onConnect: () => {
         client.subscribe(`/topic/rooms/${roomId}`, (message) => {
           const event = JSON.parse(message.body) as RoomEvent<unknown>;
@@ -95,6 +107,8 @@ export function useRoomLobby(roomId: string, accessToken: string, participantId:
                   role: 'MEMBER',
                   ready: false,
                   connectionStatus: 'CONNECTED',
+                  // 새로 입장하면 대기방에 있다 — 방이 WAITING일 때만 입장이 열린다.
+                  inLobby: true,
                 };
                 return { ...prev, participants: [...prev.participants, joined] };
               }
@@ -129,6 +143,25 @@ export function useRoomLobby(roomId: string, accessToken: string, participantId:
                   ...prev,
                   participants: prev.participants.map((p) =>
                     p.participantId === data.participantId ? { ...p, ready: data.ready } : p,
+                  ),
+                };
+              }
+              case 'course:member-returned': {
+                // 한 명이 결과 화면을 접고 대기방으로 들어왔다 — 그 타일의 "게임 중"을 뗀다.
+                // ready도 payload로 함께 온다(방장은 true, 나머지는 false로 리셋됨).
+                const data = event.data as MemberReturnedPayload;
+                return {
+                  ...prev,
+                  // 가장 먼저 돌아온 사람이 방을 WAITING으로 되돌렸다. 상태를 같이 갱신하지
+                  // 않으면 스냅샷의 FINISHED가 남아 다음 코스 시작 판단이 어긋난다.
+                  status: data.roomReopened ? 'WAITING' : prev.status,
+                  participants: prev.participants.map((p) =>
+                    p.participantId === data.participantId
+                      ? { ...p, inLobby: true, ready: data.ready }
+                      : // 방이 재개방되는 순간 서버가 전원 준비를 해제하므로 함께 반영한다.
+                        data.roomReopened
+                        ? { ...p, ready: false }
+                        : p,
                   ),
                 };
               }

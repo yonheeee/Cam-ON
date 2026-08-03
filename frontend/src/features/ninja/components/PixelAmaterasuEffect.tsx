@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { Application, Graphics } from 'pixi.js';
 
-const DURATION_MS = 2500;
+export const DURATION_MS = 2500;
 
 function snap(value: number, grid: number) {
   return Math.round(value / grid) * grid;

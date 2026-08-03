@@ -645,17 +645,17 @@
           </table>
           <table class="example-table">
             <caption>예시 데이터</caption>
-            <tr><th>name</th><th>인원</th><th>라운드</th></tr>
-            <tr><td>NINJA</td><td>2~4</td><td>3~10</td></tr>
-            <tr><td>FETCH_OBJECT</td><td>2~4</td><td>(참여자 수)~10</td></tr>
-            <tr><td>CHARADES</td><td>3~4</td><td>3~10</td></tr>
+            <tr><th>name</th><th>인원</th><th>세트당 라운드(고정)</th></tr>
+            <tr><td>NINJA</td><td>2~4</td><td>1 (최후 1인 한 판)</td></tr>
+            <tr><td>FETCH_OBJECT</td><td>2~4</td><td>5 (물건 5개)</td></tr>
+            <tr><td>CHARADES</td><td>3~4</td><td>1 (전원 1회 표현)</td></tr>
           </table>
           <p class="note">
             게임 종류 자체에 대한 정의/설명 카탈로그다 — 특정 방에서 몇 번째로 어떤 게임을 하는지(순서)는 이 테이블이 아니라
             room:{code}:course:{idx}가 담당한다. name 하나로 식별자와 표시값을 겸하므로(예: "NINJA") 값이 바뀌면 이 이름에 의존하는
             로직도 함께 깨진다는 점은 감수. is_active는 삭제 대신 두는 노출 토글이다 — 0이면 대기방 코스 설정 화면의 선택 목록에서만
             빠지고(=지금 체험 불가), row 자체는 남는다. 이미 만들어진 방의 course/session이 game_id를 값으로만(DB 제약 없이) 참조하고
-            있어서, row를 진짜로 지우면 그 참조가 끊기기 때문. min_rounds가 NULL이면 "참여자 수"로 앱이 계산(물건가져오기).
+            있어서, row를 진짜로 지우면 그 참조가 끊기기 때문. 코스가 세트 단위가 되면서 min_rounds = max_rounds = "세트당 라운드 수" 고정값으로 쓴다.
           </p>
         </div></div>
       </article>
@@ -807,16 +807,17 @@
 
       <article class="card card-redis" data-node="course" tabindex="0" role="button">
         <div class="card-head"><span class="tag tag-redis">HASH</span><h3>room:{code}:course:{idx}</h3></div>
-        <p class="card-desc">코스 한 칸 = 이 자리에 놓인 게임 + 라운드 수</p>
+        <p class="card-desc">코스 한 칸 = 이 자리에 놓인 게임 1세트</p>
         <div class="card-detail"><div>
           <table class="field-table">
             <tr><th>game_id</th><td>MySQL games 참조</td></tr>
-            <tr><th>round_count</th><td>이 게임에 배정된 라운드 수</td></tr>
+            <tr><th>round_count</th><td>세트당 라운드 수(게임별 고정값 복사본)</td></tr>
           </table>
           <p class="note">
-            idx는 1..course_length. 대기방(COM05_CONFIG01)에서 방장이 게임 목록과 순서, 게임별 라운드 수를 한 번에 정하면 이 개수만큼 키가 만들어짐 —
-            round:{n} 패턴처럼 "몇 번째"를 키 이름에 그대로 박아서 순서를 표현. 세션이 시작될 때 session:{seq}가 course:{seq}를 읽어 game_id/round_count를 그대로 가져다 씀.
-            round_count는 games.min_rounds~max_rounds 범위 안에서만 설정 가능(애플리케이션이 검증).
+            idx는 1..course_length(최대 7세트). 대기방(COM05_CONFIG01)에서 방장이 세트 큐(게임 순서)를 정하면 이 개수만큼 키가 만들어짐 —
+            round:{n} 패턴처럼 "몇 번째"를 키 이름에 그대로 박아서 순서를 표현. 같은 게임을 여러 세트 하려면 항목을 반복해 담는다.
+            세션이 시작될 때 session:{seq}가 course:{seq}를 읽어 game_id/round_count를 그대로 가져다 씀.
+            round_count는 방장이 고르는 값이 아니라 games의 게임별 고정값(닌자 1/몸말 1/물건 5)을 저장 시점에 복사한 것.
           </p>
         </div></div>
       </article>
@@ -1097,7 +1098,7 @@
     <code>skill</code>, <code>gesture</code>, <code>skill_gesture</code>, <code>effect</code> 테이블이 남는다.
     세 게임(닌자·물건가져오기·몸으로말해요)은 방·코스·참가자·세션·라운드·점수라는 같은 골격을 공유하고,
     게임마다 달라지는 부분(공격/탈락, 제출 순서, 채팅 정답)만 오른쪽 "게임별 전용" 열에 따로 둔다. 코스는 대기방에서 방장이
-    미리 확정하는 게임 개수·순서·게임별 라운드 수이며, 세션은 코스의 각 항목을 실제로 플레이할 때 열린다.
+    미리 확정하는 세트 큐(게임 순서, 항목 하나 = 1세트)이며, 세션은 코스의 각 항목을 실제로 플레이할 때 열린다.
   </footer>
 </div>
 

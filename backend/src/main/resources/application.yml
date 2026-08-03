@@ -51,3 +51,7 @@ app:
   frontend-base-url: ${FRONTEND_BASE_URL:http://localhost:5173}
   connection:
     heartbeat-ttl: ${ROOM_HEARTBEAT_TTL:15s}
+  analytics:
+    hmac-secret: ${ANALYTICS_HMAC_SECRET:local-analytics-secret-change-me}
+    app-version: ${APP_VERSION:local}
+    experiment-version: ${EXPERIMENT_VERSION:baseline}

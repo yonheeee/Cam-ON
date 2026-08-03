@@ -50,8 +50,9 @@
   word-break: break-word;
 }
 
+/* Mona12는 400/700 두 종만 있어서 600은 실제로 700으로 렌더된다 — 값을 맞춰둔다 */
 .chat-panel__nickname {
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .chat-panel__form {
@@ -71,7 +72,7 @@
   padding: 0.35rem 0.6rem;
 }
 
-/* 게임 중 — 우측 하단 고정 다크 오버레이 (기존 스타일). 우측 상단 게임 초기화 버튼과 안 겹치게 하단. */
+/* 게임 중 — 우측 하단 고정 다크 오버레이 (기존 스타일). */
 .chat-panel--floating {
   position: fixed;
   right: 1rem;
@@ -88,37 +89,117 @@
   color: #6f9fff;
 }
 
+/* floating은 "닉네임: 본문" 한 줄 유지 */
+.chat-panel--floating .chat-panel__nickname::after {
+  content: ': ';
+}
+
 .chat-panel--floating .chat-panel__form {
   border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-/* 로비 — 사이드바 카드 안에 내장 (Pixel Arcade Plaza 테마) */
+/* 로비 — 사이드바 채팅 카드 안에 내장.
+ * Figma `Screen / Lobby v2 · Standalone Cards` 실측: 메시지 블록 간격 22 / 닉네임↔본문 7,
+ * 닉네임 Mona12 Bold 12 · 본문 Mona12 Regular 13, 입력창 384×48, 전송 버튼 28×28 오렌지.
+ * (부모 카드가 1440×1024 캔버스 안에 있으므로 여기도 px 고정값을 쓴다) */
 .chat-panel--docked {
   width: 100%;
   height: 100%;
   color: var(--pap-ink);
-  font-family: var(--pap-font-body);
+  font-family: var(--pap-font-pixel);
+  font-size: 13px;
+}
+
+.chat-panel--docked .chat-panel__messages {
+  gap: 22px;
+  padding: 19px 0 16px;
+}
+
+.chat-panel--docked .chat-panel__message {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
 }
 
 .chat-panel--docked .chat-panel__nickname {
-  color: #1d8b85; /* arcade-teal을 흰 배경에서 읽히게 한 단계 어둡게 */
+  color: var(--pap-arcade-teal);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 14px;
 }
 
+.chat-panel--docked .chat-panel__text {
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 15px;
+}
+
+/* 입력창 자체가 테두리 박스이고, 전송 버튼은 그 안 오른쪽에 얹힌다.
+   폭은 카드(사이드 열 416 고정)를 그대로 채우므로 1440 기준에서 정확히 384가 된다. */
 .chat-panel--docked .chat-panel__form {
-  border-top: 2px dashed rgb(43 24 51 / 0.25);
+  position: relative;
+  flex: none;
+  box-sizing: border-box;
+  width: 100%;
+  height: 48px;
+  padding: 0;
+  border: 2px solid var(--pap-ink);
+  border-radius: 6px;
+  background: var(--pap-white);
 }
 
 .chat-panel--docked .chat-panel__form input {
-  border: 2px solid var(--pap-ink);
-  border-radius: 4px;
-  background: var(--pap-white);
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  padding: 0 56px 0 14px;
+  border: 0;
+  background: transparent;
   color: var(--pap-ink);
+  font-family: inherit;
+  font-size: 13px;
 }
 
+.chat-panel--docked .chat-panel__form input::placeholder {
+  color: var(--pap-text-muted);
+  opacity: 1;
+}
+
+.chat-panel--docked .chat-panel__form input:focus {
+  outline: none;
+}
+
+/* Figma `Chat / Send Button` — 입력창 기준 338,8 / 28×28 → 우측 여백 14, 위 6 */
 .chat-panel--docked .chat-panel__form button {
+  position: absolute;
+  top: 6px;
+  right: 16px; /* 384 - 4(외곽선) - 336(Figma 338-2) - 28 */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 28px;
+  height: 28px;
+  padding: 0;
   border: 2px solid var(--pap-ink);
-  border-radius: 4px;
-  background: var(--pap-play-yellow);
+  border-radius: 6px;
+  background: var(--pap-arcade-orange);
   color: var(--pap-ink);
-  font-weight: 700;
+  box-shadow: 2px 2px 0 rgb(41 33 58 / 0.5);
+  transition: transform 60ms ease-out, box-shadow 60ms ease-out;
+}
+
+.chat-panel--docked .chat-panel__form button svg {
+  width: 16px;
+  height: 16px;
+}
+
+.chat-panel--docked .chat-panel__form button:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 3px 3px 0 rgb(41 33 58 / 0.5);
+}
+
+.chat-panel--docked .chat-panel__form button:active {
+  transform: translate(2px, 2px);
+  box-shadow: 0 0 0 rgb(41 33 58 / 0.5);
 }

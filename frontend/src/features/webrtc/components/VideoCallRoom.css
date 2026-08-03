@@ -31,3 +31,16 @@
   opacity: 0.45;
   pointer-events: none;
 }
+
+/* 코스에서 게임과 게임 사이(서버가 다음 세션을 열기까지)의 대기 화면.
+   패널이 자기 종료 화면을 접은 뒤 빈 화면이 보이는 것을 막는다. */
+.video-call-room__intermission {
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--pap-bg, #f4e9d8) 92%, transparent);
+  text-align: center;
+}

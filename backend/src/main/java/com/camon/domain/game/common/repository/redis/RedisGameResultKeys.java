@@ -13,8 +13,12 @@ final class RedisGameResultKeys {
         return ROOM_PREFIX + roomId;
     }
 
+    static String sessionPrefix(String roomCode) {
+        return ROOM_PREFIX + roomCode + ":session:";
+    }
+
     static String session(String roomCode, int sessionSeq) {
-        return ROOM_PREFIX + roomCode + ":session:" + sessionSeq;
+        return sessionPrefix(roomCode) + sessionSeq;
     }
 
     static String round(String roomCode, int sessionSeq, int round) {

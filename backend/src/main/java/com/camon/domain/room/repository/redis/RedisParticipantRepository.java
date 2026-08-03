@@ -28,6 +28,7 @@ public class RedisParticipantRepository implements ParticipantRepository {
     private static final String READY = "ready";
     private static final String CONNECTION_STATUS = "connection_status";
     private static final String JOINED_AT = "joined_at";
+    private static final String IN_LOBBY = "in_lobby";
 
     private static final long SUCCESS = 0L;
     private static final long ROOM_NOT_FOUND = 1L;
@@ -67,7 +68,8 @@ public class RedisParticipantRepository implements ParticipantRepository {
                 'nickname', ARGV[2],
                 'ready', ARGV[3],
                 'connection_status', ARGV[4],
-                'joined_at', ARGV[5])
+                'joined_at', ARGV[5],
+                'in_lobby', ARGV[7])
             redis.call('SADD', KEYS[4], ARGV[2])
             redis.call('SET', KEYS[5], ARGV[6])
             return 0
@@ -87,13 +89,15 @@ public class RedisParticipantRepository implements ParticipantRepository {
             return 1
             """, Long.class);
 
-    private static final DefaultRedisScript<Long> RESET_READY_SCRIPT =
+    // 방 전원의 같은 필드를 한 값으로 맞춘다 (준비 해제, 대기방 체류 여부 일괄 변경).
+    // 필드명을 ARGV로 받아 준비/대기방용 스크립트를 따로 두지 않는다.
+    private static final DefaultRedisScript<Long> SET_ALL_FIELD_SCRIPT =
         new DefaultRedisScript<>("""
             local members = redis.call('SMEMBERS', KEYS[1])
             for _, participantId in ipairs(members) do
                 local participantKey = ARGV[1] .. participantId
                 if redis.call('EXISTS', participantKey) == 1 then
-                    redis.call('HSET', participantKey, 'ready', 'false')
+                    redis.call('HSET', participantKey, ARGV[2], ARGV[3])
                 end
             end
             return #members
@@ -290,7 +294,8 @@ public class RedisParticipantRepository implements ParticipantRepository {
             Boolean.toString(participant.ready()),
             participant.connectionStatus().name(),
             Long.toString(participant.joinedAt().toEpochMilli()),
-            roomId.toString()
+            roomId.toString(),
+            Boolean.toString(participant.inLobby())
         );
         return toJoinResult(result);
     }
@@ -350,10 +355,31 @@ public class RedisParticipantRepository implements ParticipantRepository {
 
     @Override
     public void resetAllReady(UUID roomId) {
+        setAllField(roomId, READY, Boolean.FALSE.toString());
+    }
+
+    @Override
+    public void updateInLobby(UUID roomId, UUID participantId, boolean inLobby) {
+        updateParticipantField(
+            roomId,
+            participantId,
+            IN_LOBBY,
+            Boolean.toString(inLobby)
+        );
+    }
+
+    @Override
+    public void updateAllInLobby(UUID roomId, boolean inLobby) {
+        setAllField(roomId, IN_LOBBY, Boolean.toString(inLobby));
+    }
+
+    private void setAllField(UUID roomId, String field, String value) {
         redisTemplate.execute(
-            RESET_READY_SCRIPT,
+            SET_ALL_FIELD_SCRIPT,
             List.of(RedisRoomKeys.participants(roomId)),
-            RedisRoomKeys.participantPrefix(roomId)
+            RedisRoomKeys.participantPrefix(roomId),
+            field,
+            value
         );
     }
 
@@ -468,7 +494,11 @@ public class RedisParticipantRepository implements ParticipantRepository {
             required(values, NICKNAME),
             Boolean.parseBoolean(required(values, READY)),
             ConnectionStatus.valueOf(required(values, CONNECTION_STATUS)),
-            Instant.ofEpochMilli(Long.parseLong(required(values, JOINED_AT)))
+            Instant.ofEpochMilli(Long.parseLong(required(values, JOINED_AT))),
+            // in_lobby가 없는 해시는 이 필드가 생기기 전에 만들어진 참가자다 — 대기방에 있는
+            // 것으로 본다. 없다고 "게임 중"으로 읽으면 멀쩡한 참가자가 영구히 게임 중으로
+            // 굳어 방장이 다음 코스를 못 시작한다.
+            booleanOrDefault(values, IN_LOBBY, true)
         ));
     }
 
@@ -558,6 +588,17 @@ public class RedisParticipantRepository implements ParticipantRepository {
             return null;
         }
         return UUID.fromString(value);
+    }
+
+    private static boolean booleanOrDefault(
+        Map<Object, Object> values,
+        String field,
+        boolean defaultValue
+    ) {
+        Object value = values.get(field);
+        return value == null
+            ? defaultValue
+            : Boolean.parseBoolean(value.toString());
     }
 
     private static String required(Map<Object, Object> values, String field) {

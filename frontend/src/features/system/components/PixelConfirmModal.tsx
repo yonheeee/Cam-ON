@@ -31,7 +31,12 @@ export function PixelConfirmModal({
           {message && <p className="confirm-modal__message">{message}</p>}
           <div className="confirm-modal__actions">
             {cancelLabel && onCancel && (
-              <button type="button" className="pap-pixel-btn" onClick={onCancel}>
+              <button
+                type="button"
+                className="pap-pixel-btn"
+                data-button-sound="cancel"
+                onClick={onCancel}
+              >
                 {cancelLabel}
               </button>
             )}

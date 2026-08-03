@@ -1,0 +1,145 @@
+/* 방장 전용 코스 편집 팝업. PixelConfirmModal과 같은 backdrop/카드 위에 얹는다. */
+.course-editor {
+  width: min(680px, 94vw);
+}
+
+.course-editor__card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px;
+  max-height: 86vh;
+  overflow-y: auto;
+}
+
+.course-editor__title {
+  margin: 0;
+}
+
+.course-editor__hint {
+  margin: 0;
+  font-size: 12px;
+  opacity: 0.75;
+}
+
+.course-editor__list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.course-editor__row {
+  display: grid;
+  /* 순번 · 게임(가변) · 주제 · 라운드 · 순서변경 */
+  grid-template-columns: 28px minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border: 2px solid var(--pap-ink);
+  background: var(--pap-surface, #fff);
+}
+
+.course-editor__seq {
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+.course-editor__game {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.course-editor__game small {
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+.course-editor__warn {
+  color: var(--pap-coral, #e2574c);
+  opacity: 1 !important;
+}
+
+.course-editor__topic {
+  font: inherit;
+  font-size: 12px;
+  padding: 4px;
+  border: 2px solid var(--pap-ink);
+  background: var(--pap-surface, #fff);
+  max-width: 150px;
+}
+
+.course-editor__rounds,
+.course-editor__row-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.course-editor__round-count {
+  min-width: 34px;
+  text-align: center;
+  font-size: 13px;
+}
+
+.course-editor__empty {
+  padding: 16px;
+  text-align: center;
+  font-size: 12px;
+  opacity: 0.7;
+  border: 2px dashed var(--pap-ink);
+}
+
+.course-editor__add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.course-editor__unsupported {
+  margin: 0;
+  font-size: 11px;
+  opacity: 0.6;
+}
+
+/* AI 서버가 꺼져 물건 가져오기를 담을 수 없을 때. "준비 중" 안내(회색)와 달리 지금 조치할 수
+   있는 문제라 눈에 띄는 색을 쓴다. */
+.course-editor__ai-down {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--pap-festival-coral, #f2795f);
+}
+
+.course-editor__error {
+  margin: 0;
+  font-size: 12px;
+  color: var(--pap-coral, #e2574c);
+}
+
+.course-editor__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* 좁은 화면에서는 한 칸을 두 줄로 접는다 — 그리드 5열이 들어가지 않는다 */
+@media (max-width: 560px) {
+  .course-editor__row {
+    grid-template-columns: 28px minmax(0, 1fr);
+  }
+
+  .course-editor__topic,
+  .course-editor__rounds,
+  .course-editor__row-actions {
+    grid-column: 2;
+  }
+
+  .course-editor__topic {
+    max-width: none;
+  }
+}

@@ -1,3 +1,5 @@
+import { handleExpiredSession, isSessionDead } from '../../session/lib/sessionExpiry';
+
 // Spring 백엔드 domain/room REST 클라이언트. ninjaApi.ts와 동일한 base URL/에러 처리 패턴.
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? `http://${window.location.hostname}:8080`;
 
@@ -7,6 +9,12 @@ export interface ParticipantResponse {
   role: 'HOST' | 'MEMBER';
   ready: boolean;
   connectionStatus: string;
+  /**
+   * 대기방 화면에 있는가. false면 코스 종합 결과에 아직 남아 있는 사람이다 — 복귀는 각자
+   * 누르는 개별 행동이라 방을 떠난 게 아니므로, 대기방 타일에 자리를 지킨 채 "게임 중"으로
+   * 표시한다.
+   */
+  inLobby: boolean;
 }
 
 export interface RoomSnapshotResponse {
@@ -37,6 +45,7 @@ export interface UpdateReadyResult {
 
 export interface StartGameResult {
   gameId: number;
+  sessionSeq: number;
   totalRounds: number;
 }
 
@@ -60,6 +69,8 @@ async function request<T>(path: string, accessToken: string, init?: RequestInit)
   });
   const body = await response.json().catch(() => null);
   if (!response.ok) {
+    // 토큰이 죽었으면 이 화면에서 할 수 있는 게 없다 — 세션을 정리하고 첫 화면으로 되돌린다.
+    if (isSessionDead(response.status)) handleExpiredSession();
     throw new RoomApiError(body?.message ?? `요청 실패 (HTTP ${response.status})`, body?.code);
   }
   return body.data as T;
@@ -90,8 +101,25 @@ export const roomApi = {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
     if (!response.ok) {
+      if (isSessionDead(response.status)) handleExpiredSession();
       const body = await response.json().catch(() => null);
       throw new RoomApiError(body?.message ?? `요청 실패 (HTTP ${response.status})`, body?.code);
+    }
+  },
+
+  // 창/탭이 닫힐 때 쓰는 퇴장 통보. 일반 fetch는 문서가 언로드되면 취소되므로 keepalive를 켜서
+  // 요청이 살아남게 한다(sendBeacon과 달리 Authorization 헤더와 DELETE를 쓸 수 있어 위
+  // leaveRoom과 같은 엔드포인트를 그대로 재사용한다). 언로드 중엔 응답을 읽을 수도, 사용자에게
+  // 알릴 수도 없으니 결과를 보지 않고 실패는 삼킨다 — 못 닿아도 하트비트 스윕이 15초 뒤 정리한다.
+  leaveRoomOnUnload: (roomId: string, accessToken: string): void => {
+    try {
+      void fetch(`${BASE_URL}/api/rooms/${roomId}/members/me`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${accessToken}` },
+        keepalive: true,
+      }).catch(() => {});
+    } catch {
+      // 언로드 시점엔 브라우저가 새 요청을 거절할 수 있다. 여기서 막혀도 페이지 종료를 방해하지 않는다.
     }
   },
 
@@ -104,6 +132,7 @@ export const roomApi = {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
     if (!response.ok) {
+      if (isSessionDead(response.status)) handleExpiredSession();
       const body = await response.json().catch(() => null);
       throw new RoomApiError(body?.message ?? `요청 실패 (HTTP ${response.status})`, body?.code);
     }
@@ -115,12 +144,28 @@ export const roomApi = {
       body: JSON.stringify({ ready }),
     }),
 
-  // 방장이 대기방에서 게임을 시작한다. 참가자 토큰은 서버가 방의 실제 참가자 목록에서 만들므로
-  // 클라이언트가 넘기지 않는다. 서버가 방장 여부·전원 준비를 검증하고 방을 PLAYING으로 전환한 뒤
-  // 세션을 열며 game:started를 브로드캐스트한다.
-  startGame: (roomId: string, gameId: number, totalRounds: number, accessToken: string) =>
+  // 방장이 대기방에서 확정한 코스대로 진행을 시작한다. 무엇을 몇 라운드 할지는 코스에 이미
+  // 들어 있고 참가자 목록도 서버가 직접 읽으므로 보낼 바디가 없다. 서버가 방장 여부·전원 준비·
+  // 코스 유효성을 검증하고 방을 PLAYING으로 전환한 뒤 첫 세션을 열며 game:started를 쏜다.
+  startGame: (roomId: string, accessToken: string) =>
     request<StartGameResult>(`/api/rooms/${roomId}/start`, accessToken, {
       method: 'POST',
-      body: JSON.stringify({ gameId, totalRounds }),
     }),
+
+  // 코스 종합 결과에서 대기방으로 복귀. 방장 전용이 아니라 참가자 각자가 부르며, 부른 사람만
+  // 돌아간다(한 번에 전원이 들어오지 않는다). 가장 먼저 부른 요청이 점수 기록을 초기화하고 방을
+  // WAITING으로 되돌린다. 서버는 course:member-returned를 브로드캐스트하고 화면 전환은 그
+  // 이벤트가 담당한다 — 당사자는 결과 화면을 접고, 나머지는 그 사람 타일의 "게임 중"만 뗀다.
+  // leaveRoom과 같은 이유(204 No Content)로 request()를 쓰지 않는다.
+  returnToLobby: async (roomId: string, accessToken: string): Promise<void> => {
+    const response = await fetch(`${BASE_URL}/api/rooms/${roomId}/return`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!response.ok) {
+      if (isSessionDead(response.status)) handleExpiredSession();
+      const body = await response.json().catch(() => null);
+      throw new RoomApiError(body?.message ?? `요청 실패 (HTTP ${response.status})`, body?.code);
+    }
+  },
 };
