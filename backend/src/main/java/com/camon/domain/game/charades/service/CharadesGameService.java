@@ -571,13 +571,31 @@ public class CharadesGameService {
             return;
         }
         cancelPendingTimeout(room.roomCode(), sessionSeq);
+        List<CharadesRankingEntry> finalRanking = buildFinalRanking(room, sessionSeq);
+        SaveRoundResult courseResult = gameScoreService.saveCourseRanking(
+            room.roomId(),
+            sessionSeq,
+            finalRanking.stream().collect(java.util.stream.Collectors.toMap(
+                CharadesRankingEntry::participantId,
+                CharadesRankingEntry::rank,
+                (left, right) -> left,
+                LinkedHashMap::new
+            ))
+        );
+        if (courseResult != SaveRoundResult.SUCCESS
+            && courseResult != SaveRoundResult.ALREADY_SAVED) {
+            throw new IllegalStateException(
+                "Failed to save charades course score: " + courseResult
+            );
+        }
         charadesEventPublisher.publish(
             room.roomId(),
             GAME_ENDED_EVENT,
             new CharadesGameEndedPayload(
                 state.totalRounds(),
                 Instant.now(),
-                buildFinalRanking(room, sessionSeq)
+                finalRanking,
+                gameScoreService.getCourseTotals(room.roomId())
             )
         );
         charadesRedis.clear(room.roomCode(), sessionSeq);

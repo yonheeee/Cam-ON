@@ -36,4 +36,8 @@ final class RedisGameResultKeys {
     static String courseTotals(String roomCode) {
         return ROOM_PREFIX + roomCode + ":course:totals";
     }
+
+    static String courseContribution(String roomCode, int sessionSeq) {
+        return session(roomCode, sessionSeq) + ":course-results";
+    }
 }

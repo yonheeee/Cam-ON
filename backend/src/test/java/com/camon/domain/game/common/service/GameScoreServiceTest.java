@@ -103,6 +103,44 @@ class GameScoreServiceTest {
     }
 
     @Test
+    void convertsFinalRanksToNormalizedCoursePoints() {
+        UUID roomId = UUID.randomUUID();
+        UUID first = UUID.randomUUID();
+        UUID second = UUID.randomUUID();
+        UUID third = UUID.randomUUID();
+        UUID fourth = UUID.randomUUID();
+        Map<UUID, Integer> ranks = Map.of(first, 1, second, 2, third, 3, fourth, 4);
+        when(gameResultRepository.saveCourseResults(
+            roomId, 2, Map.of(first, 5L, second, 3L, third, 2L, fourth, 1L)
+        )).thenReturn(SaveRoundResult.SUCCESS);
+
+        assertThat(gameScoreService.saveCourseRanking(roomId, 2, ranks))
+            .isEqualTo(SaveRoundResult.SUCCESS);
+        verify(gameResultRepository).saveCourseResults(
+            roomId, 2, Map.of(first, 5L, second, 3L, third, 2L, fourth, 1L)
+        );
+    }
+
+    @Test
+    void givesTiedParticipantsTheSameNormalizedPoints() {
+        UUID roomId = UUID.randomUUID();
+        UUID first = UUID.randomUUID();
+        UUID tiedFirst = UUID.randomUUID();
+        UUID third = UUID.randomUUID();
+        when(gameResultRepository.saveCourseResults(
+            roomId, 1, Map.of(first, 5L, tiedFirst, 5L, third, 2L)
+        )).thenReturn(SaveRoundResult.SUCCESS);
+
+        gameScoreService.saveCourseRanking(
+            roomId, 1, Map.of(first, 1, tiedFirst, 1, third, 3)
+        );
+
+        verify(gameResultRepository).saveCourseResults(
+            roomId, 1, Map.of(first, 5L, tiedFirst, 5L, third, 2L)
+        );
+    }
+
+    @Test
     void rejectsInvalidRankings() {
         UUID participantId = UUID.randomUUID();
 

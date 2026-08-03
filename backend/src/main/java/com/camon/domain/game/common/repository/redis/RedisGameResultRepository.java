@@ -43,7 +43,27 @@ public class RedisGameResultRepository implements GameResultRepository {
                 local score = ARGV[index + 1]
                 redis.call('HSET', KEYS[4], participantId, score)
                 redis.call('HINCRBY', KEYS[5], participantId, score)
-                redis.call('HINCRBY', KEYS[6], participantId, score)
+            end
+            return 1
+            """, Long.class);
+
+    private static final DefaultRedisScript<Long> SAVE_COURSE_RESULTS_SCRIPT =
+        new DefaultRedisScript<>("""
+            if redis.call('EXISTS', KEYS[1]) == 0 then
+                return -1
+            end
+            if redis.call('EXISTS', KEYS[2]) == 0 then
+                return -2
+            end
+            if redis.call('EXISTS', KEYS[3]) == 1 then
+                return 0
+            end
+
+            for index = 1, #ARGV, 2 do
+                local participantId = ARGV[index]
+                local score = ARGV[index + 1]
+                redis.call('HSET', KEYS[3], participantId, score)
+                redis.call('HINCRBY', KEYS[4], participantId, score)
             end
             return 1
             """, Long.class);
@@ -89,8 +109,7 @@ public class RedisGameResultRepository implements GameResultRepository {
                 RedisGameResultKeys.session(room.roomCode(), sessionSeq),
                 RedisGameResultKeys.round(room.roomCode(), sessionSeq, round),
                 RedisGameResultKeys.roundResults(room.roomCode(), sessionSeq, round),
-                RedisGameResultKeys.sessionTotals(room.roomCode(), sessionSeq),
-                RedisGameResultKeys.courseTotals(room.roomCode())
+                RedisGameResultKeys.sessionTotals(room.roomCode(), sessionSeq)
             ),
             arguments.toArray()
         );
@@ -125,6 +144,42 @@ public class RedisGameResultRepository implements GameResultRepository {
     @Override
     public Map<UUID, Long> findCourseTotals(UUID roomId) {
         return findScores(roomId, RedisGameResultKeys::courseTotals);
+    }
+
+    @Override
+    public SaveRoundResult saveCourseResults(
+        UUID roomId,
+        int sessionSeq,
+        Map<UUID, Long> scores
+    ) {
+        if (sessionSeq < 1) {
+            throw new IllegalArgumentException("sessionSeq must be at least 1");
+        }
+        validateScores(scores);
+        Room room = roomRepository.findById(roomId).orElse(null);
+        if (room == null) {
+            return SaveRoundResult.ROOM_NOT_FOUND;
+        }
+
+        List<String> arguments = new ArrayList<>(scores.size() * 2);
+        scores.entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(entry -> {
+            arguments.add(entry.getKey().toString());
+            arguments.add(Long.toString(entry.getValue()));
+        });
+        Long result = redisTemplate.execute(
+            SAVE_COURSE_RESULTS_SCRIPT,
+            List.of(
+                RedisGameResultKeys.room(roomId),
+                RedisGameResultKeys.session(room.roomCode(), sessionSeq),
+                RedisGameResultKeys.courseContribution(room.roomCode(), sessionSeq),
+                RedisGameResultKeys.courseTotals(room.roomCode())
+            ),
+            arguments.toArray()
+        );
+        if (result == null) {
+            throw new IllegalStateException("Redis course result script returned null");
+        }
+        return mapResult(result);
     }
 
     @Override

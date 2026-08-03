@@ -499,10 +499,30 @@ public class FetchObjectGameService {
     private void finishGame(Room room, int sessionSeq) {
         cancelPendingTimeout(room.roomCode(), sessionSeq);
         fetchRedis.markSessionEnded(room.roomCode(), sessionSeq);
+        List<FetchScoreEntry> finalScores = buildFinalScores(room, sessionSeq);
+        SaveRoundResult courseResult = gameScoreService.saveCourseRanking(
+            room.roomId(),
+            sessionSeq,
+            finalScores.stream().collect(Collectors.toMap(
+                FetchScoreEntry::participantId,
+                FetchScoreEntry::rank,
+                (left, right) -> left,
+                LinkedHashMap::new
+            ))
+        );
+        if (courseResult != SaveRoundResult.SUCCESS
+            && courseResult != SaveRoundResult.ALREADY_SAVED) {
+            throw new IllegalStateException(
+                "Failed to save fetch course score: " + courseResult
+            );
+        }
         fetchEventPublisher.publish(
             room.roomId(),
             "game:end",
-            new FetchGameEndedPayload(buildFinalScores(room, sessionSeq))
+            new FetchGameEndedPayload(
+                finalScores,
+                gameScoreService.getCourseTotals(room.roomId())
+            )
         );
         applicationEventPublisher.publishEvent(
             new GameSessionFinishedEvent(room.roomId(), sessionSeq)
