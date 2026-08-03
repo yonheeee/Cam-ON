@@ -102,6 +102,25 @@
 
 /* ---------- 본문 2열 (스테이지 | 사이드) ---------- */
 
+.lobby-screen__music-toggle {
+  position: absolute;
+  top: 48px;
+  right: var(--lobby-pad-x);
+  z-index: 2;
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  min-width: 104px;
+  padding: 8px 12px;
+  font-size: 13px;
+}
+
+@media (max-height: 780px) {
+  .lobby-screen__music-toggle {
+    top: 27px;
+  }
+}
+
 .lobby-screen__body {
   position: absolute;
   top: var(--lobby-pad-top);

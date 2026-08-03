@@ -3,6 +3,7 @@ import { ParticipantTile, useLocalParticipant, useTracks } from '@livekit/compon
 import { Track } from 'livekit-client';
 import { ChatPanel } from '../../chat/components/ChatPanel';
 import type { ChatMessage } from '../../chat/hooks/useRoomChat';
+import { BackgroundMusic } from '../../sound/components/BackgroundMusic';
 import { PixelConfirmModal } from '../../system/components/PixelConfirmModal';
 import { roomApi, RoomApiError } from '../api/roomApi';
 import { SettingsModal } from './SettingsModal';
@@ -341,6 +342,10 @@ export function LobbyScreen({
         src="/assets/cam-on-logo-v3.png"
         alt="CAM, ON!"
         onClick={() => setConfirmLeave(true)}
+      />
+      <BackgroundMusic
+        source="/assets/sounds/cozy-cartridge-club.mp3"
+        className="lobby-screen__music-toggle"
       />
 
       <div className="lobby-screen__body">
