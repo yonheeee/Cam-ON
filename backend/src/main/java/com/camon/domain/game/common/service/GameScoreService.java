@@ -71,6 +71,11 @@ public class GameScoreService {
         return gameResultRepository.findCourseTotals(roomId);
     }
 
+    /** 코스 재시작 준비 — 이전 코스의 점수 기록을 전부 지운다 (대기방 복귀 시 호출). */
+    public void clearCourseResults(UUID roomId) {
+        gameResultRepository.clearCourseResults(roomId);
+    }
+
     private static void validateRanking(List<UUID> participantIdsByRank) {
         if (participantIdsByRank == null || participantIdsByRank.isEmpty()) {
             throw new IllegalArgumentException("ranking must not be empty");

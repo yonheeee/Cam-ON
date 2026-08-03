@@ -1,35 +1,52 @@
 .confirm-modal {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  width: min(360px, 90vw);
-  padding: 28px;
+  gap: 12px;
   box-sizing: border-box;
-  text-align: center;
+  width: min(420px, calc(100vw - 32px));
+  height: 246px;
+  padding: 28px;
+  border-radius: 16px;
+  text-align: left;
 }
 
 .confirm-modal__title {
   margin: 0;
-  font-size: 20px;
+  font-family: var(--camon-font);
+  font-size: 22px;
+  line-height: 30px;
 }
 
 .confirm-modal__message {
   margin: 0;
-  font-family: var(--pap-font-body);
+  font-family: var(--camon-font);
   font-size: 14px;
+  line-height: 22px;
   color: var(--pap-ink);
-  opacity: 0.75;
 }
 
 .confirm-modal__actions {
   display: flex;
   gap: 12px;
   justify-content: center;
+  margin-top: auto;
 }
 
 .confirm-modal__actions > * {
+  /* box-shadow를 직접 덮어쓰면 hover/active(:hover가 우선순위 높음)에서 색·크기가 튄다.
+     오프셋만 바꿔주면 .pap-pixel-btn의 hover/active 계산이 그대로 이어진다. */
+  --pap-shadow-offset: 3px;
   flex: 1;
+  height: 52px;
+  padding: 0 14px;
+  border-radius: 12px;
+  font-family: var(--camon-font);
+  font-size: 14px;
+  font-weight: 700;
   /* "방 나가기"가 좁은 버튼에서 두 줄로 꺾이지 않게 */
   white-space: nowrap;
-  padding-inline: 14px;
+}
+
+.confirm-modal__actions .pap-pixel-btn--primary {
+  background: var(--camon-color-action-orange);
 }

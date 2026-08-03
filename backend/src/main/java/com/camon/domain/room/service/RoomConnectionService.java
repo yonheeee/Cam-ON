@@ -1,7 +1,10 @@
 package com.camon.domain.room.service;
 
+import com.camon.domain.analytics.domain.AnalyticsDomainEvent;
+import com.camon.domain.analytics.domain.AnalyticsEventName;
 import com.camon.domain.room.config.RoomConnectionProperties;
 import com.camon.domain.room.domain.ConnectionStatus;
+import com.camon.domain.room.domain.Participant;
 import com.camon.domain.room.event.ParticipantLeftEvent;
 import com.camon.domain.room.repository.ConnectionRepository;
 import com.camon.domain.room.repository.HeartbeatRefreshResult;
@@ -108,6 +111,41 @@ public class RoomConnectionService {
         scheduleTimeout(roomId, participantId);
     }
 
+    /**
+     * 방 참가자 중 하트비트가 이미 만료된 사람을 예약된 스윕을 기다리지 않고 즉시 퇴장 처리한다.
+     *
+     * <p>정원 판정이 participants 집합의 크기를 세기 때문에, 통보 없이 사라진 사람(창을 그냥 닫음,
+     * 프로세스 강제 종료, 절전 등)의 자리가 TTL이 만료되고 스윕이 돌 때까지 방을 막는다. 그 사이
+     * 입장 시도는 정원 초과로 거절되므로, 거절 직전에 이 메서드로 죽은 자리를 먼저 회수한다.
+     * 하트비트가 살아 있는 참가자는 건드리지 않으므로 멀쩡한 사람이 밀려나지는 않는다.
+     *
+     * @return 실제로 퇴장 처리된 참가자 수
+     */
+    public int sweepExpired(UUID roomId) {
+        int removed = 0;
+        // 하트비트 키는 STOMP가 연결될 때 처음 생긴다. 즉 방금 join REST만 끝낸 참가자는 아직
+        // 키가 없어서 "죽은 것"과 구분되지 않는다 — 예약 스윕(handleTimeout)은 연결된 뒤에만
+        // 무장되므로 이 문제가 없지만, 참가자 전체를 훑는 이 스윕은 입장 중인 사람을 쫓아낼 수
+        // 있다. 그래서 입장 후 TTL이 지나지 않은 참가자는 판단을 보류한다.
+        Instant judgeableBefore = Instant.now().minus(properties.heartbeatTtl());
+        for (Participant participant : participantRepository.findAll(roomId)) {
+            UUID participantId = participant.participantId();
+            if (connectionRepository.isAlive(participantId)) {
+                continue;
+            }
+            if (participant.joinedAt().isAfter(judgeableBefore)) {
+                continue;
+            }
+            if (removeIfExpired(roomId, participantId) == LeaveRoomStatus.SUCCESS) {
+                // 이 참가자를 기다리던 예약 스윕은 더 볼 게 없다(남겨두면 PARTICIPANT_NOT_FOUND로
+                // 한 번 깨어나기만 한다).
+                cancelTimeout(participantId);
+                removed++;
+            }
+        }
+        return removed;
+    }
+
     public void cancelTimeout(UUID participantId) {
         TimeoutTask task = timeoutTasks.remove(participantId);
         if (task != null) {
@@ -135,6 +173,61 @@ public class RoomConnectionService {
     private void forget(UUID participantId) {
         sessionsByParticipant.remove(participantId);
         disconnectedParticipants.remove(participantId);
+    }
+
+    /**
+     * 하트비트가 만료된 참가자를 실제로 방에서 빼고 그 사실을 전파한다. 예약 스윕(handleTimeout)과
+     * 입장 직전 즉시 스윕(sweepExpired)이 같은 처리를 해야 하므로 한곳에 모아둔다 — 갈라지면
+     * 한쪽 경로에서만 방장 위임이나 member:left가 빠지는 식으로 어긋난다.
+     *
+     * @return Redis가 판정한 결과. HEARTBEAT_ACTIVE면 아직 살아 있어 아무것도 하지 않았다는 뜻이다.
+     */
+    private LeaveRoomStatus removeIfExpired(UUID roomId, UUID participantId) {
+        LeaveRoomResult result =
+            participantRepository.leaveIfHeartbeatExpired(
+                roomId,
+                participantId
+            );
+        if (result.status() != LeaveRoomStatus.SUCCESS) {
+            return result.status();
+        }
+        UUID newHostParticipantId = result.hostChanged()
+            ? result.newHostParticipantId()
+            : null;
+        roomEventPublisher.publishMemberLeft(
+            roomId,
+            participantId,
+            newHostParticipantId,
+            "TIMEOUT"
+        );
+        if (result.hostChanged()) {
+            roomEventPublisher.publishHostChanged(
+                roomId,
+                result.previousHostParticipantId(),
+                result.newHostParticipantId()
+            );
+        }
+        // 방에서 실제로 빠졌으니 연결 추적 상태도 버린다. 남겨두면 같은 사람이 재입장했을 때
+        // "끊겼다 돌아온 것"으로 오인해 불필요한 CONNECTED 이벤트가 나간다.
+        forget(participantId);
+        // 게임(charades 등) 리스너에게 이탈을 알린다 — 진행 중 게임의 턴/세션 정리용.
+        applicationEventPublisher.publishEvent(
+            new ParticipantLeftEvent(
+                roomId,
+                participantId,
+                "TIMEOUT"
+            )
+        );
+        applicationEventPublisher.publishEvent(
+            AnalyticsDomainEvent.server(
+                AnalyticsEventName.PARTICIPANT_LEFT,
+                roomId,
+                participantId,
+                Instant.now(),
+                java.util.Map.of("reason", "TIMEOUT")
+            )
+        );
+        return LeaveRoomStatus.SUCCESS;
     }
 
     private void refreshHeartbeat(UUID roomId, UUID participantId) {
@@ -179,48 +272,13 @@ public class RoomConnectionService {
             return;
         }
         try {
-            LeaveRoomResult result =
-                participantRepository.leaveIfHeartbeatExpired(
-                    roomId,
-                    participantId
-                );
-            if (result.status() == LeaveRoomStatus.HEARTBEAT_ACTIVE) {
+            if (removeIfExpired(roomId, participantId)
+                == LeaveRoomStatus.HEARTBEAT_ACTIVE) {
                 // 아직 하트비트가 살아 있으면 이번 스윕은 건너뛴다. 다만 여기서 그냥 끝내면
                 // 이 참가자는 다음 하트비트/끊김 이벤트가 오기 전까지 재검사 대상에서 빠지므로,
                 // 방장이 이 상태로 조용히 사라지면 위임 자체가 영영 일어나지 않는다. 다시 무장한다.
                 scheduleTimeout(roomId, participantId);
-                return;
             }
-            if (result.status() != LeaveRoomStatus.SUCCESS) {
-                return;
-            }
-            UUID newHostParticipantId = result.hostChanged()
-                ? result.newHostParticipantId()
-                : null;
-            roomEventPublisher.publishMemberLeft(
-                roomId,
-                participantId,
-                newHostParticipantId,
-                "TIMEOUT"
-            );
-            if (result.hostChanged()) {
-                roomEventPublisher.publishHostChanged(
-                    roomId,
-                    result.previousHostParticipantId(),
-                    result.newHostParticipantId()
-                );
-            }
-            // 방에서 실제로 빠졌으니 연결 추적 상태도 버린다. 남겨두면 같은 사람이 재입장했을 때
-            // "끊겼다 돌아온 것"으로 오인해 불필요한 CONNECTED 이벤트가 나간다.
-            forget(participantId);
-            // 게임(charades 등) 리스너에게 이탈을 알린다 — 진행 중 게임의 턴/세션 정리용.
-            applicationEventPublisher.publishEvent(
-                new ParticipantLeftEvent(
-                    roomId,
-                    participantId,
-                    "TIMEOUT"
-                )
-            );
         } finally {
             timeoutTasks.computeIfPresent(
                 participantId,

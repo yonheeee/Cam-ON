@@ -373,19 +373,19 @@ class CharadesRedisRepositoryIntegrationTest {
         // 그래서 두 타입 모두 허용한다(번역 프록시 유무와 무관하게 통과) — 이 테스트는
         // REDIS_TEST_HOST 게이트 때문에 로컬에선 스킵되지만 Jenkins CI에선 항상 실행된다.
         assertThatThrownBy(() -> repository.initialize(
-            ROOM_CODE, SESSION_SEQ, 2, 7L, List.of(participantId)
+            ROOM_CODE, SESSION_SEQ, 0, 7L, List.of(participantId)
         )).isInstanceOfAny(
                 IllegalArgumentException.class,
                 InvalidDataAccessApiUsageException.class
             )
-            .hasMessageContaining("must be 1");
+            .hasMessageContaining("must be at least 1");
         assertThatThrownBy(() -> repository.initialize(
-            ROOM_CODE, SESSION_SEQ, 3, 7L, List.of(participantId)
+            ROOM_CODE, SESSION_SEQ, -1, 7L, List.of(participantId)
         )).isInstanceOfAny(
                 IllegalArgumentException.class,
                 InvalidDataAccessApiUsageException.class
             )
-            .hasMessageContaining("must be 1");
+            .hasMessageContaining("must be at least 1");
         assertThatThrownBy(() -> repository.initialize(
             ROOM_CODE, SESSION_SEQ, 1, 7L, List.of(participantId, participantId)
         )).isInstanceOfAny(

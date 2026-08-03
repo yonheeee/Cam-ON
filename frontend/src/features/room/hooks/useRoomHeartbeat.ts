@@ -1,4 +1,5 @@
 import { Client } from '@stomp/stompjs';
+import { handleExpiredSession } from '../../session/lib/sessionExpiry';
 import { useEffect } from 'react';
 
 // 백엔드는 STOMP CONNECT 시점에 session:{participantId}:alive(TTL 15초) 가드를 걸고, 이후
@@ -20,6 +21,9 @@ export function useRoomHeartbeat(roomId: string, accessToken: string) {
         Authorization: `Bearer ${accessToken}`,
       },
       reconnectDelay: 3000,
+      // STOMP는 인증 실패에도 reconnectDelay로 재연결을 계속 시도한다 — 죽은 토큰으로는
+      // 영원히 실패하므로, 세션을 정리하고 첫 화면으로 되돌려 루프를 끊는다.
+      onStompError: () => handleExpiredSession(),
       onConnect: () => {
         const beat = () =>
           client.publish({ destination: `/app/rooms/${roomId}/heartbeat`, body: '' });

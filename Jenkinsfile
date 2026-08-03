@@ -117,9 +117,45 @@ pipeline {
                     docker build \
                         --tag "${BACKEND_IMAGE}" \
                         backend
+
+                    # Vite는 VITE_* 값을 빌드 시점에 번들에 굽는다 — 런타임 env로는 못 바꾼다.
+                    # 그래서 배포에 필요한 외부 주소는 여기서 --build-arg로 넣어야 하고,
+                    # 배포 .env를 단일 출처로 삼는다(값을 두 곳에 적으면 갈라진다).
+                    #
+                    # main은 이 이미지를 실제로 배포하므로 빠진 값은 배포 전에 실패시킨다 —
+                    # 프론트는 값이 비어도 빌드가 성공하고 그 기능만 죽기 때문에, 통과시키면
+                    # 배포 후에야 드러난다.
+                    read_deploy_env() {
+                        key="$1"
+                        value=""
+                        if [ -f "${DEPLOY_DIR}/.env" ]; then
+                            value=$(sed -n "s/^${key}=//p" \
+                                "${DEPLOY_DIR}/.env" | tail -n 1)
+                        fi
+                        if [ -z "${value}" ]; then
+                            if [ "${BRANCH_NAME:-}" = "main" ]; then
+                                echo "${key} is missing in ${DEPLOY_DIR}/.env" >&2
+                                return 1
+                            fi
+                            echo "WARNING: ${key} not found in ${DEPLOY_DIR}/.env — frontend image will be built without it." >&2
+                        fi
+                        printf '%s' "${value}"
+                    }
+
+                    # LiveKit: 백엔드가 토큰을 서명하는 프로젝트와 반드시 같아야 한다.
+                    # 어긋나면 토큰 서명은 정상인데 연결만 거부돼서 원인을 찾기 어렵다.
+                    livekit_url=$(read_deploy_env LIVEKIT_URL) || exit 1
+                    # AI 서버(물건 가져오기 인식): Spring과 별개 호스트라 주소를 따로 준다.
+                    # 반드시 https여야 한다 — 배포 사이트는 HTTPS라 http 주소로 호출하면
+                    # 브라우저가 mixed content로 차단하고, 그러면 인식이 통째로 죽는다.
+                    # 안 넘기면 번들이 http://<접속호스트>:8100 폴백을 쓰는데 그게 정확히 차단되는 형태다.
+                    ai_base_url=$(read_deploy_env AI_BASE_URL) || exit 1
+
                     docker build \
                         --build-arg "VITE_API_BASE_URL=https://${DEPLOY_DOMAIN}" \
                         --build-arg "VITE_WS_BASE_URL=wss://${DEPLOY_DOMAIN}" \
+                        --build-arg "VITE_LIVEKIT_URL=${livekit_url}" \
+                        --build-arg "VITE_AI_BASE_URL=${ai_base_url}" \
                         --tag "${FRONTEND_IMAGE}" \
                         frontend
                     BACKEND_IMAGE="${BACKEND_IMAGE}" \

@@ -1,23 +1,26 @@
 import { Client } from '@stomp/stompjs';
+import { handleExpiredSession } from '../../session/lib/sessionExpiry';
 import { useEffect, useRef } from 'react';
 
-// 라운드 진행/공격 resolve/인터미션 전환을 실시간으로 반영하기 위한 구독. 서버가 /topic/rooms/{roomId}로
-// 미는 ninja:* 이벤트(round-started/attack-won/attack-resolved/round-timeout/game-ended)를 받으면
-// 곧바로 onNinjaEvent를 호출한다 — useNinjaRound는 이 콜백에서 상태를 즉시 다시 폴링해서,
-// 최대 폴링 주기(1.5초)를 기다리지 않고 반응한다.
+// 서버가 /topic/rooms/{roomId}로 미는 ninja:* 이벤트(round-started/attack-won/attack-resolved/
+// round-timeout/game-ended)를 구독해 payload째로 onNinjaEvent에 넘긴다. useNinjaRound가 이걸
+// 리듀서처럼 소비해 상태를 증분 갱신한다 — 폴링 없음.
 //
-// 전환의 "기준"은 어디까지나 서버가 내려준 상태(GET .../state)와 그 안의 서버 기준 시각이다. 이
-// 구독은 "언제 다시 읽을지"를 앞당기는 트리거일 뿐이라, WS를 놓쳐도(끊김/재접속) 폴링 폴백으로
-// 동일한 상태에 수렴한다. 단일 소스는 그대로 getState 하나.
+// onConnected는 STOMP가 (재)연결될 때마다 불린다. 이벤트는 "발생 순간 접속해 있던 사람"에게만
+// 가므로, 새로고침/끊김 복귀로 이벤트 공백이 생긴 클라이언트는 이 콜백에서 GET .../state로
+// 스냅샷을 한 번 받아 따라잡는다(그 이후는 다시 이벤트로만).
 export function useNinjaRealtime(
   roomId: string | null,
   accessToken: string | null,
-  onNinjaEvent: (eventName: string) => void,
+  onNinjaEvent: (eventName: string, data: unknown) => void,
+  onConnected: () => void,
 ) {
   const handlerRef = useRef(onNinjaEvent);
+  const connectedRef = useRef(onConnected);
   useEffect(() => {
     handlerRef.current = onNinjaEvent;
-  }, [onNinjaEvent]);
+    connectedRef.current = onConnected;
+  }, [onNinjaEvent, onConnected]);
 
   useEffect(() => {
     if (!roomId || !accessToken) return;
@@ -31,13 +34,18 @@ export function useNinjaRealtime(
         Authorization: `Bearer ${accessToken}`,
       },
       reconnectDelay: 3000,
+      // STOMP는 인증 실패에도 reconnectDelay로 재연결을 계속 시도한다 — 죽은 토큰으로는
+      // 영원히 실패하므로, 세션을 정리하고 첫 화면으로 되돌려 루프를 끊는다.
+      onStompError: () => handleExpiredSession(),
       onConnect: () => {
         client.subscribe(`/topic/rooms/${roomId}`, (message) => {
-          const event = JSON.parse(message.body) as { event?: string };
+          const event = JSON.parse(message.body) as { event?: string; data?: unknown };
           if (typeof event.event === 'string' && event.event.startsWith('ninja:')) {
-            handlerRef.current(event.event);
+            handlerRef.current(event.event, event.data);
           }
         });
+        // 구독을 걸어둔 "뒤에" 동기화해야 스냅샷과 다음 이벤트 사이에 빈틈이 없다.
+        connectedRef.current();
       },
     });
 
