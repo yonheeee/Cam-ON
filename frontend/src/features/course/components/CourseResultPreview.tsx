@@ -26,6 +26,8 @@ export function CourseResultPreview() {
         totalSessions={3}
         nicknameById={NICKNAMES}
         participantId="p2"
+        // 먼저 대기방으로 간 사람의 "대기방으로 갔어요" 표시까지 미리보기에 담는다
+        returnedParticipantIds={new Set(['p4'])}
         onReturnToLobby={() => {}}
         returning={false}
         returnError={null}

@@ -178,11 +178,8 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
   const { messages, sendMessage } = useRoomChat();
   const { gameNameOf } = useGameCatalog(accessToken);
 
-  const { activeSession, finished, intermission, skipped, clearSkipped } = useCourseProgress(
-    roomId,
-    accessToken,
-    participantId,
-  );
+  const { activeSession, finished, intermission, returnedParticipantIds, skipped, clearSkipped } =
+    useCourseProgress(roomId, accessToken, participantId);
   const recordedRoomEntryRef = useRef(false);
   useEffect(() => {
     if (recordedRoomEntryRef.current) return;
@@ -558,6 +555,7 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
           totalSessions={finished.totalSessions}
           nicknameById={nicknameById}
           participantId={participantId}
+          returnedParticipantIds={returnedParticipantIds}
           onReturnToLobby={() => void returnToLobby()}
           returning={returning}
           returnError={returnError}

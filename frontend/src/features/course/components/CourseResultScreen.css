@@ -161,6 +161,21 @@
   color: rgb(43 24 51 / 0.55);
 }
 
+/* 먼저 대기방으로 간 사람 — 캠 대신 아바타 위에 얹는 안내.
+   대기방 쪽 "게임 중"(.lobby-tile__in-result)과 짝을 이룬다: 어느 화면에 있든
+   사람은 한 화면에서만 캠으로 보이고, 다른 화면에는 어디로 갔는지만 남는다. */
+.course-result__left {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(var(--u) * 0.7);
+  z-index: 2;
+  text-align: center;
+  font-family: var(--pap-font-pixel);
+  font-size: calc(var(--u) * 0.7);
+  color: rgb(43 24 51 / 0.6);
+}
+
 /* ---- 오른쪽 위: 최종 순위표 ---- 칸: x 75.7~86.9 / y 38.1~70.5 */
 .course-result__ranking {
   position: absolute;

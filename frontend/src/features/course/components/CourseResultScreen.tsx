@@ -13,6 +13,12 @@ interface CourseResultScreenProps {
   /** 내 participantId — 내 줄을 강조하려고 */
   participantId: string;
   /**
+   * 이미 대기방으로 돌아간 사람들. 복귀가 개별 행동이라 결과 화면과 대기방이 동시에 떠 있는데,
+   * 캠까지 양쪽에 다 보이면 "저 사람은 어디 있는 건가"가 헷갈린다 — 돌아간 사람의 캠은 여기서
+   * 내리고 순위표에만 남긴다(점수는 코스 기록이라 사라지면 안 된다).
+   */
+  returnedParticipantIds: Set<string>;
+  /**
    * 대기방 복귀 요청. 방장 전용이 아니라 전원이 각자 누른다 — 화면 전환은 서버의
    * course:member-returned가 내 id로 돌아올 때 이뤄진다(누른 사람만 넘어간다).
    */
@@ -44,6 +50,7 @@ export function CourseResultScreen({
   totalSessions,
   nicknameById,
   participantId,
+  returnedParticipantIds,
   onReturnToLobby,
   returning,
   returnError,
@@ -67,9 +74,13 @@ export function CourseResultScreen({
   const nicknameOf = (id: string) => nicknameById.get(id) ?? '알 수 없음';
 
   // 캠이 아직 안 붙었거나 카메라를 끈 참가자는 닉네임 첫 글자를 아바타로 보여준다.
+  // 먼저 대기방으로 간 사람도 마찬가지다 — LiveKit 트랙은 방을 떠나기 전까진 계속 살아 있어서
+  // 그냥 두면 대기방에 있는 사람의 캠이 결과 화면에도 겹쳐 보인다. 자리(순위)는 그대로 두고
+  // 캠만 아바타로 바꾸고 "대기방으로 갔어요"를 덧붙인다.
   // 닉네임은 닌자 화면과 같은 방식(캠 위 픽셀 스티커, 배경 = 그 사람의 등수 색)으로 얹는다.
   const renderCam = (id: string) => {
-    const trackRef = trackByIdentity.get(id);
+    const returned = returnedParticipantIds.has(id);
+    const trackRef = returned ? undefined : trackByIdentity.get(id);
     return (
       <>
         {trackRef ? (
@@ -77,6 +88,7 @@ export function CourseResultScreen({
         ) : (
           <span className="course-result__avatar pap-pixel-title">{nicknameOf(id).slice(0, 1)}</span>
         )}
+        {returned && <span className="course-result__left">대기방으로 갔어요</span>}
         <span className="course-result__cam-name">{nicknameOf(id)}</span>
       </>
     );

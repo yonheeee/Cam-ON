@@ -12,6 +12,8 @@ import { useEffect, useState } from 'react';
 // - course:finished     코스의 마지막 게임까지 끝났다 → 종합 결과
 // - course:member-returned  누군가 종합 결과에서 대기방 복귀를 눌렀다. 복귀는 개별 행동이라
 //                       내 id일 때만 결과 화면을 접는다(남의 복귀로 내 화면이 넘어가면 안 된다).
+//                       남이 돌아간 경우엔 returnedParticipantIds에 쌓아, 이미 대기방으로 간
+//                       사람의 캠이 결과 화면에 계속 떠 있지 않게 한다.
 interface RoomEvent<T> {
   event: string;
   data: T;
@@ -72,6 +74,12 @@ interface UseCourseProgressResult {
   finished: CourseFinishedData | null;
   /** 진행 중인 게임 사이 대기 안내. 다음 게임이 열리거나 코스가 끝나면 null로 돌아간다 */
   intermission: IntermissionData | null;
+  /**
+   * 종합 결과에서 이미 대기방으로 돌아간 사람들. 결과 화면과 대기방은 서로 다른 화면이라
+   * 캠이 양쪽에 동시에 떠 있으면 안 된다 — 결과 화면은 이 집합에 든 사람의 캠을 그리지 않는다.
+   * 코스가 새로 끝날 때마다(course:finished) 비운다.
+   */
+  returnedParticipantIds: Set<string>;
   /** 방금 건너뛴 게임 안내 (표시 후 호출자가 지운다) */
   skipped: SessionSkippedData | null;
   clearSkipped: () => void;
@@ -87,6 +95,9 @@ export function useCourseProgress(
   const [finished, setFinished] = useState<CourseFinishedData | null>(null);
   const [intermission, setIntermission] = useState<IntermissionData | null>(null);
   const [skipped, setSkipped] = useState<SessionSkippedData | null>(null);
+  const [returnedParticipantIds, setReturnedParticipantIds] = useState<Set<string>>(
+    () => new Set(),
+  );
 
   useEffect(() => {
     const defaultProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -127,12 +138,21 @@ export function useCourseProgress(
               setFinished(event.data as CourseFinishedData);
               setActiveSession(null);
               setIntermission(null);
+              // 지난 코스에서 쌓인 복귀 기록을 비운다 — 이번 결과 화면은 전원이 아직 여기 있다.
+              setReturnedParticipantIds(new Set());
               break;
             case 'course:member-returned': {
               // 복귀는 개별 행동이다 — 돌아간 사람이 나일 때만 결과 화면을 접고 대기방으로
-              // 전환한다(대기방이 스냅샷을 새로 읽는다). 남이 돌아간 건 내 화면과 무관하고,
-              // 대기방 쪽 훅(useRoomLobby)이 그 사람 타일 표시만 갱신한다.
+              // 전환한다(대기방이 스냅샷을 새로 읽는다). 남이 돌아간 건 내 화면 전환과는
+              // 무관하지만, 그 사람 캠은 이제 대기방 쪽에 있으므로 결과 화면에서 지운다
+              // (대기방 타일 표시는 useRoomLobby가 따로 갱신한다).
               const data = event.data as MemberReturnedData;
+              setReturnedParticipantIds((prev) => {
+                if (prev.has(data.participantId)) return prev;
+                const next = new Set(prev);
+                next.add(data.participantId);
+                return next;
+              });
               if (data.participantId !== participantId) break;
               setFinished(null);
               setActiveSession(null);
@@ -155,6 +175,7 @@ export function useCourseProgress(
     activeSession,
     finished,
     intermission,
+    returnedParticipantIds,
     skipped,
     clearSkipped: () => setSkipped(null),
   };
