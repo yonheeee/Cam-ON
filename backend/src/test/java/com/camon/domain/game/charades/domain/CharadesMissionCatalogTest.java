@@ -29,9 +29,12 @@ class CharadesMissionCatalogTest {
                     .filter(CharadesMissionCatalog.MissionSpec::active))
                     .hasSizeGreaterThanOrEqualTo(4);
             });
+        // 제시어를 늘리거나 줄이면 이 숫자도 같이 고친다. 일부러 하드코딩한 canary다 —
+        // csv를 편집하다 무관한 줄이 딸려 지워지는 걸 잡으라고 둔 것이고, 실제로 제시어 확충
+        // 커밋에서 알파카/E.T.가 조용히 사라진 걸 이 assert가 잡았다.
         assertThat(CharadesMissionCatalog.TOPICS)
             .flatExtracting(CharadesMissionCatalog.TopicSpec::missions)
-            .hasSize(94);
+            .hasSize(166);
     }
 
     @Test
