@@ -1,0 +1,50 @@
+# 플레이테스트 분석 콘솔(Metabase) — 앱 배포와 분리된 별도 compose 프로젝트.
+#
+# 왜 deploy/docker-compose.prod.yml에 넣지 않았나:
+# Jenkins가 main 배포 때 docker-compose.prod.yml을 덮어쓰고 `compose up -d --remove-orphans`를
+# 돌린다. 그 파일에 없는 컨테이너는 orphan으로 간주돼 삭제되므로, 앱 배포 주기와 분석 도구의
+# 수명이 엮이면 배포 한 번에 대시보드가 사라진다. 프로젝트 이름을 분리하면(name: camon-analytics)
+# 앱 배포의 --remove-orphans가 이 컨테이너를 건드리지 않는다.
+#
+# MySQL은 앱 프로젝트가 만든 camon-network에 붙어 있으므로 external network로 참여만 한다
+# (Metabase는 컨테이너 주소 mysql:3306으로 접속 — 호스트 포트는 열지 않는다).
+name: camon-analytics
+
+services:
+  metabase:
+    image: metabase/metabase:v0.50.32
+    container_name: camon-metabase
+    environment:
+      # Metabase 자체 메타데이터(질문/대시보드/계정)는 H2 파일에 둔다. Cam-ON MySQL에 섞으면
+      # 앱 스키마와 분석 도구의 내부 테이블이 한 DB에 뒤엉킨다. 볼륨에 보관되므로 컨테이너를
+      # 지우고 다시 만들어도 대시보드는 남는다.
+      MB_DB_FILE: /metabase-data/metabase.db
+      JAVA_TIMEZONE: Asia/Seoul
+      # 힙 상한을 명시한다. 안 주면 JVM이 호스트 메모리의 1/4을 힙으로 잡아, 같은 인스턴스의
+      # backend/MySQL과 메모리를 경쟁한다.
+      JAVA_OPTS: -Xmx1g
+      # SSH 터널로 접속하므로 사용자에게 보이는 주소는 터널 로컬 포트다.
+      MB_SITE_URL: http://localhost:${METABASE_PORT:-3001}
+      MB_ANON_TRACKING_ENABLED: "false"
+    ports:
+      # 127.0.0.1 바인딩이 이 배포의 접근 제어다 — 반드시 유지한다.
+      #
+      # 이 호스트는 ufw가 켜져 있지만 22/443/8989만 허용돼 있는데도 80이 열려 있다. Docker가
+      # published 포트를 nat/DOCKER-USER 체인에 직접 넣어 ufw의 INPUT 규칙을 우회하기 때문이다.
+      # 즉 여기를 0.0.0.0으로 바꾸면 ufw에 포트를 열지 않아도 분석 콘솔이 인터넷에 그대로
+      # 노출된다(보안그룹이 막아주길 기대하는 형태가 됨). 접속은 SSH 터널로 한다:
+      #   ssh -i <pem> -L 3001:localhost:3001 ubuntu@<도메인>
+      - "127.0.0.1:${METABASE_PORT:-3001}:3000"
+    volumes:
+      - metabase-data:/metabase-data
+    networks:
+      - camon-network
+    restart: unless-stopped
+
+networks:
+  camon-network:
+    name: camon-network
+    external: true
+
+volumes:
+  metabase-data:
