@@ -77,7 +77,10 @@ export function CourseResultScreen({
         ) : (
           <span className="course-result__avatar pap-pixel-title">{nicknameOf(id).slice(0, 1)}</span>
         )}
-        <span className="course-result__cam-name">{nicknameOf(id)}</span>
+        {/* 하단 그라데이션 바 + 등수 색 띠 + 흰 이름 (::before가 색 띠) */}
+        <span className="course-result__cam-name">
+          <span>{nicknameOf(id)}</span>
+        </span>
       </>
     );
   };
@@ -133,17 +136,20 @@ export function CourseResultScreen({
         {/* 오른쪽 아래 — 버튼. 대기방 복귀는 전원이 각자 누르고 누른 사람만 넘어간다
             (예전엔 방장 전용이었다). 방을 아예 떠나려면 "방 나가기". */}
         <div className="course-result__actions">
-          <button
-            type="button"
-            className="pap-pixel-btn course-result__btn course-result__btn--lobby"
-            onClick={onReturnToLobby}
-            disabled={returning}
+          {/* 안내는 버튼 아래 문구가 아니라 hover 말풍선으로 — 문구가 끼면 아래 버튼이 밀린다 */}
+          <span
+            className="course-result__btn-wrap"
+            data-hint={'먼저 가도 괜찮아요. 남은 사람은 대기방에 "게임 중"으로 표시돼요'}
           >
-            {returning ? '돌아가는 중...' : '대기방으로'} {!returning && <span aria-hidden>→</span>}
-          </button>
-          <p className="course-result__wait-host">
-            먼저 가도 괜찮아요. 남은 사람은 대기방에 "게임 중"으로 표시돼요
-          </p>
+            <button
+              type="button"
+              className="pap-pixel-btn course-result__btn course-result__btn--lobby"
+              onClick={onReturnToLobby}
+              disabled={returning}
+            >
+              {returning ? '돌아가는 중...' : '대기방으로'} {!returning && <span aria-hidden>→</span>}
+            </button>
+          </span>
           <button type="button" className="pap-pixel-btn course-result__btn" onClick={onLeave}>
             방 나가기
           </button>
