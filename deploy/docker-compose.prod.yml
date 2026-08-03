@@ -59,6 +59,17 @@ services:
       # 생기기 전까지는 배포 환경도 local 프로필을 그대로 쓴다 — JWT 서명키가 백엔드 재시작마다
       # 새로 생성되는 대가가 있지만, 게스트 토큰 기반 임시 세션이라 재로그인 정도로 끝난다.
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-local}
+      # 플레이테스트 분석용 참가자 키 HMAC 시크릿. 값이 없으면 배포를 실패시킨다 —
+      # 빠뜨리면 백엔드가 application.yml의 기본값(local-analytics-secret-change-me)으로
+      # 조용히 돌아가고, 그 사실이 대시보드 숫자에는 정상처럼 보여서 알아채기 어렵다.
+      # 한 번 정한 뒤에는 바꾸지 않는다(바꾸면 같은 브라우저가 다른 키로 해싱돼서
+      # 재방문율·익명 브라우저 수가 과거 데이터와 이어지지 않는다).
+      ANALYTICS_HMAC_SECRET: ${ANALYTICS_HMAC_SECRET:?ANALYTICS_HMAC_SECRET 미설정 — deploy/.env에 임의의 긴 문자열을 넣어야 한다}
+      # 버전별 비교가 필요할 때만 deploy/.env에서 덮어쓴다. 기본값은 application.yml과 같은
+      # 값으로 맞춰 둔다 — compose에서 빈 문자열을 넘기면 Spring의 기본값이 그 빈 문자열로
+      # 덮여서 대시보드의 "앱 버전" 칸이 통째로 비어 버린다.
+      APP_VERSION: ${APP_VERSION:-local}
+      EXPERIMENT_VERSION: ${EXPERIMENT_VERSION:-baseline}
       # 공개 배포 환경에서는 API 문서를 통째로 차단한다(스캐너가 dev 엔드포인트를 찾는 진입점이 됨).
       SWAGGER_ENABLED: "false"
       JWT_PRIVATE_KEY_PATH: /run/secrets/camon/jwt-private.pem

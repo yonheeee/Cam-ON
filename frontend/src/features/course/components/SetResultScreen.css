@@ -119,10 +119,29 @@
   flex: 1;
   height: calc(var(--u) * 1.1);
   background: rgb(255 255 255 / 0.08);
+  transform-origin: left center;
 }
 
 .set-result__cell--on {
   background: var(--c);
+  animation: set-result-cell-fill 160ms steps(2, end) both;
+  animation-delay: calc(var(--row-index) * 70ms + var(--cell-index) * 45ms);
+}
+
+@keyframes set-result-cell-fill {
+  from {
+    background: rgb(255 255 255 / 0.08);
+    filter: brightness(1.8);
+    opacity: 0.35;
+    transform: scaleX(0.15);
+  }
+
+  to {
+    background: var(--c);
+    filter: brightness(1);
+    opacity: 1;
+    transform: scaleX(1);
+  }
 }
 
 .set-result__score {
@@ -132,9 +151,28 @@
   color: var(--c);
 }
 
+.set-result__score--settled {
+  animation: set-result-score-settle 280ms steps(2, end);
+}
+
+@keyframes set-result-score-settle {
+  50% {
+    filter: brightness(1.8);
+    text-shadow: 0 0 calc(var(--u) * 0.8) var(--c);
+    transform: scale(1.08);
+  }
+}
+
 /* 내 줄만 살짝 밝게 — 전광판 위라 테두리를 두르면 판이 지저분해진다 */
 .set-result__row--me .set-result__name {
   text-shadow: 0 0 calc(var(--u) * 0.8) var(--c);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .set-result__cell--on,
+  .set-result__score--settled {
+    animation: none;
+  }
 }
 
 /* ---- 아래 컨트롤 덱: 누적 순위 + 다음 세트 ---- */
@@ -166,20 +204,15 @@
   color: var(--pap-white);
 }
 
-.set-result__deck-sub {
-  margin: calc(var(--u) * 0.3) 0 calc(var(--u) * 0.9);
-  font-size: calc(var(--u) * 0.72);
-  opacity: 0.7;
-}
-
 .set-result__cards {
   display: grid;
-  flex: 1;
+  flex: none;
   min-height: 0;
+  height: calc(var(--u) * 6.4);
   grid-auto-columns: 1fr;
   grid-auto-flow: column;
   gap: calc(var(--u) * 0.8);
-  margin: 0;
+  margin: calc(var(--u) * 0.7) 0 0;
   padding: 0;
   list-style: none;
 }
@@ -188,8 +221,8 @@
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: calc(var(--u) * 0.3);
-  padding: calc(var(--u) * 0.4) calc(var(--u) * 0.7);
+  gap: calc(var(--u) * 0.2);
+  padding: calc(var(--u) * 0.25) calc(var(--u) * 0.6);
   border: 2px solid var(--c);
   border-radius: var(--pap-radius);
   background: rgb(255 255 255 / 0.04);

@@ -1,6 +1,6 @@
 import { ParticipantTile, useTracks } from '@livekit/components-react';
 import { Track } from 'livekit-client';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { CourseScoreEntry } from '../hooks/useCourseProgress';
 import { useAnnouncementSound } from '../../sound/hooks/useAnnouncementSound';
 import './CourseResultScreen.css';
@@ -37,6 +37,30 @@ const RANK_COLORS = [
   'var(--pap-lavender)',
 ];
 
+const FIREWORK_COLORS = ['#ff6f61', '#ffd84d', '#52d6cc', '#a98bff', '#fff3c4'];
+const FIREWORK_BURSTS = [
+  { x: '21%', y: '16%', delay: '0.15s' },
+  { x: '50%', y: '10%', delay: '0.75s' },
+  { x: '79%', y: '16%', delay: '1.35s' },
+];
+const FIREWORK_PARTICLES = 14;
+const RANK_ROW_STAGGER_MS = 160;
+const RANK_SCORE_DURATION_MS = 900;
+
+const TrophyIcon = (
+  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path d="M8 4h8v4c0 3-1.8 5-4 5S8 11 8 8V4Z" fill="currentColor" />
+    <path d="M8 6H5v1c0 2.2 1.3 3.5 3.3 3.5M16 6h3v1c0 2.2-1.3 3.5-3.3 3.5" />
+    <path d="M12 13v4M8.5 20h7M10 17h4" />
+  </svg>
+);
+
+const WinnerCrownIcon = (
+  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path d="M3 8v9.5h18V8l-4.5 3L12 5.5 7.5 11 3 8Z" fill="currentColor" />
+  </svg>
+);
+
 // 코스의 모든 게임이 끝난 뒤 뜨는 종합 결과. 점수는 코스 전체 누적(room:{code}:course:totals)이다.
 // 배경 그림(시상대 무대)의 칸에 맞춰: 가운데 큰 화면 = 우승자 캠, 아래 3칸 = 2~4위 캠,
 // 오른쪽 = 최종 순위표와 버튼.
@@ -49,7 +73,6 @@ export function CourseResultScreen({
   ranking,
   totalSessions,
   nicknameById,
-  participantId,
   returnedParticipantIds,
   onReturnToLobby,
   returning,
@@ -96,10 +119,67 @@ export function CourseResultScreen({
 
   const winner = ranking[0] ?? null;
   const runnersUp = ranking.slice(1, 4);
+  const rankingSignature = ranking
+    .map((entry) => `${entry.participantId}:${entry.rank}:${entry.totalScore}`)
+    .join('|');
+  const rankRevealDuration =
+    Math.max(0, ranking.length - 1) * RANK_ROW_STAGGER_MS + RANK_SCORE_DURATION_MS;
+  const [rankRevealElapsed, setRankRevealElapsed] = useState(0);
+
+  useEffect(() => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      setRankRevealElapsed(rankRevealDuration);
+      return;
+    }
+
+    let frameId = 0;
+    const startedAt = performance.now();
+    const tick = (now: number) => {
+      const elapsed = Math.min(rankRevealDuration, now - startedAt);
+      setRankRevealElapsed(elapsed);
+      if (elapsed < rankRevealDuration) frameId = requestAnimationFrame(tick);
+    };
+
+    setRankRevealElapsed(0);
+    frameId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frameId);
+  }, [rankRevealDuration, rankingSignature]);
 
   return (
     <div className="course-result">
       <div className="course-result__stage">
+        <div className="course-result__fireworks" aria-hidden>
+          {FIREWORK_BURSTS.map((burst, burstIndex) => (
+            <span
+              key={burstIndex}
+              className="course-result__firework"
+              style={
+                {
+                  '--firework-x': burst.x,
+                  '--firework-y': burst.y,
+                  '--firework-delay': burst.delay,
+                } as React.CSSProperties
+              }
+            >
+              {Array.from({ length: FIREWORK_PARTICLES }, (_, particleIndex) => (
+                <i
+                  key={particleIndex}
+                  className="course-result__firework-particle"
+                  style={
+                    {
+                      '--firework-angle': `${(360 / FIREWORK_PARTICLES) * particleIndex}deg`,
+                      '--firework-distance': `calc(var(--u) * ${
+                        9 + (particleIndex % 3) * 1.5
+                      })`,
+                      '--firework-color':
+                        FIREWORK_COLORS[(burstIndex + particleIndex) % FIREWORK_COLORS.length],
+                    } as React.CSSProperties
+                  }
+                />
+              ))}
+            </span>
+          ))}
+        </div>
         <p className="course-result__plate">오늘의 우승자!</p>
 
         {/* 가운데 큰 화면 — 우승자 캠 */}
@@ -125,20 +205,41 @@ export function CourseResultScreen({
 
         {/* 오른쪽 위 — 최종 순위표 */}
         <section className="course-result__ranking">
-          <h1 className="course-result__ranking-title">최종 순위</h1>
+          <h1 className="course-result__ranking-title">
+            {TrophyIcon}
+            최종 순위
+          </h1>
           <ol className="course-result__list">
-            {ranking.map((entry) => (
-              <li
-                key={entry.participantId}
-                className={`course-result__row${
-                  entry.rank === 1 ? ' course-result__row--first' : ''
-                }${entry.participantId === participantId ? ' course-result__row--me' : ''}`}
-              >
-                <span className="course-result__rank">{entry.rank}</span>
-                <span className="course-result__nickname">{nicknameOf(entry.participantId)}</span>
-                <span className="course-result__score">{entry.totalScore}점</span>
-              </li>
-            ))}
+            {ranking.map((entry, index) => {
+              const rowDelay = index * RANK_ROW_STAGGER_MS;
+              const progress = Math.min(
+                1,
+                Math.max(0, (rankRevealElapsed - rowDelay) / RANK_SCORE_DURATION_MS),
+              );
+              const displayedScore = Math.round(entry.totalScore * progress);
+              return (
+                <li
+                  key={entry.participantId}
+                  className={`course-result__row${
+                    entry.rank === 1 ? ' course-result__row--first' : ''
+                  }${progress === 1 ? ' course-result__row--settled' : ''}`}
+                  style={
+                    {
+                      '--c': RANK_COLORS[index % RANK_COLORS.length],
+                      '--row-index': index,
+                    } as React.CSSProperties
+                  }
+                >
+                  <span className="course-result__rank-badge">
+                    {entry.rank === 1 ? WinnerCrownIcon : entry.rank}
+                  </span>
+                  <span className="course-result__name-wrap">
+                    <span className="course-result__nickname">{nicknameOf(entry.participantId)}</span>
+                  </span>
+                  <span className="course-result__score">{displayedScore}점</span>
+                </li>
+              );
+            })}
           </ol>
         </section>
 
@@ -153,9 +254,6 @@ export function CourseResultScreen({
           >
             {returning ? '돌아가는 중...' : '대기방으로'} {!returning && <span aria-hidden>→</span>}
           </button>
-          <p className="course-result__wait-host">
-            먼저 가도 괜찮아요. 남은 사람은 대기방에 "게임 중"으로 표시돼요
-          </p>
           <button type="button" className="pap-pixel-btn course-result__btn" onClick={onLeave}>
             방 나가기
           </button>
