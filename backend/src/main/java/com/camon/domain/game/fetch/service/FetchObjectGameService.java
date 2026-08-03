@@ -467,6 +467,35 @@ public class FetchObjectGameService {
         return Map.copyOf(scores);
     }
 
+    /**
+     * 진행 중에 참가자가 방을 떠났다. 물건 가져오기는 라운드가 시간 기반이라 닌자처럼 판이
+     * 멈추지는 않지만, 떠난 사람이 참가자 집합에 남아 있으면 남은 사람이 전원 제출해도
+     * 라운드가 조기에 닫히지 않고 매 라운드 제한시간을 다 태운다.
+     */
+    public void handleParticipantLeft(
+        UUID roomId,
+        UUID participantId,
+        int connectedCount
+    ) {
+        Room room = roomRepository.findById(roomId).orElse(null);
+        if (room == null) {
+            return;
+        }
+        int sessionSeq = room.currentSessionSeq();
+        // 물건 가져오기 세션이 열려 있지 않으면 내 차례가 아니다(다른 게임이 진행 중이거나
+        // 이미 끝났다) — GameParticipantLeaveHandler 계약대로 조용히 빠진다.
+        if (fetchRedis.findCurrentRoundState(room.roomCode(), sessionSeq).isEmpty()
+            || fetchRedis.isSessionEnded(room.roomCode(), sessionSeq)) {
+            return;
+        }
+
+        fetchRedis.removeParticipant(room.roomCode(), sessionSeq, participantId);
+        // 혼자 남으면 더 겨룰 상대가 없다 — 남은 라운드를 다 돌리지 않고 여기서 끝낸다.
+        if (connectedCount <= 1) {
+            finishGame(room, sessionSeq);
+        }
+    }
+
     private void finishGame(Room room, int sessionSeq) {
         cancelPendingTimeout(room.roomCode(), sessionSeq);
         fetchRedis.markSessionEnded(room.roomCode(), sessionSeq);
