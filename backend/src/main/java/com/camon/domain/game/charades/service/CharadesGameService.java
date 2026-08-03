@@ -336,7 +336,8 @@ public class CharadesGameService {
                     state.currentTurn(),
                     state.presenterId(),
                     participant.participantId(),
-                    submittedAt
+                    submittedAt,
+                    mission.getKeyword()
                 )
             );
             advanceAfterTerminalTurn(room);
@@ -530,7 +531,11 @@ public class CharadesGameService {
         charadesEventPublisher.publish(
             room.roomId(),
             ROUND_TIMEOUT_EVENT,
-            new CharadesRoundTimeoutPayload(round, turn)
+            new CharadesRoundTimeoutPayload(
+                round,
+                turn,
+                resolveRevealWord(state)
+            )
         );
         advanceAfterTerminalTurn(room);
     }
@@ -781,6 +786,27 @@ public class CharadesGameService {
         if (state.expiresAt() == null || !now.isBefore(state.expiresAt())) {
             throw new BusinessException(ErrorCode.CHARADES_TURN_EXPIRED);
         }
+    }
+
+    // 끝난 턴의 제시어를 전원에게 공개하기 위한 조회. findCurrentMission과 달리 못 찾아도
+    // 예외를 던지지 않고 null을 준다 — 이 값은 타임아웃 이벤트에 얹히는 부가 정보일 뿐이라,
+    // 여기서 터지면 다음 표현자로 넘어가지 못하고 게임 자체가 멈춘다. 프론트는 word가 없을 때의
+    // 표시("아무도 못 맞혔어요")를 이미 갖고 있어서 null이면 그 화면으로 떨어진다.
+    //
+    // gameId 없이 topicId로 찾는 이유는 MissionRepository 쪽 주석 참고(스케줄러 콜백엔 gameId가 없다).
+    private String resolveRevealWord(CharadesGameState state) {
+        if (state == null || state.missionId() == null || state.topicId() == null) {
+            return null;
+        }
+        return missionRepository
+            .findByMissionIdAndTopicTopicIdAndMissionTypeAndIsActiveTrue(
+                state.missionId(),
+                state.topicId(),
+                MISSION_TYPE
+            )
+            .map(Mission::getKeyword)
+            .filter(keyword -> !keyword.isBlank())
+            .orElse(null);
     }
 
     private Mission findCurrentMission(

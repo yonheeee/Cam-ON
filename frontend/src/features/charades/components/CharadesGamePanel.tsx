@@ -47,6 +47,7 @@ export function CharadesGamePanel({
     isPresenter,
     phase,
     myWord,
+    revealedWord,
     chatLog,
     lastAnswererId,
     lastInvalidReason,
@@ -213,19 +214,13 @@ export function CharadesGamePanel({
       )}
 
       {/* 정답/시간 초과 모두 같은 팝업으로 이번 턴 제시어를 공개한다.
-          제시어 출처: 표현자는 자기가 받아둔 myWord, 그 외 참가자는
-           - 정답: 최초 정답자가 친 채팅 텍스트(= 정답)
-           - 시간 초과: 알 수 있는 경로가 없다(GET /word는 표현자·PLAYING 상태로 제한) → null */}
+          제시어는 턴이 끝날 때 서버가 answer-revealed·round-timeout에 실어주는 revealedWord가
+          원본이라 표현자든 아니든 같은 값을 본다. myWord(표현자 전용)는 그 이벤트를 놓쳤을 때의
+          폴백일 뿐이다. */}
       {(phase === 'correct' || phase === 'timeout') && (
         <CharadesResultBanner
           tone={phase}
-          word={
-            isPresenter
-              ? myWord
-              : phase === 'correct'
-                ? (latestGuessByParticipant[lastAnswererId ?? ''] ?? null)
-                : null
-          }
+          word={revealedWord ?? (isPresenter ? myWord : null)}
           answererName={phase === 'correct' ? displayName(lastAnswererId) : null}
           isFinalTurn={gameEndPending}
         />
@@ -417,7 +412,7 @@ function CharadesResultBanner({
   isFinalTurn,
 }: {
   tone: 'correct' | 'timeout';
-  /** 이번 턴 제시어. 시간 초과일 때 표현자가 아니면 알 수 없어 null이 온다(아래 주석 참고). */
+  /** 이번 턴 제시어. 서버가 제시어를 찾지 못했거나 결과 이벤트를 놓쳤을 때만 null이다. */
   word: string | null | undefined;
   /** 정답일 때만 쓰는 최초 정답자 이름 */
   answererName: string | null;
@@ -443,9 +438,9 @@ function CharadesResultBanner({
     <div className="charades-correct-overlay">
       <div className={`charades-correct-card${isTimeout ? ' charades-correct-card--timeout' : ''}`}>
         <p className="charades-correct-card__title">{isTimeout ? '시간 초과!' : '정답!'}</p>
-        {/* 시간 초과인데 제시어를 모르는 사람(표현자가 아닌 참가자)에겐 가짜 '???' 대신
-            정답을 못 받았다는 사실을 그대로 보여준다 — 백엔드가 round-timeout payload에
-            제시어를 실어주면 이 분기는 사라진다. */}
+        {/* 정상 흐름에선 서버가 제시어를 실어주므로 위쪽 분기만 탄다. 아래는 제시어를 끝내
+            못 받은 경우(미션 조회 실패, 결과 이벤트 유실)의 폴백 — 가짜 '???'로 채우지 않고
+            모른다는 사실을 그대로 보여준다. */}
         {word ? (
           <p className="charades-correct-card__word">{word}</p>
         ) : (

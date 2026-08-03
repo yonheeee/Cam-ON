@@ -59,6 +59,15 @@ interface AnswerRevealedData {
   turn: number;
   presenterId: string;
   answererId: string;
+  /** 이번 턴 제시어 원본. 정답자가 친 텍스트와 다를 수 있다(정규화 매칭이라 "코 끼리!"도 정답) */
+  word: string | null;
+}
+
+interface RoundTimeoutData {
+  round: number;
+  turn: number;
+  /** 아무도 못 맞힌 채 끝난 턴의 제시어. 서버가 못 찾으면 null */
+  word: string | null;
 }
 
 interface RoundInvalidatedData {
@@ -84,6 +93,9 @@ export function useCharadesRound(
   const [expiresAt, setExpiresAt] = useState<string | null>(null);
   const [phase, setPhase] = useState<CharadesPhase | null>(null);
   const [myWord, setMyWord] = useState<string | null>(null);
+  // 턴이 끝날 때 서버가 공개하는 제시어 — 표현자 여부와 무관하게 전원이 같은 값을 본다.
+  // myWord(표현자 전용, GET /word)와 달리 턴이 끝난 뒤에만 채워진다.
+  const [revealedWord, setRevealedWord] = useState<string | null>(null);
   const [chatLog, setChatLog] = useState<CharadesChatEntry[]>([]);
   const [lastAnswererId, setLastAnswererId] = useState<string | null>(null);
   const [lastInvalidReason, setLastInvalidReason] = useState<string | null>(null);
@@ -133,6 +145,7 @@ export function useCharadesRound(
     setPresenterId(data.presenterId);
     setExpiresAt(data.expiresAt);
     setMyWord(null);
+    setRevealedWord(null);
     setChatLog([]);
     setLastAnswererId(null);
     setLastInvalidReason(null);
@@ -158,6 +171,7 @@ export function useCharadesRound(
     setExpiresAt(state.expiresAt);
     if (turnChanged) {
       setMyWord(null);
+      setRevealedWord(null);
       setChatLog([]);
       setLastAnswererId(null);
       setLastInvalidReason(null);
@@ -277,13 +291,15 @@ export function useCharadesRound(
             case 'charades:answer-revealed': {
               const data = event.data as AnswerRevealedData;
               setLastAnswererId(data.answererId);
+              setRevealedWord(data.word ?? null);
               resultShownAtRef.current = Date.now();
               playAnswerSound(true);
               setPhase('correct');
               break;
             }
             case 'charades:round-timeout': {
-              // payload에 제시어가 없다(round/turn뿐) — 정답 공개는 표현자 본인의 myWord로만 가능하다.
+              const data = event.data as RoundTimeoutData;
+              setRevealedWord(data.word ?? null);
               resultShownAtRef.current = Date.now();
               setPhase('timeout');
               break;
@@ -376,6 +392,7 @@ export function useCharadesRound(
     phase,
     expiresAt,
     myWord,
+    revealedWord,
     chatLog,
     lastAnswererId,
     lastInvalidReason,
