@@ -9,6 +9,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { GesturePanel } from '../../gesture/components/GesturePanel';
 import { useGestureBoardStore } from '../../gesture/store/gestureBoardStore';
 import { BackgroundMusic } from '../../sound/components/BackgroundMusic';
+import { SpeakingIndicator } from '../../webrtc/components/SpeakingIndicator';
+import { useSpeakingIdentities } from '../../webrtc/hooks/useSpeakingIdentities';
 import { useAnnouncementSound } from '../../sound/hooks/useAnnouncementSound';
 import { useCountdownSound } from '../../sound/hooks/useCountdownSound';
 import { useNinjaEliminationSound } from '../hooks/useNinjaEliminationSound';
@@ -149,6 +151,7 @@ export function NinjaBattleScreen({
     () => new Map(tracks.map((t) => [t.participant.identity, t])),
     [tracks],
   );
+  const speakingIds = useSpeakingIdentities();
 
   // 타일 순서와 플레이어 색은 모든 참가자 화면에서 같아야 한다(내 화면에선 2P인 사람이 남의 화면에선
   // 3P면 색으로 소통이 안 된다). LiveKit participants 배열 순서는 클라이언트마다 다를 수 있어서
@@ -231,6 +234,9 @@ export function NinjaBattleScreen({
           {/* 탈락하면 인식 루프와 브로드캐스트를 끊는다 — 판정에 쓰이지 않는 추론을 매 프레임
               돌릴 이유가 없다(제출도 훅에서 이미 막혀 있다). 다음 판이 열리면 다시 켜진다. */}
           {isMe && <GesturePanel variant="overlay" active={!isEliminated} />}
+          {/* 탈락한 사람은 회색 오버레이 위에 표시가 겹치지 않게 뺀다 — 판에서 빠진 사람이라
+              누가 말하는지 알려줄 대상이 아니다. */}
+          <SpeakingIndicator active={!dead && speakingIds.has(id)} />
           {/* 이펙트는 이 타일 안에서만 재생된다 — 컴포넌트가 호스트 div 크기에 맞춰 그린다.
               시드의 모든 스킬이 skillEffects의 BY_SKILL_ID에 있어서 폴백 파티클은 없앴다 —
               매핑이 빠진 스킬이 생기면 이펙트 없이 진동만 남으니 스킬 추가 시 표를 함께 고친다. */}

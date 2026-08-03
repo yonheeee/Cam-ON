@@ -9,6 +9,8 @@ import { Track } from 'livekit-client';
 import { PixelConfirmModal } from '../../system/components/PixelConfirmModal';
 import { CamOffIcon } from '../../room/components/lobbyIcons';
 import { BackgroundMusic } from '../../sound/components/BackgroundMusic';
+import { SpeakingIndicator } from '../../webrtc/components/SpeakingIndicator';
+import { useSpeakingIdentities } from '../../webrtc/hooks/useSpeakingIdentities';
 import { useCountdownSound } from '../../sound/hooks/useCountdownSound';
 import { useFetchDetection } from '../hooks/useFetchDetection';
 import type { DetectionResult } from '../api/aiApi';
@@ -87,6 +89,7 @@ export function FetchObjectGame({
     onlySubscribed: false,
   });
   const localTrack = tracks.find((t) => t.participant.isLocal)?.publication?.track;
+  const speakingIds = useSpeakingIdentities();
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !localTrack) return;
@@ -233,6 +236,7 @@ export function FetchObjectGame({
             </span>
           )}
           {done && <span className="fetch-seat__stamp">{rank + 1}위</span>}
+          <SpeakingIndicator active={speakingIds.has(seat.identity)} />
 
           {/* 닉네임 배지 — 캠 좌측 상단 픽셀 스티커. 닌자와 같은 방식 */}
           <span className={`fetch-seat__tag${isMe ? ' fetch-seat__tag--me' : ''}`}>
