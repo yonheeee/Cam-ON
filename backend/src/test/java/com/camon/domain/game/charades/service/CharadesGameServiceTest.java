@@ -927,9 +927,6 @@ class CharadesGameServiceTest {
                 nextPresenter.participantId(),
                 remainingParticipant.participantId()
             ));
-        when(participantRepository.findAll(roomId)).thenReturn(
-            List.of(nextPresenter, remainingParticipant)
-        );
         when(participantRepository.findById(
             roomId,
             nextPresenter.participantId()
@@ -942,12 +939,14 @@ class CharadesGameServiceTest {
         service.handleParticipantLeft(
             roomId,
             presenterId,
-            "TIMEOUT"
+            "TIMEOUT",
+            2
         );
         service.handleParticipantLeft(
             roomId,
             presenterId,
-            "TIMEOUT"
+            "TIMEOUT",
+            2
         );
 
         verify(charadesEventPublisher).publish(
@@ -993,15 +992,12 @@ class CharadesGameServiceTest {
         when(roomRepository.findById(roomId)).thenReturn(Optional.of(room));
         when(charadesRedis.findState(ROOM_CODE, SESSION_SEQ))
             .thenReturn(Optional.of(playing));
-        when(participantRepository.findAll(roomId)).thenReturn(List.of(
-            participant(presenterId, "표현자"),
-            participant(UUID.randomUUID(), "남은참가자")
-        ));
 
         service.handleParticipantLeft(
             roomId,
             departedParticipantId,
-            "LEFT"
+            "LEFT",
+            2
         );
 
         verify(charadesRedis, never()).transitionStatus(
@@ -1034,9 +1030,6 @@ class CharadesGameServiceTest {
                 Optional.of(playing),
                 Optional.empty()
             );
-        when(participantRepository.findAll(roomId)).thenReturn(List.of(
-            participant(presenterId, "마지막참가자")
-        ));
         when(charadesRedis.transitionStatus(
             ROOM_CODE,
             SESSION_SEQ,
@@ -1047,12 +1040,14 @@ class CharadesGameServiceTest {
         service.handleParticipantLeft(
             roomId,
             departedParticipantId,
-            "LEFT"
+            "LEFT",
+            1
         );
         service.handleParticipantLeft(
             roomId,
             departedParticipantId,
-            "LEFT"
+            "LEFT",
+            1
         );
 
         InOrder order = inOrder(

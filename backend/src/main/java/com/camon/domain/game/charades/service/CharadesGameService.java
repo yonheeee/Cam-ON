@@ -420,7 +420,8 @@ public class CharadesGameService {
     public void handleParticipantLeft(
         UUID roomId,
         UUID participantId,
-        String reason
+        String reason,
+        int connectedCount
     ) {
         Room room = roomRepository.findById(roomId).orElse(null);
         if (room == null) {
@@ -431,17 +432,13 @@ public class CharadesGameService {
             room.roomCode(),
             sessionSeq
         ).orElse(null);
+        // 몸으로 말해요 세션이 열려 있지 않으면 내 차례가 아니다(다른 게임이 진행 중이거나
+        // 이미 끝났다) — GameParticipantLeaveHandler 계약대로 조용히 빠진다.
         if (state == null || state.status() == CharadesTurnStatus.FINISHED) {
             return;
         }
 
-        long connectedPlayerCount = participantRepository.findAll(roomId)
-            .stream()
-            .filter(participant ->
-                participant.connectionStatus() == ConnectionStatus.CONNECTED
-            )
-            .count();
-        if (connectedPlayerCount <= 1) {
+        if (connectedCount <= 1) {
             finishGame(room);
             return;
         }
