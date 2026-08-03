@@ -23,6 +23,7 @@ topic,keyword,difficulty,is_active
 동물,개구리,NORMAL,true
 동물,모기,NORMAL,true
 동물,비둘기,NORMAL,true
+동물,알파카,NORMAL,true
 동물,낙타,NORMAL,true
 동물,다람쥐,NORMAL,true
 동물,코알라,NORMAL,true
@@ -137,6 +138,7 @@ topic,keyword,difficulty,is_active
 영화,헐크,NORMAL,true
 영화,아이언맨,NORMAL,true
 영화,알라딘,NORMAL,true
+영화,E.T.,NORMAL,true
 영화,해리포터,NORMAL,true
 영화,터미네이터,NORMAL,true
 영화,라이온킹,NORMAL,true
