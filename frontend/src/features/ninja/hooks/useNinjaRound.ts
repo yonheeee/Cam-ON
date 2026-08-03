@@ -223,6 +223,10 @@ export function useNinjaRound(
       return;
     }
     let cancelled = false;
+    // 새 교환의 스킬을 받기 전까지 이전 교환의 스킬을 화면에 남겨두면, 라운드가 시작되는
+    // 순간 직전 술법과 인술이 잠깐 보였다가 바뀐다("잔상"). 조회를 시작할 때 먼저 비운다 —
+    // 그동안 보드는 스킬 없는 상태(빈 화면)가 되고, 응답이 오면 새 술법으로 채워진다.
+    setRequiredSkill(null);
     ninjaApi
       .getRoundSkill(gameId, round, accessToken)
       .then((skill) => {
