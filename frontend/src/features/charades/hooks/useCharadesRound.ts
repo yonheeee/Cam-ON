@@ -59,7 +59,8 @@ interface AnswerRevealedData {
   turn: number;
   presenterId: string;
   answererId: string;
-  /** 이번 턴 제시어 원본. 정답자가 친 텍스트와 다를 수 있다(정규화 매칭이라 "코 끼리!"도 정답) */
+  /** 이번 턴 제시어 원본. 정답자가 친 텍스트와 다를 수 있다 — 매칭이 공백·영문 대소문자를
+   *  무시해서 "babyshark"에 "Baby Shark"로 맞히는 게 가능하다 */
   word: string | null;
 }
 
