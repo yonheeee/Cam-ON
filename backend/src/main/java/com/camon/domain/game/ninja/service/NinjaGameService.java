@@ -535,7 +535,29 @@ public class NinjaGameService {
         log.info("[Service] handleTimeout : round={} ex={} 전원 콤보 실패 — 생존자 {}명 HP -{} (탈락 {}명, 남은 생존 {}명)",
             round, exchange, aliveBefore.size(), TIMEOUT_HP_DECAY, newlyEliminated.size(), aliveCount);
 
-        boolean roundEnded = aliveCount <= 1 || exchange >= MAX_EXCHANGES_PER_ROUND;
+        advanceAfterExchangeClosed(room, seq, round, exchange, newlyEliminated);
+    }
+
+    // 공격 없이 닫힌 교환의 뒷정리 — 전원 콤보 실패(handleTimeout)와 진행 중 이탈
+    // (handleParticipantLeft)이 같은 전개를 쓴다. 남은 생존자를 세서 판을 끝낼지 정하고,
+    // 판이 끝났으면 점수를 저장한 뒤 다음 진행(다음 교환 / 다음 판 / 게임 종료)을 예약한다.
+    //
+    // 이벤트는 두 경우 모두 ninja:round-timeout이다. 이 payload는 "이 교환이 이렇게 닫혔고
+    // 결과 스냅샷은 이거다"라는 상태 동기화용이고 프론트도 그렇게만 쓰므로(문구를 띄우지
+    // 않는다), 이탈 전용 이벤트를 새로 만들지 않는다.
+    private void advanceAfterExchangeClosed(
+        Room room,
+        int seq,
+        int round,
+        int exchange,
+        List<String> newlyEliminated
+    ) {
+        String roomCode = room.roomCode();
+        // 스냅샷 — 이벤트만 구독하는 클라이언트가 화면 HP/생존자를 즉시 맞추는 재료.
+        List<String> aliveAfter = new ArrayList<>(ninjaRedis.getAlivePlayers(roomCode, seq, round));
+        Map<String, Integer> hpAfter = hpSnapshot(roomCode, seq, round);
+
+        boolean roundEnded = aliveAfter.size() <= 1 || exchange >= MAX_EXCHANGES_PER_ROUND;
         boolean ending = false;
         List<RoundResultEntry> roundResult = null;
         Map<String, Long> totals = null;
@@ -546,25 +568,81 @@ public class NinjaGameService {
             totals = sessionTotals(room, seq);
         }
 
-        // 감쇠 반영 후 스냅샷 — 이벤트만 구독하는 클라이언트가 화면 HP를 즉시 맞추는 재료.
-        List<String> aliveAfter = new ArrayList<>(ninjaRedis.getAlivePlayers(roomCode, seq, round));
-        Map<String, Integer> hpAfterDecay = hpSnapshot(roomCode, seq, round);
-
         if (ending) {
             eventPublisher.publish(room.roomId(), "ninja:round-timeout",
                 new RoundTimeoutPayload(round, exchange, NinjaPhase.ENDED, null, roundResult, totals,
-                    aliveAfter, hpAfterDecay, List.copyOf(newlyEliminated)));
+                    aliveAfter, hpAfter, List.copyOf(newlyEliminated)));
             finishGame(room, seq);
             return;
         }
-        // 이펙트 없이 3초 카운트다운만 태우고 다음 진행으로.
+        // 이펙트 없이 카운트다운만 태우고 다음 진행으로.
         Instant nextRoundAt = Instant.now().plus(COUNTDOWN_DURATION);
         ninjaRedis.enterIntermission(roomCode, seq, null, nextRoundAt);
         eventPublisher.publish(room.roomId(), "ninja:round-timeout",
             new RoundTimeoutPayload(round, exchange, NinjaPhase.INTERMISSION, nextRoundAt, roundResult, totals,
-                aliveAfter, hpAfterDecay, List.copyOf(newlyEliminated)));
+                aliveAfter, hpAfter, List.copyOf(newlyEliminated)));
         Runnable next = resolveNext(room, seq, round, exchange, roundEnded, false);
         scheduleSessionTask(room, seq, nextRoundAt, next);
+    }
+
+    /**
+     * 진행 중에 참가자가 방을 떠났다. 나가기 버튼이든 창을 그냥 닫은 뒤 하트비트가 만료된
+     * 경우든 같은 경로(ParticipantLeftEvent)로 들어온다.
+     *
+     * <p>떠난 사람이 생존자 집합에 남아 있으면 판 종료 조건(생존 1명 이하)이 영영 안 걸려서,
+     * 남은 사람은 유령이 감쇠로 죽을 때까지 자기 HP를 같이 깎이며 기다려야 했다.
+     */
+    public void handleParticipantLeft(UUID roomId, UUID participantId) {
+        Room room = roomRepository.findById(roomId).orElse(null);
+        if (room == null) {
+            return;
+        }
+        int seq = room.currentSessionSeq();
+        String roomCode = room.roomCode();
+        NinjaPhase phase = ninjaRedis.getPhase(roomCode, seq);
+        // 닌자 세션이 열려 있지 않으면 내 차례가 아니다(다른 게임이 진행 중이거나 이미 끝났다) —
+        // GameParticipantLeaveHandler 계약대로 조용히 빠진다.
+        if (phase == null || phase == NinjaPhase.ENDED) {
+            return;
+        }
+
+        String token = participantId.toString();
+        // 판마다 전원을 되살리는 startRound가 세션 참가자 집합을 원본으로 쓰므로, 여기서 빼지
+        // 않으면 다음 판에 유령이 풀피로 부활한다. 남은 인원이 MIN_PLAYERS 미만이 되면
+        // startRound가 스스로 게임을 끝낸다.
+        ninjaRedis.removeParticipant(roomCode, seq, token);
+
+        Integer round = ninjaRedis.getCurrentRound(roomCode, seq);
+        if (round == null) {
+            return; // 아직 첫 판이 열리기 전 — 참가자 집합에서 뺀 것으로 충분하다.
+        }
+        if (!ninjaRedis.isAlive(roomCode, seq, round, token)) {
+            return; // 이미 이 판에서 탈락한 사람 — 생존자 수가 그대로라 판 진행에 영향이 없다.
+        }
+        ninjaRedis.eliminate(roomCode, seq, round, token, Instant.now());
+
+        Integer exchange = ninjaRedis.getCurrentExchange(roomCode, seq);
+        if (exchange == null) {
+            return;
+        }
+        int aliveCount = ninjaRedis.getAlivePlayers(roomCode, seq, round).size();
+        // 공격권을 쥔 채 나갔으면 대상 지정 창(15초)이 통째로 빈다. 그냥 두면 그 시간만큼 판이
+        // 멈췄다가 handleTargetTimeout이 "떠난 사람의 공격"으로 남은 사람을 때린다.
+        boolean attackerGone = token.equals(ninjaRedis.getAttacker(roomCode, seq, round, exchange))
+            && !ninjaRedis.isExchangeClosed(roomCode, seq, round, exchange);
+        log.info("[Service] handleParticipantLeft : round={} ex={} token={} 이탈 (남은 생존 {}명, 공격권 보유={})",
+            round, exchange, token, aliveCount, attackerGone);
+
+        if (aliveCount > 1 && !attackerGone) {
+            // 남은 사람끼리 지금 교환을 그대로 이어간다 — 유령은 콤보를 낼 수 없을 뿐이다.
+            return;
+        }
+        // 이 교환은 여기서 끝난다. 이미 인터미션이라 닫혀 있으면 closeExchange가 false를
+        // 돌려주는데, 그때도 예약된 다음 진행을 취소하고 우리가 이어받아야 한다 —
+        // 안 그러면 생존자 1명짜리 교환이 한 번 더 열린다.
+        ninjaRedis.closeExchange(roomCode, seq, round, exchange, "PARTICIPANT_LEFT");
+        cancelPendingTimeout(roomCode, seq);
+        advanceAfterExchangeClosed(room, seq, round, exchange, List.of(token));
     }
 
     // 이 판(round)의 결과를 점수로 환산해 저장한다 — 순위는 [생존자 HP 내림차순 → 탈락자 늦게 죽은 순]이고,
@@ -651,16 +729,33 @@ public class NinjaGameService {
 
     private void finishGame(Room room, int seq) {
         List<RankingEntry> ranking = buildFinalRanking(room, seq);
+        saveCourseRanking(room, seq, ranking.stream().collect(java.util.stream.Collectors.toMap(
+            entry -> UUID.fromString(entry.token()),
+            RankingEntry::rank,
+            (left, right) -> left,
+            java.util.LinkedHashMap::new
+        )));
         ninjaRedis.saveRanking(room.roomCode(), seq, ranking.stream().map(RankingEntry::token).toList());
         ninjaRedis.enterEnded(room.roomCode(), seq);
         log.info("[Service] finishGame : roomCode={} seq={} 최종 순위(누적점수순)={}", room.roomCode(), seq, ranking);
         eventPublisher.publish(room.roomId(), "ninja:game-ended",
-            new GameEndedPayload(ranking, sessionTotals(room, seq)));
+            new GameEndedPayload(
+                ranking,
+                sessionTotals(room, seq),
+                gameScoreService.getCourseTotals(room.roomId())
+            ));
         // 이 게임이 끝났다는 사실만 알린다 — 코스의 다음 칸으로 넘길지 종합 결과로 갈지는
         // 코스 도메인의 판단이다(닌자는 자기가 코스의 몇 번째인지도 모른다).
         applicationEventPublisher.publishEvent(
             new GameSessionFinishedEvent(room.roomId(), seq)
         );
+    }
+
+    private void saveCourseRanking(Room room, int seq, Map<UUID, Integer> ranks) {
+        SaveRoundResult result = gameScoreService.saveCourseRanking(room.roomId(), seq, ranks);
+        if (result != SaveRoundResult.SUCCESS && result != SaveRoundResult.ALREADY_SAVED) {
+            throw new IllegalStateException("Failed to save ninja course score: " + result);
+        }
     }
 
 

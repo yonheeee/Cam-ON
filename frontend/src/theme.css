@@ -444,3 +444,21 @@ h2.pap-pixel-title {
 .ninja-screen .ninja-accent-text {
   color: var(--pap-arcade-teal);
 }
+
+/* ── 캠 거울 모드 (전원) ─────────────────────────────────────────────
+ * LiveKit 기본값은 "내 캠만" 좌우반전한다
+ * (.lk-participant-media-video[data-lk-local-participant=true][data-lk-source=camera]).
+ * 그래서 내 타일과 남의 타일이 서로 반대 방향으로 보여, 같은 손동작인데 나는 오른손·
+ * 상대는 왼손으로 보이고 "왼쪽으로 가"가 서로 반대로 읽혔다.
+ *
+ * 남의 캠도 같이 반전해 전원을 거울 방향으로 맞춘다 — 각자 자기 화면에서 보는 자기 모습과
+ * 남이 보는 내 모습이 같은 방향이 된다. LiveKit 규칙과 값이 같아서(rotateY 180deg) 내 캠에
+ * 두 규칙이 겹쳐도 이중 반전은 일어나지 않는다.
+ *
+ * 화면 표시만 바꾸는 CSS다 — 손동작 인식은 반전 프레임(useHandGestureRecognition의
+ * mirrorCanvas)에서 따로 돌아가므로 판정에는 영향이 없다. 화면공유(screen_share)는
+ * 글자가 뒤집히면 못 읽으므로 camera 소스만 대상으로 한다.
+ */
+.lk-participant-media-video[data-lk-source='camera'] {
+  transform: rotateY(180deg);
+}

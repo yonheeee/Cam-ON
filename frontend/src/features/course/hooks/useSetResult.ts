@@ -1,5 +1,6 @@
 import { Client } from '@stomp/stompjs';
 import { useEffect, useState } from 'react';
+import { remainingResultHoldMs } from '../../charades/lib/resultBannerHold';
 import { handleExpiredSession } from '../../session/lib/sessionExpiry';
 import type { CourseRankRow, SetResultRow } from '../components/SetResultScreen';
 
@@ -30,14 +31,17 @@ interface NormalizedEntry {
 interface NinjaEndedData {
   ranking: { token: string; rank: number }[];
   sessionTotals: Record<string, number>;
+  courseTotals: Record<string, number>;
 }
 
 interface CharadesEndedData {
   ranking: { participantId: string; totalScore: number; rank: number }[];
+  courseTotals: Record<string, number>;
 }
 
 interface FetchEndedData {
   scores: { participantId: string; score: number; rank: number }[];
+  courseTotals: Record<string, number>;
 }
 
 // 점수 내림차순 정렬 + 동점 같은 순위 (백엔드 CourseRunner.buildRanking과 같은 규칙).
@@ -62,36 +66,39 @@ export function useSetResult(roomId: string, accessToken: string): FinishedSet |
   const [finishedSet, setFinishedSet] = useState<FinishedSet | null>(null);
 
   useEffect(() => {
-    // 세트별 점수. 같은 이벤트가 두 번 와도(재연결) 세트 번호로 덮어써서 이중 계산을 막는다.
-    const scoresBySeq = new Map<number, Map<string, number>>();
+    // 직전 세트까지 서버에 저장된 정규화 누적 점수. 순위 변화 화살표 계산에 사용한다.
+    let previousCourseTotals = new Map<string, number>();
     // game-ended payload에는 세션 번호가 없다 — game:started로 따라간다.
     let currentSeq = 0;
+    // 몸으로 말해요의 턴 결과 배너를 다 보여줄 때까지 세트 결과를 미뤄두는 타이머.
+    let charadesBannerTimer: ReturnType<typeof setTimeout> | null = null;
+    // 마지막 턴 결과 이벤트(정답/시간초과/무효)를 받은 시각 — 배너가 언제까지 떠 있어야 하는지의 기준.
+    let charadesResultAt: number | null = null;
+    const cancelPendingSetResult = () => {
+      if (charadesBannerTimer) clearTimeout(charadesBannerTimer);
+      charadesBannerTimer = null;
+    };
 
-    const publish = (entries: NormalizedEntry[]) => {
+    // endedAt은 "게임 종료 이벤트가 도착한 시각"이다 — 화면 표시를 늦추더라도(아래 charades)
+    // 이 값은 늦추지 않는다. 세트 결과 길이는 서버가 game-ended 시점부터 재는 타이머라
+    // (CourseRunner.SET_RESULT_DURATION) 여기서 같이 밀면 카운트다운이 서버와 어긋난다.
+    const publish = (
+      entries: NormalizedEntry[],
+      courseTotals: Record<string, number>,
+      endedAt: number = Date.now(),
+      seq: number = currentSeq,
+    ) => {
       if (entries.length === 0) return;
-      const seq = currentSeq;
-      // 이번 세트를 빼고 계산한 직전 누적 순위 — 화살표(▲▼)의 기준
-      const before = new Map<string, number>();
-      for (const [otherSeq, scores] of scoresBySeq) {
-        if (otherSeq === seq) continue;
-        for (const [id, score] of scores) before.set(id, (before.get(id) ?? 0) + score);
-      }
-
-      scoresBySeq.set(seq, new Map(entries.map((e) => [e.participantId, e.score])));
-
-      const after = new Map(before);
-      for (const entry of entries) {
-        after.set(entry.participantId, (after.get(entry.participantId) ?? 0) + entry.score);
-      }
-      // 이번 세트에 점수가 없던 사람도 표에 남아야 한다(0점으로).
-      for (const id of before.keys()) if (!after.has(id)) after.set(id, before.get(id) ?? 0);
+      const before = previousCourseTotals;
+      const after = new Map(Object.entries(courseTotals));
+      previousCourseTotals = new Map(after);
 
       const beforeRanks = rankByScore(before);
       const afterRanks = rankByScore(after);
 
       setFinishedSet({
         sessionSeq: seq,
-        endedAt: Date.now(),
+        endedAt,
         setResult: [...entries]
           .sort((a, b) => a.rank - b.rank)
           .map((entry) => ({
@@ -134,14 +141,18 @@ export function useSetResult(roomId: string, accessToken: string): FinishedSet |
           switch (event.event) {
             case 'game:started': {
               currentSeq = (event.data as { sessionSeq: number }).sessionSeq;
+              charadesResultAt = null;
               // 다음 세트가 열렸으니 중간 결과는 접는다.
+              cancelPendingSetResult();
               setFinishedSet(null);
               break;
             }
             case 'course:finished':
             case 'course:reset':
               // 종합 결과(또는 대기방)가 이 화면을 대신한다.
+              cancelPendingSetResult();
               setFinishedSet(null);
+              previousCourseTotals = new Map();
               break;
             case 'ninja:game-ended': {
               const data = event.data as NinjaEndedData;
@@ -151,24 +162,45 @@ export function useSetResult(roomId: string, accessToken: string): FinishedSet |
                   score: data.sessionTotals[entry.token] ?? 0,
                   rank: entry.rank,
                 })),
+                data.courseTotals,
               );
+              break;
+            }
+            // 마지막 턴이 끝나면 결과 이벤트(정답/시간초과/무효) 바로 뒤에 game-ended가 붙어 온다 —
+            // 여기서 곧바로 세트 결과를 띄우면 게임 패널이 덮여서 결과 배너가 아예 안 보인다.
+            // 배너가 뜬 지 얼마 안 됐으면 남은 시간만큼 미룬다(useCharadesRound의 유예와 짝).
+            case 'charades:answer-revealed':
+            case 'charades:round-timeout':
+            case 'charades:round-invalidated': {
+              charadesResultAt = Date.now();
               break;
             }
             case 'charades:game-ended': {
               const data = event.data as CharadesEndedData;
-              publish(
-                data.ranking.map((entry) => ({
-                  participantId: entry.participantId,
-                  score: entry.totalScore,
-                  rank: entry.rank,
-                })),
-              );
+              const entries = data.ranking.map((entry) => ({
+                participantId: entry.participantId,
+                score: entry.totalScore,
+                rank: entry.rank,
+              }));
+              const endedAt = Date.now();
+              const seq = currentSeq;
+              const hold = remainingResultHoldMs(charadesResultAt);
+              charadesResultAt = null;
+              cancelPendingSetResult();
+              if (hold > 0) {
+                charadesBannerTimer = setTimeout(
+                  () => publish(entries, data.courseTotals, endedAt, seq),
+                  hold,
+                );
+                break;
+              }
+              publish(entries, data.courseTotals, endedAt, seq);
               break;
             }
             case 'game:end': {
               // 물건 가져오기 — 이름이 게임 접두사 없이 나간다(useFetchRound와 같은 이벤트).
               const data = event.data as FetchEndedData;
-              publish(data.scores.map((entry) => ({ ...entry })));
+              publish(data.scores.map((entry) => ({ ...entry })), data.courseTotals);
               break;
             }
             default:
@@ -181,6 +213,7 @@ export function useSetResult(roomId: string, accessToken: string): FinishedSet |
     client.activate();
     return () => {
       void client.deactivate();
+      cancelPendingSetResult();
     };
   }, [roomId, accessToken]);
 

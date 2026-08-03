@@ -3,6 +3,7 @@ import { ParticipantTile, useLocalParticipant, useTracks } from '@livekit/compon
 import { Track } from 'livekit-client';
 import { ChatPanel } from '../../chat/components/ChatPanel';
 import type { ChatMessage } from '../../chat/hooks/useRoomChat';
+import { BackgroundMusic } from '../../sound/components/BackgroundMusic';
 import { PixelConfirmModal } from '../../system/components/PixelConfirmModal';
 import { roomApi, RoomApiError } from '../api/roomApi';
 import { SettingsModal } from './SettingsModal';
@@ -342,6 +343,10 @@ export function LobbyScreen({
         alt="CAM, ON!"
         onClick={() => setConfirmLeave(true)}
       />
+      <BackgroundMusic
+        source="/assets/sounds/cozy-cartridge-club.mp3"
+        className="lobby-screen__music-toggle"
+      />
 
       <div className="lobby-screen__body">
         <section className="lobby-screen__stage">
@@ -382,7 +387,11 @@ export function LobbyScreen({
                     <span className="lobby-tile__avatar-ring" />
                     <span className="lobby-tile__avatar-initial">{[...nickname][0] ?? '?'}</span>
                   </span>
-                  <ParticipantTile trackRef={trackRef} disableSpeakingIndicator />
+                  {/* 아직 결과 화면에 있는 사람은 캠을 붙이지 않는다 — LiveKit 트랙은 방을 떠나기
+                      전까진 계속 살아 있어서, 그냥 두면 결과 화면에 있는 사람이 대기방에도
+                      똑같이 비친다. 자리·순서·이름은 남기고 화면만 아바타로 대신한다
+                      (결과 화면 쪽도 대칭으로 대기방에 간 사람의 캠을 내린다). */}
+                  {!inResult && <ParticipantTile trackRef={trackRef} disableSpeakingIndicator />}
                   {/* 방장 표시 — 영상 우측 상단 왕관. 내 화면이든 게스트 화면이든 동일. */}
                   {isHost && (
                     <span className="lobby-tile__host-badge" title="방장" aria-label="방장">

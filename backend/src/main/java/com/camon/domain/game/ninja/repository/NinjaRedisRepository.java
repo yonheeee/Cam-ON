@@ -108,6 +108,12 @@ public class NinjaRedisRepository {
         return redis.opsForSet().members(participantsKey(roomCode, seq));
     }
 
+    // 진행 중에 방을 떠난 사람을 세션 참가자 집합에서 뺀다. 판마다 전원을 되살리는 startRound가
+    // 이 집합을 원본으로 쓰기 때문에, 여기서 빼지 않으면 다음 판에 떠난 사람이 풀피로 부활한다.
+    public void removeParticipant(String roomCode, int seq, String token) {
+        redis.opsForSet().remove(participantsKey(roomCode, seq), token);
+    }
+
     public void saveSkillOrder(String roomCode, int seq, List<Long> shuffledSkillIds) {
         String key = skillOrderKey(roomCode, seq);
         redis.delete(key);

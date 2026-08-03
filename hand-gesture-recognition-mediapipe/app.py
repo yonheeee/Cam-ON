@@ -15,6 +15,9 @@ import mediapipe as mp
 from utils import CvFpsCalc
 from utils import SkillEffect
 from utils import HandLandmarkSmoother
+from utils import measure_hand_proximity
+from utils import hand_proximity_factor
+from utils import hand_gap_limit_for
 from model import KeyPointClassifier
 from model import PointHistoryClassifier
 
@@ -195,6 +198,9 @@ def main():
 
         #  ####################################################################
         preprocessed_by_hand = {'Left': None, 'Right': None}
+        # 손 사이 거리 판정용 원본(픽셀) 좌표. 분류기 입력은 손마다 따로 정규화돼서 두 손의
+        # 상대 위치가 지워지므로, 거리는 정규화 전 좌표로 재야 한다.
+        pixel_by_hand = {'Left': None, 'Right': None}
         detected_hands = set()
         if results.multi_hand_landmarks is not None:
             for hand_landmarks, handedness in zip(results.multi_hand_landmarks,
@@ -209,6 +215,7 @@ def main():
                 # 겹침으로 인한 좌표 떨림 완화
                 landmark_list = landmark_smoother.smooth(
                     hand_label, landmark_list, time.time())
+                pixel_by_hand[hand_label] = landmark_list
 
                 # Conversion to relative coordinates / normalized coordinates
                 pre_processed_landmark_list = pre_process_landmark(
@@ -282,7 +289,22 @@ def main():
             combo_sign_label = keypoint_classifier_labels[combo_sign_id]
             now = time.time()
 
-            # 프레임 하나짜리 오인식에 흔들리지 않도록 최근 몇 프레임의 다수결로 안정화
+            # 모양이 맞아도 두 손이 떨어져 있으면 조합 포즈로 인정하지 않는다
+            # (이유·기준은 utils/hand_proximity.py). 스케일을 못 구한 프레임은 거리 조건 없이
+            # 모양 판정만 쓴다 — 잘못된 스케일로 정상 포즈를 떨어뜨리는 것보다 낫다.
+            proximity = measure_hand_proximity(pixel_by_hand['Left'],
+                                               pixel_by_hand['Right'])
+            gap_text = ""
+            if proximity is not None:
+                gap_text = " gap:{:.1f}".format(proximity[0])
+                if hand_proximity_factor(combo_sign_label, proximity) <= 0:
+                    gap_text = " TOO-FAR({:.1f}>{:.1f})".format(
+                        proximity[0], hand_gap_limit_for(combo_sign_label))
+                    combo_sign_label = None
+
+            # 프레임 하나짜리 오인식에 흔들리지 않도록 최근 몇 프레임의 다수결로 안정화.
+            # 거리 조건에 걸린 프레임(None)도 다수결에 넣는다 — 건너뛰면 손을 벌린 뒤에도 직전
+            # 판정이 남아 계속 인식된 것처럼 보인다.
             combo_sign_history.append(combo_sign_label)
             stable_combo_sign_label = Counter(
                 combo_sign_history).most_common(1)[0][0]
@@ -295,7 +317,9 @@ def main():
                 previous_combo_sign = stable_combo_sign_label
             hold_elapsed = now - combo_hold_start
 
-            sign_text = "SIGN:" + stable_combo_sign_label
+            # gap 수치는 안정화 이전(이번 프레임) 값이라 stable 라벨과 한 프레임 어긋날 수 있다 —
+            # 라벨별 한계를 실측으로 튜닝할 때 보는 디버그용 숫자다.
+            sign_text = "SIGN:" + (stable_combo_sign_label or "-") + gap_text
             if stable_combo_sign_label in COMBO_SKILL_EFFECT_LABELS and not combo_hold_confirmed:
                 sign_text += " ({:.1f}/{:.1f}s)".format(
                     min(hold_elapsed, HOLD_DURATION), HOLD_DURATION)

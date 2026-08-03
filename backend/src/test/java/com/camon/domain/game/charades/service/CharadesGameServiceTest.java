@@ -114,6 +114,8 @@ class CharadesGameServiceTest {
         lenient().when(gameScoreService.saveRoundScores(
             any(), anyInt(), anyInt(), any()
         )).thenReturn(SaveRoundResult.SUCCESS);
+        lenient().when(gameScoreService.saveCourseRanking(any(), anyInt(), any()))
+            .thenReturn(SaveRoundResult.SUCCESS);
         lenient().when(gameScoreService.getSessionTotals(any(), anyInt()))
             .thenReturn(Map.of());
         roomId = UUID.randomUUID();
@@ -561,11 +563,16 @@ class CharadesGameServiceTest {
             eq("chat:message-received"),
             any(ChatMessageReceivedPayload.class)
         );
+        // 공개되는 제시어는 정답자가 친 텍스트("BABY SHARK")가 아니라 원본 키워드여야 한다 —
+        // 매칭이 정규화 기반이라 둘은 얼마든지 다를 수 있다.
+        ArgumentCaptor<CharadesAnswerRevealedPayload> revealCaptor =
+            ArgumentCaptor.forClass(CharadesAnswerRevealedPayload.class);
         verify(charadesEventPublisher).publish(
             eq(roomId),
             eq("charades:answer-revealed"),
-            any(CharadesAnswerRevealedPayload.class)
+            revealCaptor.capture()
         );
+        assertThat(revealCaptor.getValue().word()).isEqualTo("babyshark");
         verify(charadesEventPublisher).publish(
             eq(roomId),
             eq("charades:round-started"),
@@ -709,6 +716,7 @@ class CharadesGameServiceTest {
             nextPresenter.participantId()
         )).thenReturn(Optional.of(nextPresenter));
         stubNextMission(43L, "코끼리");
+        stubRevealWord(42L, "기린");
 
         service.handleTimeout(
             room,
@@ -718,10 +726,12 @@ class CharadesGameServiceTest {
             scheduledExpiresAt
         );
 
+        // 아무도 못 맞혔어도 방금 끝난 턴의 제시어(42번 = "기린")를 전원에게 공개한다.
+        // 다음 턴 제시어(43번 = "코끼리")가 아니다.
         verify(charadesEventPublisher).publish(
             eq(roomId),
             eq("charades:round-timeout"),
-            eq(new CharadesRoundTimeoutPayload(1, 1))
+            eq(new CharadesRoundTimeoutPayload(1, 1, "기린"))
         );
         verify(charadesRedis).openTurn(
             eq(ROOM_CODE),
@@ -736,6 +746,83 @@ class CharadesGameServiceTest {
             eq(roomId),
             eq("charades:round-started"),
             any(CharadesRoundStartedPayload.class)
+        );
+    }
+
+    // 제시어 공개는 타임아웃 이벤트에 얹히는 부가 정보라, 조회가 비어도 턴 전개를 막으면 안 된다.
+    // (여기서 예외가 나가면 다음 표현자로 넘어가지 못하고 게임이 그대로 멈춘다.)
+    @Test
+    void timeoutStillAdvancesWhenRevealWordIsMissing() {
+        UUID presenterId = UUID.randomUUID();
+        Participant nextPresenter =
+            participant(UUID.randomUUID(), "다음표현자");
+        UUID lastPresenterId = UUID.randomUUID();
+        Instant scheduledExpiresAt =
+            Instant.parse("2026-07-27T12:00:00.123456789Z");
+        Instant redisExpiresAt = Instant.ofEpochMilli(
+            scheduledExpiresAt.toEpochMilli()
+        );
+        CharadesGameState playing = new CharadesGameState(
+            1, 3, 1, 3, TOPIC_ID, presenterId, 42L,
+            redisExpiresAt, CharadesTurnStatus.PLAYING
+        );
+        CharadesGameState timeout = new CharadesGameState(
+            1, 3, 1, 3, TOPIC_ID, presenterId, 42L,
+            redisExpiresAt, CharadesTurnStatus.TIMEOUT
+        );
+        when(roomRepository.findById(roomId)).thenReturn(Optional.of(room));
+        when(charadesRedis.findState(ROOM_CODE, SESSION_SEQ))
+            .thenReturn(
+                Optional.of(playing),
+                Optional.of(timeout),
+                Optional.of(timeout)
+            );
+        when(charadesRedis.transitionStatus(
+            ROOM_CODE,
+            SESSION_SEQ,
+            CharadesTurnStatus.PLAYING,
+            CharadesTurnStatus.TIMEOUT
+        )).thenReturn(true);
+        when(charadesRedis.getPresenterOrder(ROOM_CODE, SESSION_SEQ))
+            .thenReturn(List.of(
+                presenterId,
+                nextPresenter.participantId(),
+                lastPresenterId
+            ));
+        when(participantRepository.findById(
+            roomId,
+            nextPresenter.participantId()
+        )).thenReturn(Optional.of(nextPresenter));
+        stubNextMission(43L, "코끼리");
+        // 끝난 턴의 미션을 못 찾는 상황(비활성화/삭제)
+        when(missionRepository
+            .findByMissionIdAndTopicTopicIdAndMissionTypeAndIsActiveTrue(
+                42L,
+                TOPIC_ID,
+                "CHARADES"
+            )).thenReturn(Optional.empty());
+
+        service.handleTimeout(
+            room,
+            SESSION_SEQ,
+            1,
+            1,
+            scheduledExpiresAt
+        );
+
+        verify(charadesEventPublisher).publish(
+            eq(roomId),
+            eq("charades:round-timeout"),
+            eq(new CharadesRoundTimeoutPayload(1, 1, null))
+        );
+        verify(charadesRedis).openTurn(
+            eq(ROOM_CODE),
+            eq(SESSION_SEQ),
+            eq(1),
+            eq(2),
+            eq(nextPresenter.participantId()),
+            eq(43L),
+            any(Instant.class)
         );
     }
 
@@ -842,9 +929,6 @@ class CharadesGameServiceTest {
                 nextPresenter.participantId(),
                 remainingParticipant.participantId()
             ));
-        when(participantRepository.findAll(roomId)).thenReturn(
-            List.of(nextPresenter, remainingParticipant)
-        );
         when(participantRepository.findById(
             roomId,
             nextPresenter.participantId()
@@ -857,12 +941,14 @@ class CharadesGameServiceTest {
         service.handleParticipantLeft(
             roomId,
             presenterId,
-            "TIMEOUT"
+            "TIMEOUT",
+            2
         );
         service.handleParticipantLeft(
             roomId,
             presenterId,
-            "TIMEOUT"
+            "TIMEOUT",
+            2
         );
 
         verify(charadesEventPublisher).publish(
@@ -908,15 +994,12 @@ class CharadesGameServiceTest {
         when(roomRepository.findById(roomId)).thenReturn(Optional.of(room));
         when(charadesRedis.findState(ROOM_CODE, SESSION_SEQ))
             .thenReturn(Optional.of(playing));
-        when(participantRepository.findAll(roomId)).thenReturn(List.of(
-            participant(presenterId, "표현자"),
-            participant(UUID.randomUUID(), "남은참가자")
-        ));
 
         service.handleParticipantLeft(
             roomId,
             departedParticipantId,
-            "LEFT"
+            "LEFT",
+            2
         );
 
         verify(charadesRedis, never()).transitionStatus(
@@ -949,9 +1032,6 @@ class CharadesGameServiceTest {
                 Optional.of(playing),
                 Optional.empty()
             );
-        when(participantRepository.findAll(roomId)).thenReturn(List.of(
-            participant(presenterId, "마지막참가자")
-        ));
         when(charadesRedis.transitionStatus(
             ROOM_CODE,
             SESSION_SEQ,
@@ -962,12 +1042,14 @@ class CharadesGameServiceTest {
         service.handleParticipantLeft(
             roomId,
             departedParticipantId,
-            "LEFT"
+            "LEFT",
+            1
         );
         service.handleParticipantLeft(
             roomId,
             departedParticipantId,
-            "LEFT"
+            "LEFT",
+            1
         );
 
         InOrder order = inOrder(
@@ -1152,6 +1234,16 @@ class CharadesGameServiceTest {
             nextPresenter.participantId()
         )).thenReturn(Optional.of(nextPresenter));
         stubNextMission(43L, "코끼리");
+    }
+
+    // 끝난 턴의 제시어 공개용 조회. 스케줄러 콜백엔 gameId가 없어서 topicId로만 찾는다.
+    private void stubRevealWord(long missionId, String keyword) {
+        when(missionRepository
+            .findByMissionIdAndTopicTopicIdAndMissionTypeAndIsActiveTrue(
+                missionId,
+                TOPIC_ID,
+                "CHARADES"
+            )).thenReturn(Optional.of(missionWithKeyword(missionId, keyword)));
     }
 
     private void stubNextMission(long missionId, String keyword) {

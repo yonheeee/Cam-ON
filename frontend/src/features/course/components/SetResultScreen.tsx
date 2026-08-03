@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import './SetResultScreen.css';
 
 // 코스의 게임 한 세트가 끝날 때마다 뜨는 중간 결과.
@@ -56,6 +57,9 @@ const RANK_COLORS = [
 
 // 점수 막대 칸 수. 1등이 꽉 차고 나머지는 1등 대비 비율로 채운다(절대 점수는 오른쪽 숫자가 말해준다).
 const BAR_CELLS = 18;
+const CELL_FILL_DURATION_MS = 160;
+const CELL_STAGGER_MS = 45;
+const ROW_STAGGER_MS = 70;
 
 const DELTA_MARK: Record<CourseRankRow['delta'], string> = {
   up: '▲',
@@ -77,6 +81,43 @@ export function SetResultScreen({
   starting = false,
 }: SetResultScreenProps) {
   const topScore = Math.max(1, ...setResult.map((row) => row.score));
+  const resultSignature = setResult
+    .map((row) => `${row.participantId}:${row.score}`)
+    .join('|');
+  const maxRevealDuration =
+    Math.max(0, setResult.length - 1) * ROW_STAGGER_MS +
+    Math.max(0, BAR_CELLS - 1) * CELL_STAGGER_MS +
+    CELL_FILL_DURATION_MS;
+  const [revealElapsed, setRevealElapsed] = useState(0);
+
+  useEffect(() => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      setRevealElapsed(maxRevealDuration);
+      return;
+    }
+
+    let frameId = 0;
+    const startedAt = performance.now();
+    const tick = (now: number) => {
+      const elapsed = Math.min(maxRevealDuration, now - startedAt);
+      setRevealElapsed(elapsed);
+      if (elapsed < maxRevealDuration) frameId = requestAnimationFrame(tick);
+    };
+
+    setRevealElapsed(0);
+    frameId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frameId);
+  }, [maxRevealDuration, resultSignature]);
+
+  const filledCellsFor = (score: number) =>
+    score > 0 ? Math.max(1, Math.round((score / topScore) * BAR_CELLS)) : 0;
+  const revealProgressFor = (rowIndex: number, filledCells: number) => {
+    if (rowIndex < 0 || filledCells === 0) return 1;
+    const rowDelay = rowIndex * ROW_STAGGER_MS;
+    const rowDuration =
+      Math.max(0, filledCells - 1) * CELL_STAGGER_MS + CELL_FILL_DURATION_MS;
+    return Math.min(1, Math.max(0, (revealElapsed - rowDelay) / rowDuration));
+  };
   // 끝내 이름을 모르는 경우는 내가 들어오기 전에 나간 사람뿐이다.
   const nicknameOf = (id: string) => nicknameById.get(id) ?? '나간 참가자';
 
@@ -88,16 +129,21 @@ export function SetResultScreen({
           <h1 className="set-result__board-title">{setIndex}세트 결과</h1>
           <ol className="set-result__rows">
             {setResult.map((row, index) => {
-              const filled = row.score > 0
-                ? Math.max(1, Math.round((row.score / topScore) * BAR_CELLS))
-                : 0;
+              const filled = filledCellsFor(row.score);
+              const revealProgress = revealProgressFor(index, filled);
+              const displayedScore = Math.round(row.score * revealProgress);
               return (
                 <li
                   key={row.participantId}
                   className={`set-result__row${
                     row.participantId === participantId ? ' set-result__row--me' : ''
                   }`}
-                  style={{ '--c': RANK_COLORS[index % RANK_COLORS.length] } as React.CSSProperties}
+                  style={
+                    {
+                      '--c': RANK_COLORS[index % RANK_COLORS.length],
+                      '--row-index': index,
+                    } as React.CSSProperties
+                  }
                 >
                   <span className="set-result__rank">{String(row.rank).padStart(2, '0')}</span>
                   <span className="set-result__name">{nicknameOf(row.participantId)}</span>
@@ -108,10 +154,17 @@ export function SetResultScreen({
                         className={`set-result__cell${
                           cell < filled ? ' set-result__cell--on' : ''
                         }`}
+                        style={{ '--cell-index': cell } as React.CSSProperties}
                       />
                     ))}
                   </span>
-                  <span className="set-result__score">+{row.score}점</span>
+                  <span
+                    className={`set-result__score${
+                      revealProgress === 1 ? ' set-result__score--settled' : ''
+                    }`}
+                  >
+                    +{displayedScore}점
+                  </span>
                 </li>
               );
             })}
@@ -122,28 +175,42 @@ export function SetResultScreen({
         <section className="set-result__deck">
           <div className="set-result__totals">
             <h2 className="set-result__deck-title">누적 순위</h2>
-            <p className="set-result__deck-sub">세트 점수를 반영한 현재 순위예요.</p>
+            <p className="set-result__deck-sub">순위 점수(5·3·2·1)를 누적한 현재 순위예요.</p>
             <ol className="set-result__cards">
-              {courseRanking.map((row, index) => (
-                <li
-                  key={row.participantId}
-                  className={`set-result__card${
-                    row.participantId === participantId ? ' set-result__card--me' : ''
-                  }`}
-                  style={{ '--c': RANK_COLORS[index % RANK_COLORS.length] } as React.CSSProperties}
-                >
-                  <span className="set-result__card-head">
-                    <span className="set-result__card-rank">{row.rank}</span>
-                    <span className="set-result__card-name">{nicknameOf(row.participantId)}</span>
-                  </span>
-                  <span className="set-result__card-score">
-                    {row.totalScore}점
-                    <i className={`set-result__delta set-result__delta--${row.delta}`}>
-                      {DELTA_MARK[row.delta]}
-                    </i>
-                  </span>
-                </li>
-              ))}
+              {courseRanking.map((row, index) => {
+                const setRowIndex = setResult.findIndex(
+                  (setRow) => setRow.participantId === row.participantId,
+                );
+                const earnedScore = setRowIndex >= 0 ? setResult[setRowIndex].score : 0;
+                const revealProgress = revealProgressFor(
+                  setRowIndex,
+                  filledCellsFor(earnedScore),
+                );
+                const displayedTotal =
+                  row.totalScore - earnedScore + Math.round(earnedScore * revealProgress);
+                return (
+                  <li
+                    key={row.participantId}
+                    className={`set-result__card${
+                      row.participantId === participantId ? ' set-result__card--me' : ''
+                    }`}
+                    style={
+                      { '--c': RANK_COLORS[index % RANK_COLORS.length] } as React.CSSProperties
+                    }
+                  >
+                    <span className="set-result__card-head">
+                      <span className="set-result__card-rank">{row.rank}</span>
+                      <span className="set-result__card-name">{nicknameOf(row.participantId)}</span>
+                    </span>
+                    <span className="set-result__card-score">
+                      {displayedTotal}점
+                      <i className={`set-result__delta set-result__delta--${row.delta}`}>
+                        {DELTA_MARK[row.delta]}
+                      </i>
+                    </span>
+                  </li>
+                );
+              })}
             </ol>
           </div>
 

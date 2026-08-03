@@ -18,6 +18,7 @@ import com.camon.domain.game.common.service.GameScoreService;
 import com.camon.domain.game.common.ws.GameEventPublisher;
 import com.camon.domain.game.ninja.domain.Effect;
 import com.camon.domain.game.ninja.domain.Gesture;
+import com.camon.domain.game.ninja.domain.NinjaPhase;
 import com.camon.domain.game.ninja.domain.Skill;
 import com.camon.domain.game.ninja.domain.SkillGesture;
 import com.camon.domain.game.ninja.domain.SkillGestureId;
@@ -108,6 +109,8 @@ class NinjaGameServiceTest {
         ScheduledFuture<?> scheduledFuture = mock(ScheduledFuture.class);
         lenient().doReturn(scheduledFuture).when(taskScheduler).schedule(any(Runnable.class), any(Instant.class));
         lenient().when(gameScoreService.saveRoundScores(any(UUID.class), anyInt(), anyInt(), any()))
+            .thenReturn(SaveRoundResult.SUCCESS);
+        lenient().when(gameScoreService.saveCourseRanking(any(UUID.class), anyInt(), any()))
             .thenReturn(SaveRoundResult.SUCCESS);
         lenient().when(gameScoreService.getSessionTotals(any(UUID.class), anyInt())).thenReturn(Map.of());
 
@@ -244,6 +247,84 @@ class NinjaGameServiceTest {
         // 판 종료(생존 1명): 생존자 5점, 동시 탈락 2명은 (4+3)/2 = 3점 균등 — 토큰 순서로
         // 임의의 4점/3점이 갈리지 않는다.
         verify(gameScoreService).saveRoundScores(roomId, seq, round, Map.of(p1, 5L, p2, 3L, p3, 3L));
+    }
+
+    // ---- 진행 중 이탈 (창을 그냥 닫아 하트비트가 만료된 경우 포함) ----
+
+    @Test
+    void handleParticipantLeft_keepsRoundGoing_whenTwoSurvivorsRemain() {
+        when(ninjaRedis.getPhase(roomCode, seq)).thenReturn(NinjaPhase.ROUND);
+        when(ninjaRedis.getCurrentRound(roomCode, seq)).thenReturn(round);
+        when(ninjaRedis.isAlive(roomCode, seq, round, third)).thenReturn(true);
+        when(ninjaRedis.getCurrentExchange(roomCode, seq)).thenReturn(exchange);
+        when(ninjaRedis.getAlivePlayers(roomCode, seq, round)).thenReturn(Set.of(attacker, target));
+        when(ninjaRedis.getAttacker(roomCode, seq, round, exchange)).thenReturn(attacker);
+
+        service.handleParticipantLeft(roomId, p3);
+
+        // 다음 판에 유령이 부활하지 않도록 세션 참가자 집합에서도 빠져야 한다.
+        verify(ninjaRedis).removeParticipant(roomCode, seq, third);
+        verify(ninjaRedis).eliminate(eq(roomCode), eq(seq), eq(round), eq(third), any(Instant.class));
+        // 아직 둘이 남았으니 진행 중인 교환은 그대로 둔다.
+        verify(ninjaRedis, never()).closeExchange(anyString(), anyInt(), anyInt(), anyInt(), anyString());
+        verify(eventPublisher, never()).publish(any(), anyString(), any());
+    }
+
+    @Test
+    void handleParticipantLeft_endsRound_whenOnlyOneSurvivorRemains() {
+        when(ninjaRedis.getPhase(roomCode, seq)).thenReturn(NinjaPhase.ROUND);
+        when(ninjaRedis.getCurrentRound(roomCode, seq)).thenReturn(round);
+        when(ninjaRedis.isAlive(roomCode, seq, round, target)).thenReturn(true);
+        when(ninjaRedis.getCurrentExchange(roomCode, seq)).thenReturn(exchange);
+        // 이탈 반영 후 생존자는 attacker 한 명뿐 — 원래는 여기서 판이 끝나야 하는데,
+        // 떠난 사람이 생존자로 남아 조건이 영영 안 걸리던 것이 이 버그였다.
+        when(ninjaRedis.getAlivePlayers(roomCode, seq, round)).thenReturn(Set.of(attacker));
+        when(ninjaRedis.getAttacker(roomCode, seq, round, exchange)).thenReturn(null);
+        when(ninjaRedis.getAllHp(roomCode, seq, round))
+            .thenReturn(Map.<Object, Object>of(attacker, "60", target, "20"));
+        when(ninjaRedis.getEliminatedWithTimeDesc(roomCode, seq, round))
+            .thenReturn(List.of(Map.entry(target, 5000L)));
+        when(ninjaRedis.getTotalRounds(roomCode, seq)).thenReturn(3); // round=2 < 3 → 게임은 계속
+        when(ninjaRedis.getParticipants(roomCode, seq)).thenReturn(Set.of(attacker));
+
+        service.handleParticipantLeft(roomId, p2);
+
+        verify(ninjaRedis).closeExchange(roomCode, seq, round, exchange, "PARTICIPANT_LEFT");
+        verify(gameScoreService).saveRoundScores(eq(roomId), eq(seq), eq(round), any());
+        verify(eventPublisher).publish(eq(roomId), eq("ninja:round-timeout"), any());
+    }
+
+    @Test
+    void handleParticipantLeft_closesExchange_whenAttackerLeavesBeforeChoosingTarget() {
+        when(ninjaRedis.getPhase(roomCode, seq)).thenReturn(NinjaPhase.ROUND);
+        when(ninjaRedis.getCurrentRound(roomCode, seq)).thenReturn(round);
+        when(ninjaRedis.isAlive(roomCode, seq, round, attacker)).thenReturn(true);
+        when(ninjaRedis.getCurrentExchange(roomCode, seq)).thenReturn(exchange);
+        when(ninjaRedis.getAlivePlayers(roomCode, seq, round)).thenReturn(Set.of(target, third));
+        // 공격권을 쥔 채 나갔다 — 그냥 두면 대상 지정 창(15초)이 통째로 비고, 그 뒤 떠난
+        // 사람의 공격으로 남은 사람이 맞는다.
+        when(ninjaRedis.getAttacker(roomCode, seq, round, exchange)).thenReturn(attacker);
+        when(ninjaRedis.isExchangeClosed(roomCode, seq, round, exchange)).thenReturn(false);
+        when(ninjaRedis.getAllHp(roomCode, seq, round))
+            .thenReturn(Map.<Object, Object>of(target, "80", third, "80"));
+
+        service.handleParticipantLeft(roomId, p1);
+
+        verify(ninjaRedis).closeExchange(roomCode, seq, round, exchange, "PARTICIPANT_LEFT");
+        // 둘이 남았으니 판은 계속 — 점수 저장 없이 다음 교환으로 넘어간다.
+        verify(ninjaRedis).enterIntermission(eq(roomCode), eq(seq), eq(null), any(Instant.class));
+        verify(gameScoreService, never()).saveRoundScores(any(UUID.class), anyInt(), anyInt(), any());
+    }
+
+    @Test
+    void handleParticipantLeft_doesNothing_whenNinjaSessionIsNotOpen() {
+        // 다른 게임이 진행 중이거나 이미 끝난 세션 — GameParticipantLeaveHandler 계약대로 no-op.
+        when(ninjaRedis.getPhase(roomCode, seq)).thenReturn(null);
+
+        service.handleParticipantLeft(roomId, p1);
+
+        verify(ninjaRedis, never()).removeParticipant(anyString(), anyInt(), anyString());
+        verify(ninjaRedis, never()).eliminate(anyString(), anyInt(), anyInt(), anyString(), any(Instant.class));
     }
 
     private Room room() {

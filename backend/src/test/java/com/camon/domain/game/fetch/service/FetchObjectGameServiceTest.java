@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -121,6 +122,8 @@ class FetchObjectGameServiceTest {
             applicationEventPublisher,
             Clock.fixed(NOW, ZoneOffset.UTC)
         );
+        lenient().when(gameScoreService.saveCourseRanking(any(), anyInt(), any()))
+            .thenReturn(SaveRoundResult.SUCCESS);
     }
 
     @Test

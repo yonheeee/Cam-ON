@@ -12,7 +12,8 @@ import org.springframework.stereotype.Service;
 @Service
 public class GameScoreService {
 
-    private static final List<Long> POINTS_BY_RANK = List.of(5L, 4L, 3L, 2L);
+    private static final List<Long> ROUND_POINTS_BY_RANK = List.of(5L, 4L, 3L, 2L);
+    private static final List<Long> COURSE_POINTS_BY_RANK = List.of(5L, 3L, 2L, 1L);
 
     private final GameResultRepository gameResultRepository;
 
@@ -30,7 +31,7 @@ public class GameScoreService {
 
         LinkedHashMap<UUID, Long> scores = new LinkedHashMap<>();
         for (int index = 0; index < participantIdsByRank.size(); index++) {
-            scores.put(participantIdsByRank.get(index), POINTS_BY_RANK.get(index));
+            scores.put(participantIdsByRank.get(index), ROUND_POINTS_BY_RANK.get(index));
         }
         return gameResultRepository.saveRoundResults(
             roomId,
@@ -71,6 +72,25 @@ public class GameScoreService {
         return gameResultRepository.findCourseTotals(roomId);
     }
 
+    /** 세트 최종 순위를 코스 공통 점수(5, 3, 2, 1)로 변환해 한 번만 누적한다. */
+    public SaveRoundResult saveCourseRanking(
+        UUID roomId,
+        int sessionSeq,
+        Map<UUID, Integer> ranks
+    ) {
+        if (ranks == null || ranks.isEmpty() || ranks.size() > COURSE_POINTS_BY_RANK.size()) {
+            throw new IllegalArgumentException("ranks must contain 1 to 4 participants");
+        }
+        LinkedHashMap<UUID, Long> scores = new LinkedHashMap<>();
+        ranks.forEach((participantId, rank) -> {
+            if (participantId == null || rank == null || rank < 1 || rank > COURSE_POINTS_BY_RANK.size()) {
+                throw new IllegalArgumentException("rank must be between 1 and 4");
+            }
+            scores.put(participantId, COURSE_POINTS_BY_RANK.get(rank - 1));
+        });
+        return gameResultRepository.saveCourseResults(roomId, sessionSeq, scores);
+    }
+
     /** 코스 재시작 준비 — 이전 코스의 점수 기록을 전부 지운다 (대기방 복귀 시 호출). */
     public void clearCourseResults(UUID roomId) {
         gameResultRepository.clearCourseResults(roomId);
@@ -80,7 +100,7 @@ public class GameScoreService {
         if (participantIdsByRank == null || participantIdsByRank.isEmpty()) {
             throw new IllegalArgumentException("ranking must not be empty");
         }
-        if (participantIdsByRank.size() > POINTS_BY_RANK.size()) {
+        if (participantIdsByRank.size() > ROUND_POINTS_BY_RANK.size()) {
             throw new IllegalArgumentException("ranking supports up to 4 participants");
         }
         if (participantIdsByRank.stream().anyMatch(id -> id == null)) {
@@ -98,7 +118,7 @@ public class GameScoreService {
         if (scores == null || scores.isEmpty()) {
             throw new IllegalArgumentException("scores must not be empty");
         }
-        if (scores.size() > POINTS_BY_RANK.size()) {
+        if (scores.size() > ROUND_POINTS_BY_RANK.size()) {
             throw new IllegalArgumentException("scores support up to 4 participants");
         }
         if (scores.entrySet().stream().anyMatch(entry ->

@@ -60,7 +60,7 @@ class RedisGameResultRepositoryIntegrationTest {
     }
 
     @Test
-    void savesRoundResultsAndAccumulatesSessionAndCourseTotals() {
+    void keepsRawSessionTotalsAndAccumulatesNormalizedCourseResultsSeparately() {
         Room room = saveRoom();
         createSessionAndRound(room, 1, 1);
         createRound(room, 1, 2);
@@ -84,8 +84,13 @@ class RedisGameResultRepositoryIntegrationTest {
             .containsExactlyInAnyOrderEntriesOf(Map.of(first, 5L, second, 4L));
         assertThat(gameResultRepository.findSessionTotals(room.roomId(), 1))
             .containsExactlyInAnyOrderEntriesOf(Map.of(first, 8L, second, 9L));
+        assertThat(gameResultRepository.findCourseTotals(room.roomId())).isEmpty();
+
+        assertThat(gameResultRepository.saveCourseResults(
+            room.roomId(), 1, Map.of(second, 5L, first, 3L)
+        )).isEqualTo(SaveRoundResult.SUCCESS);
         assertThat(gameResultRepository.findCourseTotals(room.roomId()))
-            .containsExactlyInAnyOrderEntriesOf(Map.of(first, 8L, second, 9L));
+            .containsExactlyInAnyOrderEntriesOf(Map.of(first, 3L, second, 5L));
     }
 
     @Test
@@ -112,7 +117,7 @@ class RedisGameResultRepositoryIntegrationTest {
         assertThat(gameResultRepository.findSessionTotals(room.roomId(), 1))
             .containsExactlyEntriesOf(Map.of(participantId, 5L));
         assertThat(gameResultRepository.findCourseTotals(room.roomId()))
-            .containsExactlyEntriesOf(Map.of(participantId, 5L));
+            .isEmpty();
     }
 
     @Test
@@ -181,7 +186,7 @@ class RedisGameResultRepositoryIntegrationTest {
             assertThat(gameResultRepository.findSessionTotals(room.roomId(), 1))
                 .containsExactlyEntriesOf(Map.of(participantId, 5L));
             assertThat(gameResultRepository.findCourseTotals(room.roomId()))
-                .containsExactlyEntriesOf(Map.of(participantId, 5L));
+                .isEmpty();
         } finally {
             start.countDown();
             executor.shutdownNow();

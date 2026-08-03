@@ -162,8 +162,17 @@ export function GesturePanel({ variant = 'panel', active = true }: GesturePanelP
         {results.length < 2 && <li>양손이 다 잡혀야 스킬이 판정됩니다 (인식된 손 {results.length}개)</li>}
         {combo.label && (
           <li>
-            스킬 <strong>{combo.label}</strong> ({(combo.confidence * 100).toFixed(0)}%)
+            스킬 <strong>{combo.label}</strong> ({(combo.confidence * 100).toFixed(0)}%
+            {combo.handGap !== null && `, 손 거리 ${combo.handGap.toFixed(1)}`})
             <span className="gesture-panel__skill"> ⚡ 스킬 발동</span>
+          </li>
+        )}
+        {/* 모양은 맞았지만 손 사이 거리 조건에서 걸러진 경우 — 왜 인식이 안 되는지 알려준다.
+            표시되는 숫자는 손바닥 길이 단위이고, 그대로 handProximity.ts의 라벨별 한계 튜닝에 쓴다. */}
+        {!combo.label && combo.rawLabel && combo.handGap !== null && (
+          <li>
+            <strong>{combo.rawLabel}</strong> 모양은 맞지만 두 손이 멀어요 (거리 {combo.handGap.toFixed(1)} / 허용{' '}
+            {combo.handGapLimit?.toFixed(1)} 손바닥)
           </li>
         )}
       </ul>

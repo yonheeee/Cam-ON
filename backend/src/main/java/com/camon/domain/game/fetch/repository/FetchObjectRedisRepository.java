@@ -379,6 +379,24 @@ public class FetchObjectRedisRepository {
         return Set.copyOf(participantIds);
     }
 
+    // 진행 중에 방을 떠난 사람을 세션 참가자 집합에서 뺀다. claimSubmission Lua가 이 집합의
+    // 크기로 "전원 제출"을 판정하므로, 빼지 않으면 남은 사람이 다 제출해도 라운드가 조기에
+    // 닫히지 않고 제한시간을 다 태운다.
+    public void removeParticipant(String roomCode, int sessionSeq, UUID participantId) {
+        redis.opsForSet().remove(
+            FetchObjectRedisKeys.participants(roomCode, sessionSeq),
+            participantId.toString()
+        );
+    }
+
+    public boolean isSessionEnded(String roomCode, int sessionSeq) {
+        Object status = redis.opsForHash().get(
+            FetchObjectRedisKeys.session(roomCode, sessionSeq),
+            STATUS_FIELD
+        );
+        return status != null && ENDED.equals(status.toString());
+    }
+
     public void markSessionEnded(String roomCode, int sessionSeq) {
         redis.opsForHash().put(
             FetchObjectRedisKeys.session(roomCode, sessionSeq),

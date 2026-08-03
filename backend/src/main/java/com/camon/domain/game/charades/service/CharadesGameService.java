@@ -336,7 +336,8 @@ public class CharadesGameService {
                     state.currentTurn(),
                     state.presenterId(),
                     participant.participantId(),
-                    submittedAt
+                    submittedAt,
+                    mission.getKeyword()
                 )
             );
             advanceAfterTerminalTurn(room);
@@ -419,7 +420,8 @@ public class CharadesGameService {
     public void handleParticipantLeft(
         UUID roomId,
         UUID participantId,
-        String reason
+        String reason,
+        int connectedCount
     ) {
         Room room = roomRepository.findById(roomId).orElse(null);
         if (room == null) {
@@ -430,17 +432,13 @@ public class CharadesGameService {
             room.roomCode(),
             sessionSeq
         ).orElse(null);
+        // 몸으로 말해요 세션이 열려 있지 않으면 내 차례가 아니다(다른 게임이 진행 중이거나
+        // 이미 끝났다) — GameParticipantLeaveHandler 계약대로 조용히 빠진다.
         if (state == null || state.status() == CharadesTurnStatus.FINISHED) {
             return;
         }
 
-        long connectedPlayerCount = participantRepository.findAll(roomId)
-            .stream()
-            .filter(participant ->
-                participant.connectionStatus() == ConnectionStatus.CONNECTED
-            )
-            .count();
-        if (connectedPlayerCount <= 1) {
+        if (connectedCount <= 1) {
             finishGame(room);
             return;
         }
@@ -530,7 +528,11 @@ public class CharadesGameService {
         charadesEventPublisher.publish(
             room.roomId(),
             ROUND_TIMEOUT_EVENT,
-            new CharadesRoundTimeoutPayload(round, turn)
+            new CharadesRoundTimeoutPayload(
+                round,
+                turn,
+                resolveRevealWord(state)
+            )
         );
         advanceAfterTerminalTurn(room);
     }
@@ -569,13 +571,31 @@ public class CharadesGameService {
             return;
         }
         cancelPendingTimeout(room.roomCode(), sessionSeq);
+        List<CharadesRankingEntry> finalRanking = buildFinalRanking(room, sessionSeq);
+        SaveRoundResult courseResult = gameScoreService.saveCourseRanking(
+            room.roomId(),
+            sessionSeq,
+            finalRanking.stream().collect(java.util.stream.Collectors.toMap(
+                CharadesRankingEntry::participantId,
+                CharadesRankingEntry::rank,
+                (left, right) -> left,
+                LinkedHashMap::new
+            ))
+        );
+        if (courseResult != SaveRoundResult.SUCCESS
+            && courseResult != SaveRoundResult.ALREADY_SAVED) {
+            throw new IllegalStateException(
+                "Failed to save charades course score: " + courseResult
+            );
+        }
         charadesEventPublisher.publish(
             room.roomId(),
             GAME_ENDED_EVENT,
             new CharadesGameEndedPayload(
                 state.totalRounds(),
                 Instant.now(),
-                buildFinalRanking(room, sessionSeq)
+                finalRanking,
+                gameScoreService.getCourseTotals(room.roomId())
             )
         );
         charadesRedis.clear(room.roomCode(), sessionSeq);
@@ -781,6 +801,27 @@ public class CharadesGameService {
         if (state.expiresAt() == null || !now.isBefore(state.expiresAt())) {
             throw new BusinessException(ErrorCode.CHARADES_TURN_EXPIRED);
         }
+    }
+
+    // 끝난 턴의 제시어를 전원에게 공개하기 위한 조회. findCurrentMission과 달리 못 찾아도
+    // 예외를 던지지 않고 null을 준다 — 이 값은 타임아웃 이벤트에 얹히는 부가 정보일 뿐이라,
+    // 여기서 터지면 다음 표현자로 넘어가지 못하고 게임 자체가 멈춘다. 프론트는 word가 없을 때의
+    // 표시("아무도 못 맞혔어요")를 이미 갖고 있어서 null이면 그 화면으로 떨어진다.
+    //
+    // gameId 없이 topicId로 찾는 이유는 MissionRepository 쪽 주석 참고(스케줄러 콜백엔 gameId가 없다).
+    private String resolveRevealWord(CharadesGameState state) {
+        if (state == null || state.missionId() == null || state.topicId() == null) {
+            return null;
+        }
+        return missionRepository
+            .findByMissionIdAndTopicTopicIdAndMissionTypeAndIsActiveTrue(
+                state.missionId(),
+                state.topicId(),
+                MISSION_TYPE
+            )
+            .map(Mission::getKeyword)
+            .filter(keyword -> !keyword.isBlank())
+            .orElse(null);
     }
 
     private Mission findCurrentMission(
