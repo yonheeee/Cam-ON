@@ -226,6 +226,10 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   const spkStatus: DeviceStatus = spk.devices.length === 0 ? 'none' : 'ok';
 
   // ---- 카메라 미리보기 (로컬 트랙을 그대로 붙인다 — 새 getUserMedia 없이) ----
+  // camStatus도 deps에 필요하다: 모달을 연 직후엔 장치 목록 조회가 안 끝나 camStatus가
+  // 'ok'가 아니고, 그동안 <video>는 렌더되지 않는다. 목록이 도착해 <video>가 생겨도
+  // track/isCameraEnabled는 그대로라 이 effect가 다시 안 돌아 미리보기가 검게 남았다
+  // (카메라 토글을 껐다 켜야 붙던 버그). 'ok'로 바뀌는 렌더 뒤에 attach가 실행돼야 한다.
   const track = cameraTrack?.track;
   useEffect(() => {
     const video = videoRef.current;
@@ -234,7 +238,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
     return () => {
       track.detach(video);
     };
-  }, [track, isCameraEnabled]);
+  }, [track, isCameraEnabled, camStatus]);
 
   // ---- 손동작 인식 (미리보기 위 스켈레톤 + 테스트 결과 판정) ----
   const previewActive = isCameraEnabled && camStatus === 'ok' && Boolean(track);
