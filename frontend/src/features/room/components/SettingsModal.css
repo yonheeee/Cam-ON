@@ -222,6 +222,23 @@
   border-radius: 6px;
 }
 
+/* 손동작 판정 디버그 readout (dev · ?gestureDebug 전용). 거리 한계 튜닝용 숫자를 보여준다. */
+.settings-modal__gesture-debug {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  right: 8px;
+  padding: 5px 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.4;
+  color: #f4f1ea;
+  background: rgba(12, 14, 22, 0.78);
+  border: 1px solid rgba(244, 241, 234, 0.35);
+  border-radius: 5px;
+  pointer-events: none;
+}
+
 .settings-modal__preview-empty {
   position: absolute;
   inset: 0;
