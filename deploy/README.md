@@ -8,6 +8,9 @@
 브라우저가 카메라/마이크(`getUserMedia`)를 허용하려면 `localhost`가 아닌 이상 HTTPS가
 필수라 이 배포가 필요하다.
 
+플레이테스트 지표 대시보드(Metabase)는 앱 배포와 수명을 분리한 별도 compose 프로젝트로 띄운다 —
+절차와 이유는 [analytics/README.md](analytics/README.md)에 있다.
+
 ## 사전 준비 (AWS 콘솔 / 도메인 등록기관에서 직접)
 
 1. **도메인 확보** — 가비아/Route53/Namecheap 등에서 구매하거나, 비용 없이 빠르게 하려면

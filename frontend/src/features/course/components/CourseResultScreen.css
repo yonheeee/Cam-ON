@@ -57,6 +57,107 @@
   pointer-events: none;
 }
 
+.course-result__fireworks {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.course-result__firework {
+  position: absolute;
+  top: var(--firework-y);
+  left: var(--firework-x);
+  width: 0;
+  height: 0;
+}
+
+.course-result__firework::after {
+  content: '';
+  position: absolute;
+  left: calc(var(--u) * -0.7);
+  top: calc(var(--u) * -0.7);
+  width: calc(var(--u) * 1.4);
+  height: calc(var(--u) * 1.4);
+  border: calc(var(--u) * 0.18) solid #fff3c4;
+  border-radius: 50%;
+  box-shadow: 0 0 calc(var(--u) * 1.2) #ffd84d;
+  opacity: 0;
+  animation: course-result-firework-flash 1.35s ease-out var(--firework-delay) 3 both;
+}
+
+.course-result__firework-particle {
+  position: absolute;
+  left: calc(var(--u) * -0.55);
+  top: calc(var(--u) * -0.14);
+  width: calc(var(--u) * 1.1);
+  height: calc(var(--u) * 0.28);
+  border-radius: 1px;
+  background: var(--firework-color);
+  box-shadow:
+    0 0 calc(var(--u) * 0.5) var(--firework-color),
+    0 0 calc(var(--u) * 1) var(--firework-color);
+  opacity: 0;
+  transform: rotate(var(--firework-angle)) translateX(0) scale(0.25);
+  animation: course-result-firework-burst 1.35s ease-out var(--firework-delay) 3 both;
+}
+
+@keyframes course-result-firework-flash {
+  0% {
+    opacity: 0;
+    transform: scale(0.1);
+  }
+
+  12% {
+    opacity: 1;
+  }
+
+  45% {
+    opacity: 0.65;
+    transform: scale(1.7);
+  }
+
+  100% {
+    opacity: 0;
+    transform: scale(2.4);
+  }
+}
+
+@keyframes course-result-firework-burst {
+  0% {
+    opacity: 0;
+    transform: rotate(var(--firework-angle)) translateX(0) scale(0.25);
+  }
+
+  12% {
+    opacity: 1;
+  }
+
+  70% {
+    opacity: 0.9;
+  }
+
+  100% {
+    opacity: 0;
+    transform: rotate(var(--firework-angle)) translateX(var(--firework-distance)) scale(0.8);
+  }
+}
+
+.course-result__plate,
+.course-result__winner,
+.course-result__podium,
+.course-result__ranking,
+.course-result__actions {
+  z-index: 2;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .course-result__fireworks {
+    display: none;
+  }
+}
+
 /* 아래 %는 전부 배경 그림의 검은 칸을 픽셀 스캔해서 잰 값이다(눈대중 금지 — 칸을 조금만
    벗어나도 글자가 금테 위로 올라탄다). 명판 x 35.7~48.8 / y 26.3~29.8 */
 .course-result__plate {
@@ -189,11 +290,23 @@
 }
 
 .course-result__ranking-title {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: calc(var(--u) * 0.35);
   margin: 0;
-  text-align: center;
   font-family: var(--pap-font-pixel);
   font-size: calc(var(--u) * 1.1);
   color: var(--pap-play-yellow);
+}
+
+.course-result__ranking-title svg {
+  width: calc(var(--u) * 1.25);
+  height: calc(var(--u) * 1.25);
+  stroke: var(--pap-play-yellow);
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .course-result__list {
@@ -207,32 +320,92 @@
 }
 
 .course-result__row {
+  position: relative;
   display: grid;
-  grid-template-columns: calc(var(--u) * 1.2) 1fr auto;
+  grid-template-columns: calc(var(--u) * 1.65) minmax(0, 1fr) auto;
   align-items: center;
-  gap: calc(var(--u) * 0.5);
+  gap: calc(var(--u) * 0.4);
   flex: 1;
-  padding: 0 calc(var(--u) * 0.6);
-  border: 2px solid var(--pap-ink);
+  overflow: hidden;
+  padding: 0 calc(var(--u) * 0.5) 0 calc(var(--u) * 0.35);
+  border: 2px solid var(--c);
   border-radius: calc(var(--u) * 0.4);
-  background: var(--camon-color-panel-cream);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--c) 20%, white), #fffdf5 48%);
+  box-shadow: calc(var(--u) * 0.12) calc(var(--u) * 0.12) 0 rgb(43 24 51 / 0.45);
   color: var(--pap-ink);
   font-size: calc(var(--u) * 0.8);
+  opacity: 0;
+  animation: course-result-row-enter 420ms steps(4, end)
+    calc(var(--row-index) * 160ms) both;
 }
 
-/* 우승자 줄만 금색 */
+@keyframes course-result-row-enter {
+  from {
+    opacity: 0;
+    transform: translateX(calc(var(--u) * 1.4));
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* 우승자 줄만 금색 + 한 번 지나가는 빛 */
 .course-result__row--first {
-  background: var(--pap-play-yellow);
+  background: linear-gradient(90deg, #ffe27a, #fff3bf 55%, #ffd45f);
+  box-shadow:
+    calc(var(--u) * 0.12) calc(var(--u) * 0.12) 0 rgb(43 24 51 / 0.45),
+    0 0 calc(var(--u) * 0.55) rgb(255 216 77 / 0.5);
 }
 
-.course-result__row--me {
-  outline: 2px solid var(--pap-arcade-teal);
-  outline-offset: -4px;
+.course-result__row--first::after {
+  content: '';
+  position: absolute;
+  top: -70%;
+  bottom: -70%;
+  left: -35%;
+  width: 22%;
+  background: rgb(255 255 255 / 0.7);
+  transform: rotate(18deg);
+  animation: course-result-first-shine 800ms ease-out 1.05s both;
+  pointer-events: none;
 }
 
-.course-result__rank {
+@keyframes course-result-first-shine {
+  from {
+    left: -35%;
+  }
+
+  to {
+    left: 125%;
+  }
+}
+
+.course-result__rank-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(var(--u) * 1.45);
+  height: calc(var(--u) * 1.45);
   font-family: var(--pap-font-pixel);
-  opacity: 0.7;
+  font-size: calc(var(--u) * 0.9);
+}
+
+.course-result__rank-badge svg {
+  width: calc(var(--u) * 1.05);
+  height: calc(var(--u) * 1.05);
+  color: var(--pap-festival-coral);
+  stroke: var(--pap-ink);
+  stroke-width: 1.4;
+  stroke-linejoin: round;
+}
+
+.course-result__name-wrap {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: calc(var(--u) * 0.25);
 }
 
 .course-result__nickname {
@@ -243,6 +416,28 @@
 
 .course-result__score {
   font-family: var(--pap-font-pixel);
+  font-variant-numeric: tabular-nums;
+}
+
+.course-result__row--settled .course-result__score {
+  animation: course-result-score-settle 240ms steps(2, end);
+}
+
+@keyframes course-result-score-settle {
+  50% {
+    color: var(--c);
+    filter: brightness(1.25);
+    transform: scale(1.08);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .course-result__row,
+  .course-result__row--first::after,
+  .course-result__row--settled .course-result__score {
+    animation: none;
+    opacity: 1;
+  }
 }
 
 /* ---- 오른쪽 아래: 버튼 ---- 칸: x 75.7~86.9 / y 72.3~84.6 */
@@ -267,13 +462,6 @@
 
 .course-result__btn--lobby {
   background: var(--pap-arcade-orange);
-}
-
-.course-result__wait-host {
-  margin: 0;
-  text-align: center;
-  font-size: calc(var(--u) * 0.65);
-  opacity: 0.8;
 }
 
 .course-result__error {

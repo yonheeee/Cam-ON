@@ -729,16 +729,33 @@ public class NinjaGameService {
 
     private void finishGame(Room room, int seq) {
         List<RankingEntry> ranking = buildFinalRanking(room, seq);
+        saveCourseRanking(room, seq, ranking.stream().collect(java.util.stream.Collectors.toMap(
+            entry -> UUID.fromString(entry.token()),
+            RankingEntry::rank,
+            (left, right) -> left,
+            java.util.LinkedHashMap::new
+        )));
         ninjaRedis.saveRanking(room.roomCode(), seq, ranking.stream().map(RankingEntry::token).toList());
         ninjaRedis.enterEnded(room.roomCode(), seq);
         log.info("[Service] finishGame : roomCode={} seq={} 최종 순위(누적점수순)={}", room.roomCode(), seq, ranking);
         eventPublisher.publish(room.roomId(), "ninja:game-ended",
-            new GameEndedPayload(ranking, sessionTotals(room, seq)));
+            new GameEndedPayload(
+                ranking,
+                sessionTotals(room, seq),
+                gameScoreService.getCourseTotals(room.roomId())
+            ));
         // 이 게임이 끝났다는 사실만 알린다 — 코스의 다음 칸으로 넘길지 종합 결과로 갈지는
         // 코스 도메인의 판단이다(닌자는 자기가 코스의 몇 번째인지도 모른다).
         applicationEventPublisher.publishEvent(
             new GameSessionFinishedEvent(room.roomId(), seq)
         );
+    }
+
+    private void saveCourseRanking(Room room, int seq, Map<UUID, Integer> ranks) {
+        SaveRoundResult result = gameScoreService.saveCourseRanking(room.roomId(), seq, ranks);
+        if (result != SaveRoundResult.SUCCESS && result != SaveRoundResult.ALREADY_SAVED) {
+            throw new IllegalStateException("Failed to save ninja course score: " + result);
+        }
     }
 
 
