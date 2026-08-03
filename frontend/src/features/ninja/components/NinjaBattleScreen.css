@@ -511,8 +511,11 @@
   align-items: center;
   justify-content: center;
   flex-wrap: wrap;
-  gap: 2px;
-  margin-bottom: 24px; /* 원 아래 absolute 캡션(11px 픽셀폰트 + 위 여백)이 앉을 자리 */
+  /* 캡션(.ninja-seal__caption)은 absolute라 자리를 차지하지 않는다. 그래서 인술이 많아
+     두 줄로 접히면 첫 줄 캡션이 둘째 줄 원 위에 겹쳤다(아마테라스 6개 등).
+     행 간격(24px)으로 캡션 자리를 확보한다 — 가로 간격은 그대로 2px. */
+  gap: 24px 2px;
+  margin-bottom: 24px; /* 마지막 줄 캡션이 앉을 자리 */
 }
 
 .ninja-seal {
