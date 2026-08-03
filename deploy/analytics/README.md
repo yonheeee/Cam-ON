@@ -30,15 +30,23 @@ EC2 외부에서 직접 열리지 않는다.
 
 터널을 연 사람의 PC에서만 열린다. 볼 때만 켜면 되고, 꺼도 수집은 계속된다.
 
+**로컬 포트는 3001을 피해 3002를 쓴다.** `backend/compose.yml`의 analytics 프로파일로 로컬
+Metabase를 띄워 본 사람은 3001이 이미 쓰이고 있어서, `-L 3001:...`은 포트 충돌로 실패한다
+(`ExitOnForwardFailure` 없이 실행하면 터널만 조용히 안 붙고 브라우저에는 로컬 Metabase가
+그대로 열려서, EC2 데이터를 본다고 착각하기 쉽다 — 로컬은 자기 PC 플레이만 보인다).
+
 ```bash
-ssh -i <pem 경로> -L 3001:localhost:3001 ubuntu@i15b110.p.ssafy.io
+ssh -i <pem 경로> -o ExitOnForwardFailure=yes -L 3002:localhost:3001 \
+    ubuntu@i15b110.p.ssafy.io
 ```
 
 터널을 띄운 채로 브라우저에서:
 
 ```text
-http://localhost:3001
+http://localhost:3002
 ```
+
+어느 쪽에 붙었는지 확실히 하려면 로그인 후 DB 목록에 `Cam-ON`(mysql)이 있는지 본다.
 
 로그인 계정은 EC2의 `/opt/camon/analytics/.mb-admin.env`(mode 600)에 있다. 팀원별 계정을
 따로 주려면 Metabase 관리자 화면에서 초대한다(사람마다 pem을 돌리는 것보다 이게 맞다).

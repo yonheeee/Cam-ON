@@ -23,8 +23,11 @@ services:
       # 힙 상한을 명시한다. 안 주면 JVM이 호스트 메모리의 1/4을 힙으로 잡아, 같은 인스턴스의
       # backend/MySQL과 메모리를 경쟁한다.
       JAVA_OPTS: -Xmx1g
-      # SSH 터널로 접속하므로 사용자에게 보이는 주소는 터널 로컬 포트다.
-      MB_SITE_URL: http://localhost:${METABASE_PORT:-3001}
+      # Metabase가 링크를 만들 때 쓰는 주소. SSH 터널로 접속하므로 이건 EC2 바인딩 포트
+      # (METABASE_PORT)가 아니라 **보는 사람 PC의 터널 로컬 포트**다. 둘을 같은 값으로 묶으면
+      # 로컬에 3001을 이미 쓰는 사람(backend/compose.yml analytics 프로파일)에게 자기 로컬
+      # Metabase를 가리키는 링크가 나가서, 다른 데이터를 보고 있는 걸 알아채기 어렵다.
+      MB_SITE_URL: ${MB_SITE_URL:-http://localhost:3002}
       MB_ANON_TRACKING_ENABLED: "false"
     ports:
       # 127.0.0.1 바인딩이 이 배포의 접근 제어다 — 반드시 유지한다.
@@ -33,7 +36,7 @@ services:
       # published 포트를 nat/DOCKER-USER 체인에 직접 넣어 ufw의 INPUT 규칙을 우회하기 때문이다.
       # 즉 여기를 0.0.0.0으로 바꾸면 ufw에 포트를 열지 않아도 분석 콘솔이 인터넷에 그대로
       # 노출된다(보안그룹이 막아주길 기대하는 형태가 됨). 접속은 SSH 터널로 한다:
-      #   ssh -i <pem> -L 3001:localhost:3001 ubuntu@<도메인>
+      #   ssh -i <pem> -o ExitOnForwardFailure=yes -L 3002:localhost:3001 ubuntu@<도메인>
       - "127.0.0.1:${METABASE_PORT:-3001}:3000"
     volumes:
       - metabase-data:/metabase-data
