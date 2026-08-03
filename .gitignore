@@ -8,3 +8,9 @@ deploy/secrets/
 *.pem
 *.ppk
 .env
+# .env.local / .env.production 등 파생 파일도 전부 제외하고, 키 이름만 담은 템플릿만 남긴다
+.env.*
+!.env.example
+
+# macOS 탐색기가 폴더마다 만드는 메타데이터 파일
+.DS_Store
