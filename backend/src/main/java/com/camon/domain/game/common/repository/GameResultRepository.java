@@ -22,6 +22,12 @@ public interface GameResultRepository {
 
     Map<UUID, Long> findCourseTotals(UUID roomId);
 
+    SaveRoundResult saveCourseResults(
+        UUID roomId,
+        int sessionSeq,
+        Map<UUID, Long> scores
+    );
+
     /**
      * 코스 한 번의 점수 기록 전부(course:totals + 모든 session:{seq}:* 키)를 지운다.
      * 점수 키는 HINCRBY로 누적되므로, 같은 방에서 코스를 다시 돌리려면 반드시 먼저 지워야

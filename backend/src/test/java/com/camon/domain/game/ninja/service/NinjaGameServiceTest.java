@@ -110,6 +110,8 @@ class NinjaGameServiceTest {
         lenient().doReturn(scheduledFuture).when(taskScheduler).schedule(any(Runnable.class), any(Instant.class));
         lenient().when(gameScoreService.saveRoundScores(any(UUID.class), anyInt(), anyInt(), any()))
             .thenReturn(SaveRoundResult.SUCCESS);
+        lenient().when(gameScoreService.saveCourseRanking(any(UUID.class), anyInt(), any()))
+            .thenReturn(SaveRoundResult.SUCCESS);
         lenient().when(gameScoreService.getSessionTotals(any(UUID.class), anyInt())).thenReturn(Map.of());
 
         Effect effect = Effect.builder()

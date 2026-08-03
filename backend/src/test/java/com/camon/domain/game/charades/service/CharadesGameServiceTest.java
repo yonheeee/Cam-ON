@@ -114,6 +114,8 @@ class CharadesGameServiceTest {
         lenient().when(gameScoreService.saveRoundScores(
             any(), anyInt(), anyInt(), any()
         )).thenReturn(SaveRoundResult.SUCCESS);
+        lenient().when(gameScoreService.saveCourseRanking(any(), anyInt(), any()))
+            .thenReturn(SaveRoundResult.SUCCESS);
         lenient().when(gameScoreService.getSessionTotals(any(), anyInt()))
             .thenReturn(Map.of());
         roomId = UUID.randomUUID();

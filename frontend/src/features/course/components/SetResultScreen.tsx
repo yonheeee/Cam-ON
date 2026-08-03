@@ -122,7 +122,7 @@ export function SetResultScreen({
         <section className="set-result__deck">
           <div className="set-result__totals">
             <h2 className="set-result__deck-title">누적 순위</h2>
-            <p className="set-result__deck-sub">세트 점수를 반영한 현재 순위예요.</p>
+            <p className="set-result__deck-sub">순위 점수(5·3·2·1)를 누적한 현재 순위예요.</p>
             <ol className="set-result__cards">
               {courseRanking.map((row, index) => (
                 <li
