@@ -70,7 +70,10 @@ public class NinjaGameService {
     private static final Duration TARGET_DURATION = Duration.ofSeconds(15);
     // 공격 resolve 후 다음 교환/판 사이의 인터미션: 이펙트 재생 5초 + 다음 진행 직전 카운트다운.
     // 타임아웃(공격 없음)으로 넘어갈 땐 이펙트가 없어 카운트다운만 태운다.
-    private static final Duration EFFECT_DURATION = Duration.ofSeconds(5);
+    // 0.7초 암전 뒤 기술별 이펙트가 재생된다. 서버도 같은 총 길이를 사용해야
+    // 모든 참가자의 카운트다운이 이펙트 종료 직후 동시에 시작된다.
+    private static final long CINEMATIC_BLACKOUT_MILLIS = 700;
+    private static final long FALLBACK_EFFECT_MILLIS = 1800;
     // 카운트다운은 3→2→1을 0.5초씩 보여주고 끝난다(총 1.5초). 숫자 3개를 초 단위로 세면
     // 교환마다 3초가 죽는데, 손동작 게임은 교환이 자주 돌아서 그 대기가 체감이 크다.
     // 프론트가 이 길이를 0.5초로 나눠 표시하므로(useNinjaRound.countdownSeconds) 값을 바꿀
@@ -427,7 +430,7 @@ public class NinjaGameService {
         }
 
         Instant now = Instant.now();
-        Instant effectUntil = now.plus(EFFECT_DURATION);
+        Instant effectUntil = now.plus(effectDuration(skill.getId()));
         // 게임 종료 결정타면 카운트다운 없이 이펙트만 재생하고 최종 순위로 — nextRoundAt은 null.
         Instant nextRoundAt = ending ? null : effectUntil.plus(COUNTDOWN_DURATION);
 
@@ -443,6 +446,20 @@ public class NinjaGameService {
 
         return new TargetResponse(round, exchange, participantToken, targetToken, skill.getId(), damage,
             hpAfterClamped, eliminated, roundEnded, ending);
+    }
+
+    private Duration effectDuration(Long skillId) {
+        long effectMillis = switch (skillId.intValue()) {
+            case 1 -> 1750; // 뇌절
+            case 2 -> 1900; // 봉선화의 술
+            case 3 -> 2050; // 수룡탄의 술
+            case 4 -> 1650; // 냥냥펀치
+            case 5 -> 1950; // 바람의 상처
+            case 6 -> 2500; // 아마테라스
+            case 7 -> 2300; // 나선환
+            default -> FALLBACK_EFFECT_MILLIS;
+        };
+        return Duration.ofMillis(CINEMATIC_BLACKOUT_MILLIS + effectMillis);
     }
 
     // 인터미션 이후 무엇을 할지: 게임 종료 / 다음 판 시작 / 같은 판의 다음 교환.
