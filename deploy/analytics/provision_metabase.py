@@ -300,14 +300,18 @@ FROM playtest_metric_course_attempts;""",
         FROM playtest_metric_course_attempts
     ) AS `참가자 중간 이탈률 (%)`,
     (
+        -- 전체 참가자 기준: 결과 화면 도달 인원 ÷ 최초 참가 인원.
+        -- 완주자만 분모로 쓰면 중간에 이탈한 사람이 계산에서 빠져 거의 항상 100%가 나온다
+        -- (완주했으면 결과 화면을 보기 때문). 최초 참가 인원을 분모로 두면 이탈까지 반영된다.
+        -- LEAST는 안전장치다 — 도중에 참가자가 교체되면 도달 인원이 최초 인원을 넘어
+        -- 100%를 초과할 수 있다.
         SELECT ROUND(
-            100.0 * SUM(LEAST(result_viewer_count, completed_player_count))
-                / NULLIF(SUM(completed_player_count), 0),
+            100.0 * SUM(LEAST(result_viewer_count, initial_player_count))
+                / NULLIF(SUM(initial_player_count), 0),
             1
         )
         FROM playtest_metric_course_attempts
-        WHERE course_completed = TRUE
-    ) AS `결과 화면 도달률 (%)`,
+    ) AS `전체 참가자 기준 결과 화면 도달률 (%)`,
     (
         SELECT ROUND(
             100.0 * SUM(outcome = 'PARTICIPANT_RECONNECTED')

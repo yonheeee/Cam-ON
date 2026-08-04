@@ -83,17 +83,20 @@ GROUP BY
     leave_reason
 ORDER BY dropout_players DESC;
 
--- 4. Result-screen reach rate (%), based on players remaining at course completion
+-- 4. Result-screen reach rate (%), based on every player who entered the course.
+-- Using only the players left at completion makes this ~always 100%: finishing the course
+-- means seeing the result screen, so mid-course dropouts vanish from the denominator.
+-- LEAST guards against >100% when participants are replaced mid-course.
 SELECT
-    SUM(completed_player_count) AS completion_players,
-    SUM(LEAST(result_viewer_count, completed_player_count)) AS result_viewers,
+    SUM(initial_player_count) AS initial_players,
+    SUM(LEAST(result_viewer_count, initial_player_count)) AS result_viewers,
     ROUND(
-        100.0 * SUM(LEAST(result_viewer_count, completed_player_count))
-            / NULLIF(SUM(completed_player_count), 0),
+        100.0 * SUM(LEAST(result_viewer_count, initial_player_count))
+            / NULLIF(SUM(initial_player_count), 0),
         1
     ) AS result_screen_reach_rate_percent
 FROM playtest_metric_course_attempts
-WHERE course_completed = TRUE
+WHERE 1 = 1
 [[AND started_at >= {{start_date}}]]
 [[AND started_at < DATE_ADD({{end_date}}, INTERVAL 1 DAY)]];
 
