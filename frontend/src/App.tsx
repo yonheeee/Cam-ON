@@ -3,7 +3,6 @@ import { LandingPage } from './features/landing/components/LandingPage';
 import { SetResultPreview } from './features/course/components/SetResultPreview';
 import { CourseResultPreview } from './features/course/components/CourseResultPreview';
 import { NinjaEffectPreview } from './features/ninja/components/NinjaEffectPreview';
-import { NinjaCinematicPreview } from './features/ninja/components/NinjaCinematicPreview';
 import { JoinRoomPage } from './features/room/pages/JoinRoomPage';
 import { NicknamePage } from './features/room/pages/NicknamePage';
 import { RoomPage } from './features/room/pages/RoomPage';
@@ -35,9 +34,6 @@ function App() {
         {/* 개발 전용: 코스 최종 결과 화면 배치 확인 */}
         {import.meta.env.DEV && (
           <Route path="/dev/course-result" element={<CourseResultPreview />} />
-        )}
-        {import.meta.env.DEV && (
-          <Route path="/dev/ninja-cinematic" element={<NinjaCinematicPreview />} />
         )}
         {/* 정적 세그먼트가 :roomId보다 우선 매칭되므로 /rooms/join이 RoomPage에 잡히지 않는다 */}
         <Route path="/rooms/join" element={<InviteRedirect />} />

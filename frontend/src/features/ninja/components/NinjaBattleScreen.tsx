@@ -120,6 +120,7 @@ export function NinjaBattleScreen({
     countdownSeconds,
     lastAttack,
     roundResult,
+    connectionState,
   } = useNinjaRound(roomId, gameId, accessToken, myId, comboEntry?.comboLabel ?? null, comboEntry?.confidence ?? 0);
 
   // 카운트다운이 한 칸 0.5초라(총 1.5초) 음원을 2배속으로 돌려 "3, 2, 1" 비트를 화면과 맞춘다.
@@ -155,6 +156,7 @@ export function NinjaBattleScreen({
     [tracks],
   );
   const speakingIds = useSpeakingIdentities();
+  const nicknameCacheRef = useRef(new Map<string, string>());
   const stageRef = useRef<HTMLDivElement>(null);
   const tileRefs = useRef(new Map<string, HTMLDivElement>());
   const [cinematicFocus, setCinematicFocus] = useState<{ x: number; y: number } | null>(null);
@@ -167,12 +169,58 @@ export function NinjaBattleScreen({
     [participants],
   );
 
+  useEffect(() => {
+    for (const participant of participants) {
+      if (participant.name) nicknameCacheRef.current.set(participant.identity, participant.name);
+    }
+  }, [participants]);
+
   // 짝수 자리는 왼쪽, 홀수 자리는 오른쪽. 2인전은 1:1 대면, 3인은 2:1, 4인은 2:2가 된다.
   const leftSeats = seats.filter((_, i) => i % 2 === 0);
   const rightSeats = seats.filter((_, i) => i % 2 === 1);
 
   const nicknameOf = (id: string) =>
     participants.find((p) => p.identity === id)?.name || (id === myId ? '나' : '상대');
+
+  const connectionNicknameOf = (id: string) =>
+    participants.find((participant) => participant.identity === id)?.name ||
+    nicknameCacheRef.current.get(id) ||
+    (id === myId ? '나' : '참가자');
+
+  const connectionBanner = (() => {
+    if (connectionState.selfConnectionTimedOut) {
+      return { tone: 'danger', text: '연결 시간이 초과되어 탈락 처리됩니다.' };
+    }
+    if (connectionState.selfReconnecting) {
+      return { tone: 'warning', text: '연결이 끊겼습니다. 재연결 중...' };
+    }
+    const notice = connectionState.connectionNotice;
+    if (notice) {
+      if (notice.participantId === null) {
+        return { tone: 'success', text: '서버와 다시 연결되었습니다.' };
+      }
+      const nickname = connectionNicknameOf(notice.participantId);
+      if (notice.kind === 'TIMED_OUT') {
+        return { tone: 'danger', text: `${nickname}님의 연결이 끊겨 탈락 처리되었습니다.` };
+      }
+      if (notice.kind === 'RECONNECTED') {
+        return { tone: 'success', text: `${nickname}님이 다시 연결되었습니다.` };
+      }
+      return { tone: 'warning', text: `${nickname}님의 연결이 끊겼습니다.` };
+    }
+    if (connectionState.disconnectedParticipantIds.length > 0) {
+      const names = connectionState.disconnectedParticipantIds
+        .slice(0, 2)
+        .map(connectionNicknameOf)
+        .join(', ');
+      const rest = Math.max(0, connectionState.disconnectedParticipantIds.length - 2);
+      return {
+        tone: 'warning',
+        text: `${names}${rest ? ` 외 ${rest}명` : ''}의 재연결을 기다리는 중입니다.`,
+      };
+    }
+    return null;
+  })();
 
   const gameStarted = round !== null;
 
@@ -366,6 +414,11 @@ export function NinjaBattleScreen({
         className="ninja-stage"
         style={{ '--ninja-scale': stageScale } as React.CSSProperties}
       >
+        {connectionBanner && (
+          <div className={`ninja-connection-toast ninja-connection-toast--${connectionBanner.tone}`}>
+            {connectionBanner.text}
+          </div>
+        )}
         {cinematicPhase !== 'idle' && effectTargetId && (
           <NinjaCinematicOverlay
             focus={cinematicPhase === 'focus' ? cinematicFocus : null}
