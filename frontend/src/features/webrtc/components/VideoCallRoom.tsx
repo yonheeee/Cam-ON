@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { LiveKitRoom, RoomAudioRenderer, useParticipants } from '@livekit/components-react';
+import { LiveKitRoom, useParticipants } from '@livekit/components-react';
+import { VoiceVolumeProvider } from '../../sound/context/VoiceVolumeProvider';
+import { VoiceAudioRenderer } from '../../sound/components/VoiceAudioRenderer';
 import { VideoPresets, type RoomOptions } from 'livekit-client';
 import { CharadesMicrophoneController } from '../../charades/components/CharadesMicrophoneController';
 import { CharadesGamePanel } from '../../charades/components/CharadesGamePanel';
@@ -115,36 +117,41 @@ export function VideoCallRoom({ accessToken, token, roomId, participantId }: Vid
       {connectionError && (
         <div className="video-call-room__connection-error">LiveKit 연결 실패: {connectionError}</div>
       )}
-      <LiveKitRoom
-        serverUrl={LIVEKIT_SERVER_URL}
-        token={token}
-        connect
-        video
-        audio
-        options={roomOptions}
-        data-lk-theme="default"
-        style={{ height: '100vh' }}
-        onConnected={() => setConnectionError(null)}
-        onDisconnected={() => {
-          if (leavingRef.current) return; // 의도한 퇴장은 leaveRoom이 정리까지 끝냄
-          clearRoom();
-          setClosed(true);
-        }}
-        onError={(err) => setConnectionError(err.message)}
-      >
-        {/* 원격 참가자의 마이크를 실제로 재생하는 유일한 지점. 대기방·닌자·몸으로말해요가 각자
-            캠 타일을 직접 그리게 되면서 VideoConference(안에 이게 들어있다)를 안 쓰게 됐고, 그
-            뒤로는 아무도 오디오를 렌더하지 않아 전원이 음소거처럼 들렸다 — 표현자만 음소거되어야
-            하는 몸으로말해요가 특히 깨졌다. 캠 타일은 Camera 트랙만 붙이므로 화면과 무관하게
-            여기서 한 번만 렌더한다(로컬 오디오는 제외되므로 자기 소리가 되울리지 않는다). */}
-        <RoomAudioRenderer />
-        <RoomContent
-          roomId={roomId}
-          accessToken={accessToken}
-          participantId={participantId}
-          onLeave={leaveRoom}
-        />
-      </LiveKitRoom>
+      {/* 음성 볼륨 상태를 방 전체에 공급한다. BGM 버튼의 음성 슬라이더(BackgroundMusic)와
+          실제 재생 지점(VoiceAudioRenderer)이 트리에서 멀리 떨어져 있어 이 컨텍스트로 잇는다.
+          Provider가 방 안에만 있으므로, 랜딩의 BGM 버튼은 음성 슬라이더를 띄우지 않는다. */}
+      <VoiceVolumeProvider>
+        <LiveKitRoom
+          serverUrl={LIVEKIT_SERVER_URL}
+          token={token}
+          connect
+          video
+          audio
+          options={roomOptions}
+          data-lk-theme="default"
+          style={{ height: '100vh' }}
+          onConnected={() => setConnectionError(null)}
+          onDisconnected={() => {
+            if (leavingRef.current) return; // 의도한 퇴장은 leaveRoom이 정리까지 끝냄
+            clearRoom();
+            setClosed(true);
+          }}
+          onError={(err) => setConnectionError(err.message)}
+        >
+          {/* 원격 참가자의 마이크를 실제로 재생하는 유일한 지점. 대기방·닌자·몸으로말해요가 각자
+              캠 타일을 직접 그리게 되면서 VideoConference(안에 이게 들어있다)를 안 쓰게 됐고, 그
+              뒤로는 아무도 오디오를 렌더하지 않아 전원이 음소거처럼 들렸다 — 표현자만 음소거되어야
+              하는 몸으로말해요가 특히 깨졌다. 캠 타일은 Camera 트랙만 붙이므로 화면과 무관하게
+              여기서 한 번만 렌더한다(로컬 오디오는 제외되므로 자기 소리가 되울리지 않는다). */}
+          <VoiceAudioRenderer />
+          <RoomContent
+            roomId={roomId}
+            accessToken={accessToken}
+            participantId={participantId}
+            onLeave={leaveRoom}
+          />
+        </LiveKitRoom>
+      </VoiceVolumeProvider>
       {closed && (
         <PixelConfirmModal
           title="방 연결이 종료되었어요"

@@ -102,21 +102,30 @@
 
 /* ---------- 본문 2열 (스테이지 | 사이드) ---------- */
 
-.lobby-screen__music-toggle {
+/* className은 BackgroundMusic의 래퍼에 붙는다(음량 창이 버튼 기준으로 떠야 해서).
+   .background-music을 함께 적어 컴포넌트 기본값(position: relative)을 순서와 무관하게 덮는다. */
+.lobby-screen__music-toggle.background-music {
   position: absolute;
   top: 48px;
   right: var(--lobby-pad-x);
   z-index: 2;
-  display: inline-flex;
-  gap: 8px;
-  align-items: center;
+}
+
+.lobby-screen__music-toggle .background-music__toggle {
   min-width: 104px;
   padding: 8px 12px;
   font-size: 13px;
 }
 
+/* 음량 창이 참가자 타일 위로 펼쳐지는데, 타일 내부 요소들이 z-index 3~4를 쓴다(준비 배지·
+   방장 왕관·이름 바 등). 래퍼 기본값 2로는 창이 그 아래로 깔리므로, 열려 있는 동안만 올린다.
+   방 설정 모달(z-index 10)보다는 낮게 둔다. */
+.lobby-screen__music-toggle.background-music--open {
+  z-index: 9;
+}
+
 @media (max-height: 780px) {
-  .lobby-screen__music-toggle {
+  .lobby-screen__music-toggle.background-music {
     top: 27px;
   }
 }

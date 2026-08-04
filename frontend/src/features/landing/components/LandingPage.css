@@ -129,14 +129,17 @@
   outline-offset: 4px;
 }
 
-.landing__music-toggle {
+/* className은 BackgroundMusic의 래퍼에 붙는다(음량 창이 버튼 기준으로 떠야 해서). 위치는
+   래퍼에, 버튼 크기는 버튼에 준다. .background-music을 함께 적어 두 클래스 특이도로 만들어,
+   CSS 로드 순서와 무관하게 컴포넌트 기본값(position: relative)을 확실히 덮는다. */
+.landing__music-toggle.background-music {
   position: fixed;
   z-index: 20;
   top: 20px;
   right: 20px;
-  display: inline-flex;
-  gap: 8px;
-  align-items: center;
+}
+
+.landing__music-toggle .background-music__toggle {
   min-width: 118px;
   padding: 10px 14px;
   font-size: 14px;
@@ -155,9 +158,12 @@
     transform: translateX(-50%) scale(0.62);
   }
 
-  .landing__music-toggle {
+  .landing__music-toggle.background-music {
     top: 12px;
     right: 12px;
+  }
+
+  .landing__music-toggle .background-music__toggle {
     min-width: 104px;
     padding: 8px 10px;
     font-size: 12px;

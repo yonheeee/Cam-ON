@@ -1,4 +1,19 @@
+/* BGM 버튼 + 펼쳐지는 음량 창.
+ *
+ * 래퍼가 위치 기준이다. 호출부(랜딩/대기방/게임 화면)는 이 래퍼에 자기 className을 붙여
+ * 위치만 지정하고, 버튼 크기(min-width/padding/font-size)는 `.background-music__toggle`을
+ * 겨냥해서 준다 — 패널이 버튼을 기준으로 떠야 하므로 fixed/absolute가 버튼이 아니라 래퍼에
+ * 걸려야 한다. */
 .background-music {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.background-music__toggle {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
   justify-content: center;
   transition:
     opacity 120ms ease,
@@ -15,12 +30,23 @@
   stroke-width: 2.6;
 }
 
-.background-music--muted {
+.background-music__caret {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+  transition: transform 120ms ease;
+}
+
+.background-music--open .background-music__caret {
+  transform: rotate(180deg);
+}
+
+.background-music__toggle--muted {
   opacity: 0.58;
   filter: grayscale(0.75);
 }
 
-.background-music--waiting {
+.background-music__toggle--waiting {
   animation: background-music-waiting 1.2s ease-in-out infinite;
 }
 
@@ -31,8 +57,132 @@
   }
 }
 
+/* ---- 펼쳐지는 창 ---- */
+
+.background-music__panel {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  /* 슬라이더가 눌릴 만큼의 폭은 확보하되, 게임 화면 헤더 위에서 과하게 넓어지지 않게 둔다.
+     라벨(음악/음성) 열이 붙으면서 조금 넓어졌다. */
+  width: 232px;
+  padding: 12px;
+  background: var(--pap-plaza-cream);
+  font-family: var(--pap-font-pixel);
+  text-align: left;
+}
+
+.background-music__panel[hidden] {
+  display: none;
+}
+
+.background-music__mute {
+  --pap-shadow-offset: var(--pap-shadow-icon);
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  padding: 7px 10px;
+  font-size: 12px;
+}
+
+/* 음악/음성 두 줄. grid로 라벨·슬라이더·퍼센트 열을 맞춰서, 두 줄의 슬라이더 시작점과
+   퍼센트 위치가 어긋나지 않게 한다(flex로 하면 라벨 글자수에 따라 밀린다). */
+.background-music__row {
+  display: grid;
+  grid-template-columns: 28px 1fr 40px;
+  gap: 8px;
+  align-items: center;
+}
+
+.background-music__row-label {
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.background-music__value {
+  font-size: 12px;
+  font-weight: 700;
+  text-align: right;
+  /* 값이 9%→100%로 바뀔 때 폭이 흔들리지 않게. 열 너비는 grid가 고정한다. */
+  font-variant-numeric: tabular-nums;
+}
+
+.background-music__hint {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--pap-text-muted);
+}
+
+/* ---- 픽셀 톤 슬라이더 ----
+ * 트랙은 잉크 테두리를 두른 크림 막대, 손잡이는 각진 사각형. 브라우저별 의사요소가 상속을
+ * 공유하지 않아 트랙/손잡이 규칙을 WebKit·Firefox로 각각 적는다. */
+.background-music__range {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 18px;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.background-music__range:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.background-music__range::-webkit-slider-runnable-track {
+  height: 10px;
+  background: var(--pap-white);
+  border: var(--pap-stroke-control) solid var(--pap-ink);
+  border-radius: 0;
+}
+
+.background-music__range::-webkit-slider-thumb {
+  width: 12px;
+  height: 18px;
+  margin-top: -6px;
+  background: var(--pap-arcade-orange);
+  border: var(--pap-stroke-control) solid var(--pap-ink);
+  border-radius: 0;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.background-music__range::-moz-range-track {
+  height: 10px;
+  background: var(--pap-white);
+  border: var(--pap-stroke-control) solid var(--pap-ink);
+  border-radius: 0;
+}
+
+.background-music__range::-moz-range-thumb {
+  width: 12px;
+  height: 18px;
+  background: var(--pap-arcade-orange);
+  border: var(--pap-stroke-control) solid var(--pap-ink);
+  border-radius: 0;
+}
+
+.background-music__range:focus-visible {
+  outline: 3px solid var(--pap-arcade-teal);
+  outline-offset: 2px;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .background-music--waiting {
+  .background-music__toggle--waiting {
     animation: none;
+  }
+
+  .background-music__caret {
+    transition: none;
   }
 }
