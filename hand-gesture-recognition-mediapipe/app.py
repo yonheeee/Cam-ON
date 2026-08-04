@@ -18,6 +18,9 @@ from utils import HandLandmarkSmoother
 from utils import measure_hand_proximity
 from utils import hand_proximity_factor
 from utils import hand_gap_limit_for
+from utils import describe_hand_candidate
+from utils import select_combo_hands
+from utils import MIN_HAND_DEPTH
 from model import KeyPointClassifier
 from model import PointHistoryClassifier
 
@@ -115,7 +118,11 @@ def main():
     mp_hands = mp.solutions.hands
     hands = mp_hands.Hands(
         static_image_mode=use_static_image_mode,
-        max_num_hands=2,
+        # 판정에 쓰는 손은 2개(왼손+오른손)뿐인데 4개를 받는 이유: Hands는 "가까운 손"이 아니라
+        # 자기 detection 점수 순으로 상한까지 내놓는다. 2로 두면 뒤쪽 사람의 손이나 손처럼 생긴
+        # 물체가 상위에 올라오는 순간 플레이어의 손 하나가 밀려나 조합 판정이 죽는다. 후보를
+        # 넉넉히 받아서 그중 가까운 손·가운데 손을 utils/hand_selection.py가 직접 고른다.
+        max_num_hands=4,
         min_detection_confidence=min_detection_confidence,
         min_tracking_confidence=min_tracking_confidence,
     )
@@ -170,6 +177,9 @@ def main():
     # 손가락/손이 겹쳐서 검출이 흔들릴 때 좌표 떨림을 줄이는 1€ 필터
     landmark_smoother = HandLandmarkSmoother(min_cutoff=1.0, beta=0.3)
 
+    # 직전 프레임에서 손을 잡고 있었는지 — 깊이 하한의 이력(hysteresis)에 쓴다(hand_selection.py)
+    hands_engaged = False
+
     #  ########################################################################
     mode = 0
 
@@ -202,16 +212,38 @@ def main():
         # 상대 위치가 지워지므로, 거리는 정규화 전 좌표로 재야 한다.
         pixel_by_hand = {'Left': None, 'Right': None}
         detected_hands = set()
+        far_hand_count = 0
+        nearest_depth = None
         if results.multi_hand_landmarks is not None:
+            # 후보를 먼저 전부 재보고(크기·중앙 여부) 판정에 쓸 한 쌍만 고른다 — 스무딩보다 앞서야
+            # 한다. 1€ 필터는 손 라벨별로 상태를 들고 있어서, 버릴 손까지 넣으면 뒤쪽 사람의 손
+            # 좌표가 같은 라벨 슬롯에 섞여 들어가 플레이어의 손이 그쪽으로 끌려간다.
+            frame_height, frame_width = debug_image.shape[0], debug_image.shape[1]
+            candidates = []
             for hand_landmarks, handedness in zip(results.multi_hand_landmarks,
                                                   results.multi_handedness):
-                hand_label = handedness.classification[0].label
+                candidate = describe_hand_candidate(
+                    handedness.classification[0].label,
+                    (hand_landmarks, handedness),
+                    calc_landmark_list(debug_image, hand_landmarks),
+                    frame_width, frame_height)
+                if candidate is not None:
+                    candidates.append(candidate)
+
+            selection = select_combo_hands(candidates, hands_engaged)
+            hands_engaged = len(selection.hands) > 0
+            far_hand_count = selection.far_hand_count
+            nearest_depth = selection.nearest_depth
+
+            for candidate in selection.hands:
+                hand_landmarks, handedness = candidate.source
+                hand_label = candidate.handedness
                 detected_hands.add(hand_label)
 
                 # Bounding box calculation
                 brect = calc_bounding_rect(debug_image, hand_landmarks)
-                # Landmark calculation
-                landmark_list = calc_landmark_list(debug_image, hand_landmarks)
+                # Landmark calculation (선별 단계에서 계산해둔 픽셀 좌표를 그대로 쓴다)
+                landmark_list = candidate.pixels
                 # 겹침으로 인한 좌표 떨림 완화
                 landmark_list = landmark_smoother.smooth(
                     hand_label, landmark_list, time.time())
@@ -270,6 +302,8 @@ def main():
                              (brect[1] + brect[3]) // 2)
                     skill_effect.spawn(center)
                 previous_hand_sign[hand_label] = hand_sign_label
+        else:
+            hands_engaged = False
 
         for hand_label in ('Left', 'Right'):
             if hand_label not in detected_hands:
@@ -347,6 +381,18 @@ def main():
             previous_combo_sign = None
             combo_hold_confirmed = False
             combo_sign_history.clear()
+
+        # 깊이 하한에 걸려 무시한 손 — 정상 거리인데 손이 안 잡히면 이 숫자(실측 depth)를 보고
+        # hand_selection.py의 MIN_HAND_DEPTH를 조정한다. 프론트 환경설정 미리보기의 디버그
+        # readout과 같은 값이다.
+        if far_hand_count > 0:
+            far_text = "FAR-HANDS:{} depth:{:.3f}/{:.3f}".format(
+                far_hand_count, nearest_depth or 0.0, MIN_HAND_DEPTH)
+            cv.putText(debug_image, far_text, (10, 170),
+                       cv.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 0), 4, cv.LINE_AA)
+            cv.putText(debug_image, far_text, (10, 170),
+                       cv.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2,
+                       cv.LINE_AA)
 
         debug_image = draw_point_history(debug_image, point_history['Left'])
         debug_image = draw_point_history(debug_image, point_history['Right'])

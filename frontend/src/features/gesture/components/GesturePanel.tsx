@@ -54,7 +54,7 @@ export function GesturePanel({ variant = 'panel', active = true }: GesturePanelP
     };
   }, [track]);
 
-  const { results, combo, ready, error, mirrorCanvasRef } = useHandGestureRecognition(
+  const { results, combo, depth, ready, error, mirrorCanvasRef } = useHandGestureRecognition(
     videoRef,
     active && Boolean(track),
   );
@@ -160,6 +160,14 @@ export function GesturePanel({ variant = 'panel', active = true }: GesturePanelP
       </div>
       <ul className="gesture-panel__results">
         {results.length < 2 && <li>양손이 다 잡혀야 스킬이 판정됩니다 (인식된 손 {results.length}개)</li>}
+        {/* 뒤쪽 사람 손·손처럼 생긴 물체가 끼어들지 않게 너무 먼 손은 판정에서 뺀다
+            (handSelection.ts). 왜 손이 안 잡히는지 모르는 상황을 막으려고 알려준다. */}
+        {depth.farHandCount > 0 && (
+          <li>
+            카메라에서 먼 손 {depth.farHandCount}개는 무시했어요 (거리 {depth.nearest?.toFixed(2)} / 하한{' '}
+            {depth.min.toFixed(2)})
+          </li>
+        )}
         {combo.label && (
           <li>
             스킬 <strong>{combo.label}</strong> ({(combo.confidence * 100).toFixed(0)}%

@@ -242,11 +242,12 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
 
   // ---- 손동작 인식 (미리보기 위 스켈레톤 + 테스트 결과 판정) ----
   const previewActive = isCameraEnabled && camStatus === 'ok' && Boolean(track);
-  const { results, combo, ready: handReady } = useHandGestureRecognition(videoRef, previewActive);
+  const { results, combo, depth, ready: handReady } = useHandGestureRecognition(videoRef, previewActive);
   const handDetected = results.length > 0;
   // 손동작 판정 디버그 표시 — 라벨/신뢰도와 함께 두 손 사이 거리(손바닥 길이 단위)와 그 라벨의
-  // 허용 한계를 같이 보여준다. handProximity.ts의 라벨별 한계를 실측으로 튜닝하는 화면이
-  // 여기다(닌자 게임은 2명부터라 방을 두 개 잡아야 하는데, 이 미리보기는 혼자서도 열린다).
+  // 허용 한계, 그리고 카메라와의 거리 지표(depth)와 그 하한을 같이 보여준다.
+  // handProximity.ts의 라벨별 거리 한계와 handSelection.ts의 깊이 하한을 실측으로 튜닝하는
+  // 화면이 여기다(닌자 게임은 2명부터라 방을 두 개 잡아야 하는데, 이 미리보기는 혼자서도 열린다).
   // 플레이어에게 보일 정보는 아니라 dev 빌드에서만 켜고, 배포된 플레이테스트 빌드에서
   // 재보고 싶을 때만 ?gestureDebug 쿼리로 연다.
   const [gestureDebug] = useState(
@@ -456,6 +457,10 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                           : combo.rawLabel
                             ? `${combo.rawLabel} 모양 · 두 손이 멀어요 ${combo.handGap?.toFixed(2)} > ${combo.handGapLimit?.toFixed(2)}`
                             : `양손을 보여주세요 (인식된 손 ${results.length}개)`}
+                        {/* 카메라 거리 지표 — 하한(min)보다 작으면 그 손은 판정에서 제외된다.
+                            handSelection.ts의 MIN_HAND_DEPTH를 실측으로 조정할 때 보는 숫자다. */}
+                        {` · 거리 ${depth.nearest?.toFixed(3) ?? '-'} / 하한 ${depth.min.toFixed(3)}`}
+                        {depth.farHandCount > 0 && ` · 먼 손 ${depth.farHandCount}개 무시`}
                       </span>
                     )}
                   </>

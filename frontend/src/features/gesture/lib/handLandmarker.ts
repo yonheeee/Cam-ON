@@ -13,6 +13,14 @@ const MODEL_URL =
 const MIN_HAND_DETECTION_CONFIDENCE = 0.7;
 const MIN_TRACKING_CONFIDENCE = 0.5;
 
+// 판정에 쓰는 손은 2개(왼손+오른손)뿐인데 4개를 받는 이유: HandLandmarker는 "가까운 손"이 아니라
+// 자기 detection 점수 순으로 상한까지 내놓는다. 2로 두면 뒤쪽을 지나가는 사람의 손이나 손처럼
+// 생긴 물체가 상위에 올라오는 순간 플레이어의 손 하나가 밀려나 조합 판정이 죽었다. 후보를
+// 넉넉히 받아서 그중 가까운 손·가운데 손을 lib/handSelection.ts가 직접 고른다.
+// 손 하나당 랜드마크 추론이 한 번 더 도는 만큼 프레임 비용이 늘지만, GPU 델리게이트에서
+// 인식 루프가 30fps를 유지하는 선이라 판정이 죽는 것보다 낫다.
+const NUM_HANDS = 4;
+
 /**
  * 양손 랜드마커를 만든다. WASM + 모델(약 8MB)을 CDN에서 받으므로 첫 호출은 느리다 —
  * 브라우저가 캐시하므로 두 번째부터는 빠르다(사전 점검이 워밍업 역할도 한다).
@@ -24,7 +32,7 @@ export async function createHandLandmarker(): Promise<HandLandmarker> {
   return HandLandmarker.createFromOptions(vision, {
     baseOptions: { modelAssetPath: MODEL_URL, delegate: 'GPU' },
     runningMode: 'VIDEO',
-    numHands: 2,
+    numHands: NUM_HANDS,
     minHandDetectionConfidence: MIN_HAND_DETECTION_CONFIDENCE,
     minTrackingConfidence: MIN_TRACKING_CONFIDENCE,
   });

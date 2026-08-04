@@ -63,14 +63,22 @@
   filter: drop-shadow(0 3px 0 rgb(20 12 4 / 0.45));
 }
 
+/* className은 BackgroundMusic의 래퍼에 붙는다 — 버튼 크기는 버튼을 겨냥해서 준다. */
 .fetch-game__music-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* 음량 창은 헤더에서 아래로 펼쳐져 본문(.fetch-game__floor) 영역까지 내려온다. 그런데 헤더와
+   본문이 둘 다 z-index: 3이라, 같은 값이면 DOM 순서상 나중인 본문이 이겨서 창이 가려진다.
+   창이 열려 있는 동안만 헤더를 한 단 올린다(평소 쌓임 순서는 건드리지 않는다). */
+.fetch-game__head:has(.background-music--open) {
+  z-index: 4;
+}
+
+.fetch-game__music-toggle .background-music__toggle {
   min-width: 110px;
   padding: 8px 12px;
   font-size: 13px;
-  flex-shrink: 0;
 }
 
 /* 라운드·시계 — 말풍선 위 가운데 한 줄 */
