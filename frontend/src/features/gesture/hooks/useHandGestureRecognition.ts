@@ -10,6 +10,7 @@ import { createHandLandmarker } from '../lib/handLandmarker';
 import { classifyKeyPoint } from '../lib/keypointClassifier';
 import { HandLandmarkSmoother } from '../lib/oneEuroFilter';
 import { measureHandProximity, handProximityFactor, handGapLimitFor } from '../lib/handProximity';
+import { describeHandCandidate, selectComboHands, MIN_HAND_DEPTH } from '../lib/handSelection';
 
 // app.py의 combo_sign_history = deque(maxlen=5) — 프레임 하나짜리 오인식(손 떨림 등)에
 // 흔들리지 않도록 최근 5프레임의 다수결로 안정화한다.
@@ -18,7 +19,21 @@ const STABILIZE_WINDOW = 5;
 export interface HandGestureResult {
   handedness: 'Left' | 'Right';
   landmarks: NormalizedLandmark[];
+  /** 프레임 높이 대비 손바닥 길이 — 카메라와의 거리 대용 지표 (클수록 가까움) */
+  depth: number;
 }
+
+/** 후보 선별 결과 — 왜 손이 안 잡히는지(너무 멀다) 알려주고 하한을 실측으로 튜닝하는 데 쓴다. */
+export interface HandDepthInfo {
+  /** 이번 프레임에서 가장 가까운 손의 depth. 후보가 하나도 없으면 null */
+  nearest: number | null;
+  /** 판정에 쓰기 위한 depth 하한 (handSelection.ts의 MIN_HAND_DEPTH) */
+  min: number;
+  /** 너무 멀어서 무시한 손 개수 */
+  farHandCount: number;
+}
+
+const EMPTY_DEPTH: HandDepthInfo = { nearest: null, min: MIN_HAND_DEPTH, farHandCount: 0 };
 
 export interface ComboGestureResult {
   /** 모양 + 손 사이 거리 조건을 모두 통과한 최종 판정. 양손이 다 잡혀야만 채워진다 (한 손이면 null) */
@@ -75,12 +90,15 @@ function correctHandedness(taskVisionLabel: 'Left' | 'Right'): 'Left' | 'Right' 
 export function useHandGestureRecognition(videoRef: RefObject<HTMLVideoElement | null>, active: boolean) {
   const [results, setResults] = useState<HandGestureResult[]>([]);
   const [combo, setCombo] = useState<ComboGestureResult>(EMPTY_COMBO);
+  const [depth, setDepth] = useState<HandDepthInfo>(EMPTY_DEPTH);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const landmarkerRef = useRef<HandLandmarker | null>(null);
   const mirrorCanvasRef = useRef<HTMLCanvasElement>(document.createElement('canvas'));
   const smootherRef = useRef(new HandLandmarkSmoother(1.0, 0.3, 1.0));
   const stabilizeWindowRef = useRef<(string | null)[]>([]);
+  // 직전 프레임에서 손을 잡고 있었는지 — 깊이 하한의 이력(hysteresis)에 쓴다(handSelection.ts).
+  const engagedRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -132,21 +150,39 @@ export function useHandGestureRecognition(videoRef: RefObject<HTMLVideoElement |
       const detection = landmarker.detectForVideo(mirrorCanvas, now);
       const timestampSeconds = now / 1000;
 
+      // 후보를 먼저 전부 재보고(크기·중앙 여부) 판정에 쓸 한 쌍만 고른다 — 스무딩보다 앞서야
+      // 한다. 1€ 필터는 손 라벨별로 상태를 들고 있어서, 버릴 손까지 넣으면 뒤쪽 사람의 손
+      // 좌표가 같은 라벨 슬롯에 섞여 들어가 플레이어의 손이 그쪽으로 끌려간다.
+      const candidates = detection.landmarks
+        .map((landmarks, i) => {
+          const taskVisionLabel = (detection.handedness[i]?.[0]?.categoryName ?? 'Right') as 'Left' | 'Right';
+          const handednessLabel = correctHandedness(taskVisionLabel);
+          const pixels = calcLandmarkList(landmarks, width, height);
+          return describeHandCandidate(handednessLabel, landmarks, pixels, width, height);
+        })
+        .filter((candidate): candidate is NonNullable<typeof candidate> => candidate !== null);
+
+      const selection = selectComboHands(candidates, engagedRef.current);
+      engagedRef.current = selection.hands.length > 0;
+      setDepth({
+        nearest: selection.nearestDepth,
+        min: MIN_HAND_DEPTH,
+        farHandCount: selection.farHandCount,
+      });
+
       const detectedHands = new Set<'Left' | 'Right'>();
       const preprocessedByHand: Partial<Record<'Left' | 'Right', number[]>> = {};
       // 손 사이 거리 판정용 원본(픽셀) 좌표. 분류기 입력(preprocessedByHand)은 손마다 따로
       // 정규화돼서 두 손의 상대 위치가 지워지므로, 거리는 정규화 전 좌표로 재야 한다.
       const pixelByHand: Partial<Record<'Left' | 'Right', Point[]>> = {};
-      const frameResults: HandGestureResult[] = detection.landmarks.map((landmarks, i) => {
-        const taskVisionLabel = (detection.handedness[i]?.[0]?.categoryName ?? 'Right') as 'Left' | 'Right';
-        const handednessLabel = correctHandedness(taskVisionLabel);
+      const frameResults: HandGestureResult[] = selection.hands.map((candidate) => {
+        const handednessLabel = candidate.handedness;
         detectedHands.add(handednessLabel);
         // 겹침으로 인한 좌표 떨림을 완화하는 1€ 필터 (app.py의 landmark_smoother.smooth 포팅).
-        const rawLandmarkList = calcLandmarkList(landmarks, width, height);
-        const landmarkList = smootherRef.current.smooth(handednessLabel, rawLandmarkList, timestampSeconds);
+        const landmarkList = smootherRef.current.smooth(handednessLabel, candidate.pixels, timestampSeconds);
         pixelByHand[handednessLabel] = landmarkList;
         preprocessedByHand[handednessLabel] = preProcessLandmark(landmarkList);
-        return { handedness: handednessLabel, landmarks };
+        return { handedness: handednessLabel, landmarks: candidate.landmarks, depth: candidate.depth };
       });
       setResults(frameResults);
 
@@ -193,9 +229,11 @@ export function useHandGestureRecognition(videoRef: RefObject<HTMLVideoElement |
   useEffect(() => {
     if (active) return;
     stabilizeWindowRef.current = [];
+    engagedRef.current = false;
     setResults([]);
     setCombo(EMPTY_COMBO);
+    setDepth(EMPTY_DEPTH);
   }, [active]);
 
-  return { results, combo, ready, error, mirrorCanvasRef };
+  return { results, combo, depth, ready, error, mirrorCanvasRef };
 }
