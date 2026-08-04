@@ -9,17 +9,22 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { GesturePanel } from '../../gesture/components/GesturePanel';
 import { useGestureBoardStore } from '../../gesture/store/gestureBoardStore';
 import { BackgroundMusic } from '../../sound/components/BackgroundMusic';
+import { SpeakingIndicator } from '../../webrtc/components/SpeakingIndicator';
+import { useSpeakingIdentities } from '../../webrtc/hooks/useSpeakingIdentities';
 import { useAnnouncementSound } from '../../sound/hooks/useAnnouncementSound';
 import { useCountdownSound } from '../../sound/hooks/useCountdownSound';
 import { useNinjaEliminationSound } from '../hooks/useNinjaEliminationSound';
 import { useNinjaEffectSound } from '../hooks/useNinjaEffectSound';
 import { useNinjaRound } from '../hooks/useNinjaRound';
 import { gestureImage } from '../lib/gestureImages';
-import { skillEffect, skillShake } from '../lib/skillEffects';
+import { skillEffect, skillEffectMs, skillShake } from '../lib/skillEffects';
 import { PixelConfirmModal } from '../../system/components/PixelConfirmModal';
+import { CINEMATIC_BLACKOUT_MS, NinjaCinematicOverlay } from './NinjaCinematicOverlay';
 import './NinjaBattleScreen.css';
 
-const ATTACK_TARGET_TIMER_SECONDS = 30;
+// 백엔드 NinjaGameService.TARGET_DURATION 및 useNinjaRound의 대상 선택 타이머와 동일해야
+// 진행 바가 15초에서 100%로 시작해 0%까지 정확히 줄어든다.
+const ATTACK_TARGET_TIMER_SECONDS = 15;
 const MAX_HP = 100;
 // 다음 교환 카운트다운이 세는 숫자 개수(3 → 2 → 1). useNinjaRound.COUNTDOWN_STEPS와 같은 값.
 const NINJA_COUNTDOWN_STEPS = 3;
@@ -115,6 +120,7 @@ export function NinjaBattleScreen({
     countdownSeconds,
     lastAttack,
     roundResult,
+    connectionState,
   } = useNinjaRound(roomId, gameId, accessToken, myId, comboEntry?.comboLabel ?? null, comboEntry?.confidence ?? 0);
 
   // 카운트다운이 한 칸 0.5초라(총 1.5초) 음원을 2배속으로 돌려 "3, 2, 1" 비트를 화면과 맞춘다.
@@ -149,6 +155,11 @@ export function NinjaBattleScreen({
     () => new Map(tracks.map((t) => [t.participant.identity, t])),
     [tracks],
   );
+  const speakingIds = useSpeakingIdentities();
+  const nicknameCacheRef = useRef(new Map<string, string>());
+  const stageRef = useRef<HTMLDivElement>(null);
+  const tileRefs = useRef(new Map<string, HTMLDivElement>());
+  const [cinematicFocus, setCinematicFocus] = useState<{ x: number; y: number } | null>(null);
 
   // 타일 순서와 플레이어 색은 모든 참가자 화면에서 같아야 한다(내 화면에선 2P인 사람이 남의 화면에선
   // 3P면 색으로 소통이 안 된다). LiveKit participants 배열 순서는 클라이언트마다 다를 수 있어서
@@ -158,12 +169,58 @@ export function NinjaBattleScreen({
     [participants],
   );
 
+  useEffect(() => {
+    for (const participant of participants) {
+      if (participant.name) nicknameCacheRef.current.set(participant.identity, participant.name);
+    }
+  }, [participants]);
+
   // 짝수 자리는 왼쪽, 홀수 자리는 오른쪽. 2인전은 1:1 대면, 3인은 2:1, 4인은 2:2가 된다.
   const leftSeats = seats.filter((_, i) => i % 2 === 0);
   const rightSeats = seats.filter((_, i) => i % 2 === 1);
 
   const nicknameOf = (id: string) =>
     participants.find((p) => p.identity === id)?.name || (id === myId ? '나' : '상대');
+
+  const connectionNicknameOf = (id: string) =>
+    participants.find((participant) => participant.identity === id)?.name ||
+    nicknameCacheRef.current.get(id) ||
+    (id === myId ? '나' : '참가자');
+
+  const connectionBanner = (() => {
+    if (connectionState.selfConnectionTimedOut) {
+      return { tone: 'danger', text: '연결 시간이 초과되어 탈락 처리됩니다.' };
+    }
+    if (connectionState.selfReconnecting) {
+      return { tone: 'warning', text: '연결이 끊겼습니다. 재연결 중...' };
+    }
+    const notice = connectionState.connectionNotice;
+    if (notice) {
+      if (notice.participantId === null) {
+        return { tone: 'success', text: '서버와 다시 연결되었습니다.' };
+      }
+      const nickname = connectionNicknameOf(notice.participantId);
+      if (notice.kind === 'TIMED_OUT') {
+        return { tone: 'danger', text: `${nickname}님의 연결이 끊겨 탈락 처리되었습니다.` };
+      }
+      if (notice.kind === 'RECONNECTED') {
+        return { tone: 'success', text: `${nickname}님이 다시 연결되었습니다.` };
+      }
+      return { tone: 'warning', text: `${nickname}님의 연결이 끊겼습니다.` };
+    }
+    if (connectionState.disconnectedParticipantIds.length > 0) {
+      const names = connectionState.disconnectedParticipantIds
+        .slice(0, 2)
+        .map(connectionNicknameOf)
+        .join(', ');
+      const rest = Math.max(0, connectionState.disconnectedParticipantIds.length - 2);
+      return {
+        tone: 'warning',
+        text: `${names}${rest ? ` 외 ${rest}명` : ''}의 재연결을 기다리는 중입니다.`,
+      };
+    }
+    return null;
+  })();
 
   const gameStarted = round !== null;
 
@@ -192,14 +249,65 @@ export function NinjaBattleScreen({
     setShakeTick((tick) => tick + 1);
   }, [inEffectPlayback, round, exchange]);
 
+  const effectTargetId = inEffectPlayback ? (lastAttack?.targetToken ?? null) : null;
+  const effectSkillId = lastAttack?.skillId ?? requiredSkill?.skillId;
+  const [cinematicPhase, setCinematicPhase] = useState<'idle' | 'blackout' | 'focus'>('idle');
+  const pixelEffect = cinematicPhase === 'focus' && effectTargetId
+    ? skillEffect(effectSkillId)
+    : null;
+  const shake = skillShake(effectSkillId);
+
+  useEffect(() => {
+    if (!inEffectPlayback || !effectTargetId) {
+      setCinematicPhase('idle');
+      return;
+    }
+
+    setCinematicPhase('blackout');
+    const focusTimer = window.setTimeout(() => setCinematicPhase('focus'), CINEMATIC_BLACKOUT_MS);
+    const endTimer = window.setTimeout(
+      () => setCinematicPhase('idle'),
+      CINEMATIC_BLACKOUT_MS + skillEffectMs(effectSkillId),
+    );
+    return () => {
+      window.clearTimeout(focusTimer);
+      window.clearTimeout(endTimer);
+    };
+  }, [effectSkillId, effectTargetId, exchange, inEffectPlayback, round]);
+
+  useEffect(() => {
+    if (cinematicPhase !== 'focus' || !effectTargetId) {
+      setCinematicFocus(null);
+      return;
+    }
+
+    const measureTarget = () => {
+      const stage = stageRef.current;
+      const target = tileRefs.current.get(effectTargetId);
+      if (!stage || !target) return;
+
+      const stageRect = stage.getBoundingClientRect();
+      const targetRect = target.getBoundingClientRect();
+      if (stageRect.width === 0 || stageRect.height === 0) return;
+
+      setCinematicFocus({
+        x: ((targetRect.left + targetRect.width / 2 - stageRect.left) / stageRect.width) * 100,
+        y: ((targetRect.top + targetRect.height / 2 - stageRect.top) / stageRect.height) * 100,
+      });
+    };
+
+    const frame = window.requestAnimationFrame(measureTarget);
+    window.addEventListener('resize', measureTarget);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener('resize', measureTarget);
+    };
+  }, [cinematicPhase, effectTargetId, stageScale]);
+
   if (!gameStarted) return null;
 
   // 이펙트는 맞은 사람 타일에서 재생한다 — 데미지가 "누구에게" 들어갔는지가 화면에서 바로 읽힌다.
-  const effectTargetId = inEffectPlayback ? (lastAttack?.targetToken ?? null) : null;
-  const effectSkillId = lastAttack?.skillId ?? requiredSkill?.skillId;
-  const pixelEffect = effectTargetId ? skillEffect(effectSkillId) : null;
   // 진동은 스킬마다 다르다(단발 타격은 1회, 연발/굽이침은 이펙트가 끝날 때까지 반복).
-  const shake = skillShake(effectSkillId);
 
   const renderTile = (id: string, seat: number) => {
     const trackRef = trackByIdentity.get(id);
@@ -217,7 +325,13 @@ export function NinjaBattleScreen({
     return (
       <div
         key={id}
-        className={`ninja-tile ninja-tile--p${(seat % 4) + 1}${dead ? ' ninja-tile--dead' : ''}`}
+        ref={(node) => {
+          if (node) tileRefs.current.set(id, node);
+          else tileRefs.current.delete(id);
+        }}
+        className={`ninja-tile ninja-tile--p${(seat % 4) + 1}${dead ? ' ninja-tile--dead' : ''}${
+          cinematicPhase === 'focus' && effectTargetId === id ? ' ninja-tile--cinematic-target' : ''
+        }`}
       >
         <div className="ninja-tile__cam">
           {trackRef ? (
@@ -231,6 +345,9 @@ export function NinjaBattleScreen({
           {/* 탈락하면 인식 루프와 브로드캐스트를 끊는다 — 판정에 쓰이지 않는 추론을 매 프레임
               돌릴 이유가 없다(제출도 훅에서 이미 막혀 있다). 다음 판이 열리면 다시 켜진다. */}
           {isMe && <GesturePanel variant="overlay" active={!isEliminated} />}
+          {/* 탈락한 사람은 회색 오버레이 위에 표시가 겹치지 않게 뺀다 — 판에서 빠진 사람이라
+              누가 말하는지 알려줄 대상이 아니다. */}
+          <SpeakingIndicator active={!dead && speakingIds.has(id)} />
           {/* 이펙트는 이 타일 안에서만 재생된다 — 컴포넌트가 호스트 div 크기에 맞춰 그린다.
               시드의 모든 스킬이 skillEffects의 BY_SKILL_ID에 있어서 폴백 파티클은 없앴다 —
               매핑이 빠진 스킬이 생기면 이펙트 없이 진동만 남으니 스킬 추가 시 표를 함께 고친다. */}
@@ -292,7 +409,22 @@ export function NinjaBattleScreen({
       />
       {/* 여기서부터가 1440×810 고정 캔버스. 배경은 이 밖(뷰포트 전체)에 있어서 비율이 안 맞는
           화면에서도 레터박스 검은 띠 대신 야경 배경이 그대로 보인다. */}
-      <div className="ninja-stage" style={{ '--ninja-scale': stageScale } as React.CSSProperties}>
+      <div
+        ref={stageRef}
+        className="ninja-stage"
+        style={{ '--ninja-scale': stageScale } as React.CSSProperties}
+      >
+        {connectionBanner && (
+          <div className={`ninja-connection-toast ninja-connection-toast--${connectionBanner.tone}`}>
+            {connectionBanner.text}
+          </div>
+        )}
+        {cinematicPhase !== 'idle' && effectTargetId && (
+          <NinjaCinematicOverlay
+            focus={cinematicPhase === 'focus' ? cinematicFocus : null}
+            blackout={cinematicPhase === 'blackout'}
+          />
+        )}
       <header className="ninja-screen__topbar">
         <img
           className="ninja-screen__logo pap-pixel-img"

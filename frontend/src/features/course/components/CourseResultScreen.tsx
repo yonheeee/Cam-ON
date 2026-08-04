@@ -3,6 +3,8 @@ import { Track } from 'livekit-client';
 import { useEffect, useMemo, useState } from 'react';
 import type { CourseScoreEntry } from '../hooks/useCourseProgress';
 import { useAnnouncementSound } from '../../sound/hooks/useAnnouncementSound';
+import { SpeakingIndicator } from '../../webrtc/components/SpeakingIndicator';
+import { useSpeakingIdentities } from '../../webrtc/hooks/useSpeakingIdentities';
 import './CourseResultScreen.css';
 
 interface CourseResultScreenProps {
@@ -94,6 +96,8 @@ export function CourseResultScreen({
     [tracks],
   );
 
+  const speakingIds = useSpeakingIdentities();
+
   const nicknameOf = (id: string) => nicknameById.get(id) ?? '알 수 없음';
 
   // 캠이 아직 안 붙었거나 카메라를 끈 참가자는 닉네임 첫 글자를 아바타로 보여준다.
@@ -112,6 +116,8 @@ export function CourseResultScreen({
           <span className="course-result__avatar pap-pixel-title">{nicknameOf(id).slice(0, 1)}</span>
         )}
         {returned && <span className="course-result__left">대기방으로 갔어요</span>}
+        {/* 먼저 대기방으로 간 사람은 캠과 함께 표시도 내린다(위 trackRef와 같은 이유) */}
+        <SpeakingIndicator active={!returned && speakingIds.has(id)} />
         {/* 하단 그라데이션 바 + 등수 색 띠 + 흰 이름 (::before가 색 띠) */}
         <span className="course-result__cam-name">
           <span>{nicknameOf(id)}</span>

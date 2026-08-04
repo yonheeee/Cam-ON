@@ -4,6 +4,8 @@ import { Track } from 'livekit-client';
 import { ChatPanel } from '../../chat/components/ChatPanel';
 import type { ChatMessage } from '../../chat/hooks/useRoomChat';
 import { BackgroundMusic } from '../../sound/components/BackgroundMusic';
+import { SpeakingIndicator } from '../../webrtc/components/SpeakingIndicator';
+import { useSpeakingIdentities } from '../../webrtc/hooks/useSpeakingIdentities';
 import { PixelConfirmModal } from '../../system/components/PixelConfirmModal';
 import { roomApi, RoomApiError } from '../api/roomApi';
 import { SettingsModal } from './SettingsModal';
@@ -107,6 +109,7 @@ export function LobbyScreen({
   const tracks = useTracks([{ source: Track.Source.Camera, withPlaceholder: true }], {
     onlySubscribed: false,
   });
+  const speakingIds = useSpeakingIdentities();
 
   const self = room?.participants.find((p) => p.participantId === participantId);
   const isHost = participantId === room?.hostParticipantId;
@@ -392,6 +395,9 @@ export function LobbyScreen({
                       똑같이 비친다. 자리·순서·이름은 남기고 화면만 아바타로 대신한다
                       (결과 화면 쪽도 대칭으로 대기방에 간 사람의 캠을 내린다). */}
                   {!inResult && <ParticipantTile trackRef={trackRef} disableSpeakingIndicator />}
+                  {/* 캠을 내린 사람(결과 화면에 남아 있는 사람)은 말하는 표시도 내린다 —
+                      아바타만 남은 자리에 테두리가 켜지면 여기 있는 사람처럼 보인다. */}
+                  <SpeakingIndicator active={!inResult && speakingIds.has(identity)} />
                   {/* 방장 표시 — 영상 우측 상단 왕관. 내 화면이든 게스트 화면이든 동일. */}
                   {isHost && (
                     <span className="lobby-tile__host-badge" title="방장" aria-label="방장">

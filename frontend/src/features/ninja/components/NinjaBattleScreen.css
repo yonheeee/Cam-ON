@@ -35,6 +35,91 @@
   z-index: 1;
 }
 
+/* 공격 확정 순간의 만화식 집중 연출. 피격 타일의 실제 중심 좌표를 기준으로
+   전장을 어둡게 만들고 집중선을 뻗어, 기존 술법 이펙트가 더 강하게 읽히게 한다. */
+.ninja-cinematic {
+  --ninja-focus-x: 50%;
+  --ninja-focus-y: 50%;
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  overflow: hidden;
+  pointer-events: none;
+  animation: ninja-cinematic-enter 140ms steps(3, end) both;
+}
+
+.ninja-cinematic__dark {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(
+      ellipse 25% 34% at var(--ninja-focus-x) var(--ninja-focus-y),
+      rgb(18 11 33 / 0.68) 0%,
+      rgb(2 2 6 / 0.91) 58%,
+      rgb(0 0 0 / 0.97) 100%
+    );
+}
+
+.ninja-cinematic--blackout .ninja-cinematic__dark {
+  background: #000;
+}
+
+.ninja-cinematic__focus {
+  position: absolute;
+  left: var(--ninja-focus-x);
+  top: var(--ninja-focus-y);
+  width: 470px;
+  height: 280px;
+  border: 3px solid rgb(255 253 245 / 0.28);
+  border-radius: 18px;
+  box-shadow:
+    0 0 0 8px rgb(255 253 245 / 0.05),
+    0 0 54px 14px rgb(255 253 245 / 0.18),
+    inset 0 0 40px rgb(255 255 255 / 0.08);
+  transform: translate(-50%, -50%);
+  animation: ninja-cinematic-focus 640ms steps(4, end) infinite;
+}
+
+.ninja-cinematic__rays {
+  position: absolute;
+  inset: 0;
+}
+
+.ninja-cinematic__rays span {
+  position: absolute;
+  left: var(--ninja-focus-x);
+  top: var(--ninja-focus-y);
+  width: 1040px;
+  height: var(--ninja-ray-width);
+  background: linear-gradient(
+    90deg,
+    transparent 0 7%,
+    rgb(255 253 245 / 0.88) 12%,
+    rgb(255 253 245 / 0.34) 46%,
+    transparent 86%
+  );
+  transform: rotate(var(--ninja-ray-angle));
+  transform-origin: left center;
+  opacity: 0;
+  animation: ninja-cinematic-ray 620ms ease-out var(--ninja-ray-delay) infinite;
+}
+
+@keyframes ninja-cinematic-enter {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes ninja-cinematic-focus {
+  0%, 100% { transform: translate(-50%, -50%) scale(0.96); opacity: 0.55; }
+  50% { transform: translate(-50%, -50%) scale(1.04); opacity: 1; }
+}
+
+@keyframes ninja-cinematic-ray {
+  0% { opacity: 0; transform: rotate(var(--ninja-ray-angle)) scaleX(0.06); }
+  22% { opacity: 1; }
+  100% { opacity: 0; transform: rotate(var(--ninja-ray-angle)) scaleX(1); }
+}
+
 /* 배경 레이어 — 피격 진동을 여기서만 돌린다(자식이 없어서 transform 합성만 다시 하면 된다).
    scale(var(--ninja-bg-scale))으로 미리 키워둬서 최대 진폭(약 10px)만큼 밀려도 가장자리에 여백이 안 생긴다. */
 .ninja-screen__bg {
@@ -261,6 +346,22 @@
   border-color: var(--ninja-seat-color, var(--pap-ink));
 }
 
+.ninja-tile--cinematic-target {
+  z-index: 30;
+  isolation: isolate;
+  box-shadow:
+    0 0 0 4px var(--pap-white),
+    0 0 34px 12px var(--ninja-seat-color, var(--pap-play-yellow)),
+    8px 8px 0 rgb(0 0 0 / 0.75);
+  animation: ninja-cinematic-target-lock 260ms cubic-bezier(0.2, 1.5, 0.45, 1) both;
+}
+
+@keyframes ninja-cinematic-target-lock {
+  from { transform: scale(0.88); filter: brightness(0.42); }
+  72% { transform: scale(1.09); filter: brightness(1.28); }
+  to { transform: scale(1.05); filter: brightness(1.05); }
+}
+
 /* 공격권 보유자에게 노란 글로우를 덧대던 규칙은 뺐다 — 플레이어 색 테두리 위에 다른 색 테두리가
    겹쳐서 "이 사람 색이 뭔지"가 흐려졌다. 누가 공격권을 가졌는지는 상단 알림이 말해준다. */
 
@@ -351,24 +452,29 @@
 }
 
 .ninja-tile--dead .ninja-tile__cam .lk-participant-tile {
-  filter: grayscale(1) brightness(0.4);
+  filter: grayscale(0.55) brightness(0.78);
 }
 
 .ninja-tile__dead {
   position: absolute;
   inset: 0;
   z-index: 5;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgb(27 18 48 / 0.6);
+  background: rgb(27 18 48 / 0.16);
   pointer-events: none;
 }
 
 .ninja-tile__dead span {
-  font-size: 33px;
-  color: var(--pap-festival-coral);
-  text-shadow: 0 3px 0 rgb(0 0 0 / 0.6);
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  padding: 4px 9px;
+  font-size: 22px;
+  color: var(--pap-white);
+  background: rgb(27 18 48 / 0.82);
+  border: 2px solid var(--pap-festival-coral);
+  border-radius: 5px;
+  box-shadow: 3px 3px 0 rgb(0 0 0 / 0.45);
+  text-shadow: 0 2px 0 rgb(0 0 0 / 0.55);
 }
 
 /* 대상 지정 — 타일 전체가 버튼이 된다(작은 버튼을 찾아 누를 여유가 없는 게임이라) */
@@ -678,6 +784,37 @@
   color: var(--pap-festival-coral);
 }
 
+/* 연결 상태 알림은 처치/공격 알림과 겹치지 않도록 한 줄 아래에 둔다. 암전 중에도 재연결
+   상태를 잃지 않게 시네마틱보다 높은 레이어에서 표시한다. */
+.ninja-connection-toast {
+  position: absolute;
+  top: 76px;
+  left: 50%;
+  z-index: 80;
+  max-width: min(760px, calc(100% - 48px));
+  padding: 11px 20px;
+  border: 3px solid var(--pap-play-yellow);
+  border-radius: var(--pap-radius);
+  background: rgb(18 11 33 / 0.96);
+  box-shadow: 5px 5px 0 rgb(0 0 0 / 0.5);
+  color: var(--pap-white);
+  font-family: var(--pap-font-pixel);
+  font-size: 19px;
+  line-height: 1.35;
+  text-align: center;
+  transform: translateX(-50%);
+  pointer-events: none;
+  animation: ninja-toast-in 140ms ease-out;
+}
+
+.ninja-connection-toast--danger {
+  border-color: var(--pap-festival-coral);
+}
+
+.ninja-connection-toast--success {
+  border-color: var(--pap-arcade-teal);
+}
+
 .ninja-toast__kunai {
   width: 24px;
   height: 24px;
@@ -704,8 +841,13 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .ninja-cinematic,
+  .ninja-cinematic__focus,
+  .ninja-cinematic__rays span,
+  .ninja-tile--cinematic-target,
   .ninja-waiting,
   .ninja-toast,
+  .ninja-connection-toast,
   .ninja-waiting__dots {
     animation: none;
   }

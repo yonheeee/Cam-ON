@@ -3,6 +3,8 @@ import { Track } from 'livekit-client';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { roomApi } from '../../room/api/roomApi';
 import { BackgroundMusic } from '../../sound/components/BackgroundMusic';
+import { SpeakingIndicator } from '../../webrtc/components/SpeakingIndicator';
+import { useSpeakingIdentities } from '../../webrtc/hooks/useSpeakingIdentities';
 import { useCountdownSound } from '../../sound/hooks/useCountdownSound';
 import { PixelConfirmModal } from '../../system/components/PixelConfirmModal';
 import { useCharadesRound } from '../hooks/useCharadesRound';
@@ -124,6 +126,7 @@ export function CharadesGamePanel({
     if (myParticipantId) ids.add(myParticipantId);
     return Array.from(ids);
   }, [participants, myParticipantId]);
+  const speakingIds = useSpeakingIdentities();
   const presenterTrack = presenterId ? trackByIdentity.get(presenterId) : undefined;
   const otherIds = rosterIds.filter((id) => id !== presenterId);
 
@@ -312,6 +315,10 @@ export function CharadesGamePanel({
                 ) : (
                   <span className="charades-stage__avatar">{displayName(presenterId).slice(0, 1)}</span>
                 )}
+                {/* 표현자는 자기 차례에 마이크가 꺼지므로 평소엔 켜지지 않는다. 그래도 그리는 이유는
+                    음소거가 실패했을 때(useCharadesMicrophone이 microphoneError로 알린다) 소리가
+                    나가고 있다는 사실이 화면에도 보여야 하기 때문이다. */}
+                {presenterId && <SpeakingIndicator active={speakingIds.has(presenterId)} />}
               </div>
               {/* --seat는 위 .charades-stage__box에서 상속받는다 */}
               <span className="charades-cam-name charades-cam-name--stage">
@@ -334,6 +341,7 @@ export function CharadesGamePanel({
               name={displayName(id)}
               guess={latestGuessByParticipant[id]}
               seat={seatColor(id)}
+              speaking={speakingIds.has(id)}
             />
           ))}
         </div>
@@ -360,11 +368,13 @@ function SidebarCard({
   name,
   guess,
   seat,
+  speaking,
 }: {
   trackRef: TrackRef | undefined;
   name: string;
   guess?: string;
   seat: string;
+  speaking: boolean;
 }) {
   return (
     <div className="charades-sidebar__card" style={{ '--seat': seat } as CSSProperties}>
@@ -375,6 +385,7 @@ function SidebarCard({
           <span className="charades-sidebar__avatar">{name.slice(0, 1)}</span>
         )}
         <span className="charades-cam-name">{name}</span>
+        <SpeakingIndicator active={speaking} />
       </div>
       {/* 말풍선은 캠 "밖" 카드 레벨에서 absolute로 띄운다 — 캠 자체는 overflow:hidden이라 안에 두면
           잘려서 안 보인다. 카드 위치/사이드바 세로 배치는 그대로, 캠과 다음 캠 사이 여백에 걸친다. */}
