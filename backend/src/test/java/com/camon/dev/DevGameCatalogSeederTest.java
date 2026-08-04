@@ -101,7 +101,8 @@ class DevGameCatalogSeederTest {
         seeder.run(null);
 
         ArgumentCaptor<Mission> captor = ArgumentCaptor.forClass(Mission.class);
-        verify(missionRepository, times(12)).save(captor.capture());
+        // 개수 canary — 카탈로그를 바꾸면 여기서 걸린다 (v3: 휴대폰 제거 + 3종 추가 = 14)
+        verify(missionRepository, times(14)).save(captor.capture());
         List<Mission> saved = captor.getAllValues();
 
         assertThat(saved)
@@ -134,11 +135,11 @@ class DevGameCatalogSeederTest {
         seeder.run(null);
 
         ArgumentCaptor<Mission> captor = ArgumentCaptor.forClass(Mission.class);
-        verify(missionRepository, times(10)).save(captor.capture());
+        verify(missionRepository, times(12)).save(captor.capture());
         assertThat(captor.getAllValues())
             .extracting(Mission::getKeyword)
             .containsExactlyElementsOf(
-                FetchObjectMissionCatalog.KEYWORDS.subList(2, 12)
+                FetchObjectMissionCatalog.KEYWORDS.subList(2, 14)
             );
     }
 

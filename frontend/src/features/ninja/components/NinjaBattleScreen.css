@@ -283,14 +283,15 @@
   cursor: pointer;
 }
 
+/* className은 BackgroundMusic의 래퍼에 붙는다 — 버튼 크기는 버튼을 겨냥해서 준다. */
 .ninja-screen__music-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
+  flex-shrink: 0;
+}
+
+.ninja-screen__music-toggle .background-music__toggle {
   min-width: 110px;
   padding: 8px 12px;
   font-size: 13px;
-  flex-shrink: 0;
 }
 
 /* ---- 본문: 좌 캠 / 중앙 보드 / 우 캠 ---- */
