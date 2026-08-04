@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>손 선별 확인 (dev)</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 16px;
+        background: #14161c;
+        color: #f4f1e8;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      h1 {
+        font-size: 15px;
+        margin: 0 0 8px;
+        font-weight: 600;
+      }
+      p.hint {
+        margin: 0 0 12px;
+        font-size: 12px;
+        line-height: 1.6;
+        color: #9aa0ae;
+      }
+      .stage {
+        position: relative;
+        display: inline-block;
+        line-height: 0;
+        border: 1px solid #2a2e3a;
+      }
+      .stage canvas {
+        display: block;
+      }
+      #skeleton {
+        position: absolute;
+        inset: 0;
+      }
+      #readout {
+        margin-top: 12px;
+        font-size: 13px;
+        line-height: 1.7;
+        white-space: pre;
+      }
+      .legend {
+        margin-top: 8px;
+        font-size: 12px;
+        color: #9aa0ae;
+      }
+      .swatch {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        margin-right: 4px;
+        vertical-align: middle;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>손 선별 확인 — depth 하한 / 가운데·큰 손 우선</h1>
+    <p class="hint">
+      실제 인식 루프와 같은 모듈(lib/handSelection.ts)을 같은 순서로 돌린다. 백엔드·LiveKit 없이
+      카메라만 쓴다.<br />
+      확인 순서: ① 양손을 평소 거리에 두고 depth 값을 본다 → ② 손을 카메라에서 멀리하거나 뒤로
+      물러나서 depth가 하한 아래로 내려가는 순간 스켈레톤이 빨강으로 바뀌는지 본다 → ③ 뒤쪽에서
+      다른 사람이 손을 흔들 때 그 손만 빨강이고 내 손은 초록으로 남는지 본다.
+    </p>
+    <div class="stage">
+      <canvas id="mirror"></canvas>
+      <canvas id="skeleton"></canvas>
+    </div>
+    <div class="legend">
+      <span class="swatch" style="background: #00e676"></span>판정에 쓰는 손(선별 통과)
+      <span class="swatch" style="background: #ff5252; margin-left: 12px"></span>버린 손(너무 멀거나
+      순위에서 밀림)
+    </div>
+    <div id="readout">카메라 권한을 허용하고 손을 보여주세요…</div>
+    <script type="module" src="/gesture-check.ts"></script>
+  </body>
+</html>
