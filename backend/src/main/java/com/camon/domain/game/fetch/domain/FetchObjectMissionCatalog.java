@@ -8,8 +8,10 @@ public final class FetchObjectMissionCatalog {
 
     public static final String MISSION_TYPE = "OBJECT";
 
+    // v3 (2026-08-04): "휴대폰" 제거 — 폰 화면 사진 치팅 방어로 AI가 폰 계열을 전부
+    // _none(오답)으로 흡수하게 되어, 카탈로그에 남으면 클리어 불가능한 라운드가 된다.
+    // 두루마리 휴지/옷걸이/책 추가 (labels.py v3와 동시 반영).
     public static final List<String> KEYWORDS = List.of(
-        "휴대폰",
         "마우스",
         "가위",
         "숟가락",
@@ -20,7 +22,10 @@ public final class FetchObjectMissionCatalog {
         "우산",
         "그릇",
         "모자",
-        "가방"
+        "가방",
+        "두루마리 휴지",
+        "옷걸이",
+        "책"
     );
 
     private FetchObjectMissionCatalog() {
