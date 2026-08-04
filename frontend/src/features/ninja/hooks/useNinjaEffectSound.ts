@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { mixSfxVolume } from '../../sound/lib/sfxVolume';
 
 const EFFECT_SOUND_BY_SKILL_ID: Partial<Record<number, string>> = {
   1: '/assets/sounds/thunder.mp3',
@@ -30,7 +31,7 @@ export function useNinjaEffectSound(
 
     const audio = new Audio(source);
     audio.preload = 'auto';
-    audio.volume = 0.85;
+    audio.volume = mixSfxVolume(0.85);
     audioRef.current = audio;
     void audio.play().catch(() => {
       // 효과음 재생 실패가 닌자 게임 진행을 막아서는 안 된다.
