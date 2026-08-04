@@ -776,7 +776,8 @@ public class NinjaGameService {
     }
 
 
-    // 게임 최종 순위: 판별로 누적된 세션 점수 내림차순. 동점은 토큰으로 결정적 정렬.
+    // 게임 최종 순위: 판별로 누적된 세션 점수 내림차순. 동점은 같은 순위로 처리하고,
+    // 같은 점수 안에서는 토큰으로 결정적 정렬한다(10, 10, 5점 -> 1, 1, 3위).
     private List<RankingEntry> buildFinalRanking(Room room, int seq) {
         Map<UUID, Long> totals = gameScoreService.getSessionTotals(room.roomId(), seq);
         List<String> participants = new ArrayList<>(ninjaRedis.getParticipants(room.roomCode(), seq));
@@ -784,9 +785,20 @@ public class NinjaGameService {
             Comparator.<String>comparingLong(token -> totals.getOrDefault(UUID.fromString(token), 0L)).reversed()
                 .thenComparing(token -> token)
         );
-        return IntStream.range(0, participants.size())
-            .mapToObj(i -> new RankingEntry(participants.get(i), i + 1))
-            .toList();
+
+        List<RankingEntry> ranking = new ArrayList<>(participants.size());
+        Long previousScore = null;
+        int rank = 0;
+        for (int i = 0; i < participants.size(); i++) {
+            String token = participants.get(i);
+            long score = totals.getOrDefault(UUID.fromString(token), 0L);
+            if (previousScore == null || score != previousScore) {
+                rank = i + 1;
+            }
+            ranking.add(new RankingEntry(token, rank));
+            previousScore = score;
+        }
+        return ranking;
     }
 
     private void requireCurrentRound(String roomCode, int seq, int round) {
