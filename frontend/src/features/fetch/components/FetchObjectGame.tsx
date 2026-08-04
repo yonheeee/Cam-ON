@@ -82,7 +82,9 @@ export function FetchObjectGame({
     (COUNTDOWN_MS - countdownLeft) / 1000,
   );
   const secondsLeft = Math.ceil(Math.min(remainingMs, ROUND_DURATION_MS) / 1000);
-  const hurry = playing && !inCountdown && secondsLeft <= 5;
+  // 5초 → 10초 (라운드 40초 확대와 함께): 그레이스가 남은 시간을 10초로 자르는 순간부터
+  // 붉은 연출이 켜져서, "누군가 성공했다 — 서둘러!" 신호를 겸한다.
+  const hurry = playing && !inCountdown && secondsLeft <= 10;
 
   // 내 카메라 트랙을 게임 화면의 비디오에 붙인다 (GesturePanel과 같은 패턴)
   const tracks = useTracks([{ source: Track.Source.Camera, withPlaceholder: false }], {
