@@ -17,11 +17,14 @@ import { useNinjaEliminationSound } from '../hooks/useNinjaEliminationSound';
 import { useNinjaEffectSound } from '../hooks/useNinjaEffectSound';
 import { useNinjaRound } from '../hooks/useNinjaRound';
 import { gestureImage } from '../lib/gestureImages';
-import { skillEffect, skillShake } from '../lib/skillEffects';
+import { skillEffect, skillEffectMs, skillShake } from '../lib/skillEffects';
 import { PixelConfirmModal } from '../../system/components/PixelConfirmModal';
+import { CINEMATIC_BLACKOUT_MS, NinjaCinematicOverlay } from './NinjaCinematicOverlay';
 import './NinjaBattleScreen.css';
 
-const ATTACK_TARGET_TIMER_SECONDS = 30;
+// 백엔드 NinjaGameService.TARGET_DURATION 및 useNinjaRound의 대상 선택 타이머와 동일해야
+// 진행 바가 15초에서 100%로 시작해 0%까지 정확히 줄어든다.
+const ATTACK_TARGET_TIMER_SECONDS = 15;
 const MAX_HP = 100;
 // 다음 교환 카운트다운이 세는 숫자 개수(3 → 2 → 1). useNinjaRound.COUNTDOWN_STEPS와 같은 값.
 const NINJA_COUNTDOWN_STEPS = 3;
@@ -152,6 +155,9 @@ export function NinjaBattleScreen({
     [tracks],
   );
   const speakingIds = useSpeakingIdentities();
+  const stageRef = useRef<HTMLDivElement>(null);
+  const tileRefs = useRef(new Map<string, HTMLDivElement>());
+  const [cinematicFocus, setCinematicFocus] = useState<{ x: number; y: number } | null>(null);
 
   // 타일 순서와 플레이어 색은 모든 참가자 화면에서 같아야 한다(내 화면에선 2P인 사람이 남의 화면에선
   // 3P면 색으로 소통이 안 된다). LiveKit participants 배열 순서는 클라이언트마다 다를 수 있어서
@@ -195,14 +201,65 @@ export function NinjaBattleScreen({
     setShakeTick((tick) => tick + 1);
   }, [inEffectPlayback, round, exchange]);
 
+  const effectTargetId = inEffectPlayback ? (lastAttack?.targetToken ?? null) : null;
+  const effectSkillId = lastAttack?.skillId ?? requiredSkill?.skillId;
+  const [cinematicPhase, setCinematicPhase] = useState<'idle' | 'blackout' | 'focus'>('idle');
+  const pixelEffect = cinematicPhase === 'focus' && effectTargetId
+    ? skillEffect(effectSkillId)
+    : null;
+  const shake = skillShake(effectSkillId);
+
+  useEffect(() => {
+    if (!inEffectPlayback || !effectTargetId) {
+      setCinematicPhase('idle');
+      return;
+    }
+
+    setCinematicPhase('blackout');
+    const focusTimer = window.setTimeout(() => setCinematicPhase('focus'), CINEMATIC_BLACKOUT_MS);
+    const endTimer = window.setTimeout(
+      () => setCinematicPhase('idle'),
+      CINEMATIC_BLACKOUT_MS + skillEffectMs(effectSkillId),
+    );
+    return () => {
+      window.clearTimeout(focusTimer);
+      window.clearTimeout(endTimer);
+    };
+  }, [effectSkillId, effectTargetId, exchange, inEffectPlayback, round]);
+
+  useEffect(() => {
+    if (cinematicPhase !== 'focus' || !effectTargetId) {
+      setCinematicFocus(null);
+      return;
+    }
+
+    const measureTarget = () => {
+      const stage = stageRef.current;
+      const target = tileRefs.current.get(effectTargetId);
+      if (!stage || !target) return;
+
+      const stageRect = stage.getBoundingClientRect();
+      const targetRect = target.getBoundingClientRect();
+      if (stageRect.width === 0 || stageRect.height === 0) return;
+
+      setCinematicFocus({
+        x: ((targetRect.left + targetRect.width / 2 - stageRect.left) / stageRect.width) * 100,
+        y: ((targetRect.top + targetRect.height / 2 - stageRect.top) / stageRect.height) * 100,
+      });
+    };
+
+    const frame = window.requestAnimationFrame(measureTarget);
+    window.addEventListener('resize', measureTarget);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener('resize', measureTarget);
+    };
+  }, [cinematicPhase, effectTargetId, stageScale]);
+
   if (!gameStarted) return null;
 
   // 이펙트는 맞은 사람 타일에서 재생한다 — 데미지가 "누구에게" 들어갔는지가 화면에서 바로 읽힌다.
-  const effectTargetId = inEffectPlayback ? (lastAttack?.targetToken ?? null) : null;
-  const effectSkillId = lastAttack?.skillId ?? requiredSkill?.skillId;
-  const pixelEffect = effectTargetId ? skillEffect(effectSkillId) : null;
   // 진동은 스킬마다 다르다(단발 타격은 1회, 연발/굽이침은 이펙트가 끝날 때까지 반복).
-  const shake = skillShake(effectSkillId);
 
   const renderTile = (id: string, seat: number) => {
     const trackRef = trackByIdentity.get(id);
@@ -220,7 +277,13 @@ export function NinjaBattleScreen({
     return (
       <div
         key={id}
-        className={`ninja-tile ninja-tile--p${(seat % 4) + 1}${dead ? ' ninja-tile--dead' : ''}`}
+        ref={(node) => {
+          if (node) tileRefs.current.set(id, node);
+          else tileRefs.current.delete(id);
+        }}
+        className={`ninja-tile ninja-tile--p${(seat % 4) + 1}${dead ? ' ninja-tile--dead' : ''}${
+          cinematicPhase === 'focus' && effectTargetId === id ? ' ninja-tile--cinematic-target' : ''
+        }`}
       >
         <div className="ninja-tile__cam">
           {trackRef ? (
@@ -298,7 +361,17 @@ export function NinjaBattleScreen({
       />
       {/* 여기서부터가 1440×810 고정 캔버스. 배경은 이 밖(뷰포트 전체)에 있어서 비율이 안 맞는
           화면에서도 레터박스 검은 띠 대신 야경 배경이 그대로 보인다. */}
-      <div className="ninja-stage" style={{ '--ninja-scale': stageScale } as React.CSSProperties}>
+      <div
+        ref={stageRef}
+        className="ninja-stage"
+        style={{ '--ninja-scale': stageScale } as React.CSSProperties}
+      >
+        {cinematicPhase !== 'idle' && effectTargetId && (
+          <NinjaCinematicOverlay
+            focus={cinematicPhase === 'focus' ? cinematicFocus : null}
+            blackout={cinematicPhase === 'blackout'}
+          />
+        )}
       <header className="ninja-screen__topbar">
         <img
           className="ninja-screen__logo pap-pixel-img"

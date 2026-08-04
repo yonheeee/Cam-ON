@@ -129,7 +129,7 @@
   left: var(--lobby-pad-x);
   display: grid;
   /* 사이드 열은 Figma 폭 그대로 고정, 남는 폭은 전부 스테이지가 가져간다 */
-  grid-template-columns: minmax(0, 1fr) 416px;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 416px);
   gap: 24px;
 }
 
@@ -554,7 +554,9 @@
 
 .lobby-screen__ticket {
   position: relative;
-  width: 416px;
+  width: 100%;
+  max-width: 416px;
+  justify-self: center;
   height: 135.44px;
   background: url('/assets/lobby-participation-ticket.png') center / 100% 100% no-repeat;
   /* 티켓은 사각형이 아니라 티켓 실루엣이라 box-shadow가 아니라 drop-shadow로 그린다 */
@@ -566,7 +568,7 @@
   position: absolute;
   top: 24.19px;
   left: 36.76px;
-  width: 379.24px;
+  width: calc(100% - 36.76px);
   height: 87.07px;
 }
 
@@ -621,7 +623,7 @@
 .lobby-screen__ticket-actions {
   position: absolute;
   top: 4.2px;
-  left: 310.7px;
+  right: 31.78px;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -680,7 +682,7 @@
 .lobby-screen__chat {
   position: relative;
   box-sizing: border-box;
-  width: 416px;
+  width: 100%;
   border: var(--pap-stroke-control) solid var(--pap-ink);
   border-radius: var(--pap-radius);
   background: var(--pap-white);
@@ -724,7 +726,7 @@
 .lobby-screen__course-edit {
   position: absolute;
   top: 12px;
-  left: 314px;
+  right: 24px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -764,7 +766,7 @@
   left: 14px;
   display: flex;
   gap: 36px;
-  width: 384px;
+  width: calc(100% - 28px);
   height: 104px;
   margin: 0;
   padding: 0;
@@ -863,7 +865,7 @@
   position: absolute;
   top: 62px;
   left: 14px;
-  width: 384px;
+  width: calc(100% - 28px);
   margin: 0;
   color: var(--pap-text-muted);
   font-size: 12px;
@@ -891,7 +893,7 @@
   position: absolute;
   top: 51px;
   left: 14px;
-  width: 384px;
+  width: calc(100% - 28px);
   height: 2px;
   background: rgb(41 33 58 / 0.22);
 }
@@ -900,7 +902,7 @@
 .lobby-screen__chat-toggle {
   position: absolute;
   top: 10.5px;
-  left: 370px;
+  right: 14px;
   width: 28px;
   height: 28px;
 }
@@ -914,9 +916,9 @@
 
 .lobby-screen__actions {
   display: grid;
-  grid-template-columns: 124px 260px;
+  grid-template-columns: 124px minmax(0, 1fr);
   gap: 32px; /* 156 - 124 */
-  width: 416px;
+  width: 100%;
   height: 44px;
 }
 
@@ -1029,5 +1031,153 @@
   position: absolute;
   top: calc(100% + 4px);
   left: 0;
-  width: 416px;
+  width: 100%;
+}
+
+/* 중간 폭에서는 사이드바가 320px까지 자연스럽게 줄어든다. 참여 코드와 액션 버튼도
+   같은 비율로 조밀해져 왼쪽 카메라 영역을 과도하게 밀어내지 않는다. */
+@media (max-width: 1100px) {
+  .lobby-screen {
+    --lobby-pad-x: 20px;
+  }
+
+  .lobby-screen__body {
+    gap: 18px;
+  }
+
+  .lobby-screen__code-area {
+    left: 24px;
+    width: calc(100% - 24px);
+  }
+
+  .lobby-screen__code-tiles {
+    gap: 4px;
+  }
+
+  .lobby-screen__code-tile {
+    width: 30px;
+    height: 40px;
+    font-size: 16px;
+  }
+
+  .lobby-screen__ticket-actions {
+    right: 18px;
+  }
+
+  .lobby-screen__actions {
+    grid-template-columns: minmax(100px, 0.8fr) minmax(0, 1.5fr);
+    gap: 14px;
+  }
+}
+
+/* 태블릿·모바일에서는 두 열을 억지로 압축하지 않고 사이드 패널을 카메라 아래로 보낸다.
+   camon-stage의 기본 overflow:hidden도 세로 스크롤로 전환해 모든 컨트롤에 접근 가능하게 한다. */
+@media (max-width: 820px) {
+  .lobby-screen {
+    --lobby-pad-x: 18px;
+    position: fixed;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  .lobby-screen__logo {
+    top: 24px;
+    left: 18px;
+    width: 144px;
+    height: auto;
+  }
+
+  .lobby-screen__music-toggle {
+    top: 28px;
+    right: 18px;
+  }
+
+  .lobby-screen__body {
+    position: relative;
+    inset: auto;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 24px;
+    width: calc(100% - 36px);
+    min-height: 0;
+    margin: 112px 18px 48px;
+  }
+
+  .lobby-screen__stage {
+    height: clamp(420px, 72vh, 660px);
+  }
+
+  .lobby-screen__grid {
+    gap: 16px 12px;
+  }
+
+  .lobby-screen__side {
+    width: 100%;
+    max-width: 560px;
+    height: 760px;
+    margin: 0 auto;
+  }
+
+  .lobby-screen__side--chat-expanded {
+    height: 590px;
+  }
+
+  .lobby-screen__bg-bottom {
+    position: fixed;
+  }
+}
+
+@media (max-width: 480px) {
+  .lobby-screen__logo {
+    width: 124px;
+  }
+
+  .lobby-screen__music-toggle {
+    min-width: 88px;
+    padding: 7px 9px;
+  }
+
+  .lobby-screen__body {
+    width: calc(100% - 24px);
+    margin-right: 12px;
+    margin-left: 12px;
+  }
+
+  .lobby-screen__stage {
+    height: 400px;
+  }
+
+  .lobby-screen__grid {
+    gap: 12px 8px;
+  }
+
+  .lobby-screen__code-area {
+    left: 18px;
+    width: calc(100% - 18px);
+  }
+
+  .lobby-screen__code-tile {
+    width: clamp(24px, 7vw, 28px);
+  }
+
+  .lobby-screen__code-tiles {
+    gap: 3px;
+  }
+
+  .lobby-screen__panel-sub {
+    display: none;
+  }
+
+  .lobby-screen__ticket-actions {
+    right: 12px;
+  }
+
+  .lobby-screen__actions {
+    grid-template-columns: minmax(96px, 0.8fr) minmax(0, 1.5fr);
+    gap: 10px;
+  }
+
+  .lobby-screen__actions .pap-pixel-btn {
+    padding: 0 8px;
+    font-size: 12px;
+  }
 }
