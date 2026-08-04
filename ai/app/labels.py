@@ -6,7 +6,8 @@
 # - 한 제시어가 여러 형태를 허용할 수 있다 (라면 = 봉지/컵 모두 OK, 가방 = 백팩/크로스백 모두 OK)
 #   → 라벨당 프롬프트를 여러 개 두면 점수는 그중 최고점으로 합산된다 (main.py의 라벨별 max)
 #
-# 이전 버전 풀(50종 v1, 20종 v2)은 git 히스토리 참고.
+# 이전 버전 풀(50종 v1, 20종 v2, 12종)은 git 히스토리 참고.
+# v3 (2026-08-04): 휴대폰 제거(치팅 네거티브와 충돌) + 두루마리 휴지/옷걸이/책 추가 = 14종.
 
 # 프롬프트 템플릿 — 단일 기본형만 사용한다.
 # ⚠ 촬영 맥락 템플릿("held up in a hand" 등)은 실측 후 롤백함 (2026-07-27):
@@ -20,8 +21,11 @@ PROMPT_TEMPLATES = [
 PROMPT_TEMPLATE = PROMPT_TEMPLATES[0]
 
 # 제시어(한국어) → 허용하는 영어 프롬프트 구문들
+#
+# "휴대폰"은 v3에서 제거 (2026-08-04): 폰 화면에 사진을 띄워 보여주는 치팅을 막으려면
+# 폰 계열 프롬프트를 네거티브에 넣어야 하는데, 폰이 미션 라벨인 동안은 본질적으로
+# 불가능했다 (7/27 롤백 참고). 게임 중인 기기라 "가져오기" 미션으로도 무의미했음.
 MISSION_POOL: dict[str, list[str]] = {
-    "휴대폰": ["a smartphone"],
     "마우스": [
         "a computer mouse",
         # 버티컬(에르고) 마우스가 일반 프롬프트로는 0.4 문턱을 못 넘어서 변형 추가
@@ -41,6 +45,19 @@ MISSION_POOL: dict[str, list[str]] = {
     "그릇": ["a bowl", "a plate", "a ceramic dish"],
     "모자": ["a baseball cap", "a hat", "a beanie"],
     "가방": ["a backpack", "a crossbody bag", "a handbag", "a tote bag"],
+    # ---- v3 추가 (2026-08-04): 보유율 높고 기존 라벨과 실루엣이 안 겹치는 것만 ----
+    "두루마리 휴지": [
+        "a roll of toilet paper",
+        "a roll of paper towels",
+    ],
+    "옷걸이": [
+        "a clothes hanger",
+        "a plastic clothes hanger",
+    ],
+    "책": [
+        "a book",
+        "a paperback book",
+    ],
     # 여기에 자유롭게 추가 — "제시어": ["허용 형태 1", "허용 형태 2", ...]
 }
 
@@ -61,10 +78,15 @@ NEGATIVE_PROMPTS = [
     # 빈손 팬터마임 — 물건 없이 쥐는 시늉만 해도 가는 물건(숟가락 등)이 통과되던 문제 대응
     "an empty hand pretending to hold something",
     "an empty hand with fingers pinched together, holding nothing",
-    # ⚠ 화면 사진 치팅 네거티브("...phone screen...")는 롤백함 (2026-07-27):
-    #   진짜 휴대폰(특히 화면 꺼진 검은 폰)을 _none 0.646으로 흡수해버림 — 휴대폰이
-    #   미션 라벨인 이상 본질적으로 충돌. 사진 치팅 방어는 "전원이 서로의 화면을 실시간으로
-    #   보고 있다"는 사회적 레이어에 맡긴다.
+    # 폰 화면 사진 치팅 (v3에서 복원, 2026-08-04) — 7/27에 롤백했던 네거티브.
+    # 당시 문제는 "휴대폰이 미션 라벨"이라 진짜 폰까지 _none에 흡수된 것이었는데,
+    # v3에서 휴대폰 라벨을 풀에서 뺐으므로 충돌이 사라졌다. 이제는 폰 자체("a smartphone")도
+    # 네거티브로 흡수 — 화면에 뭘 띄웠든 폰을 들고 있으면 _none으로 간다 (이중 방어).
+    # 한계: 태블릿/모니터/인쇄물 치팅은 못 막는다 — 그쪽은 여전히 사회적 레이어
+    # (전원이 서로의 화면을 실시간으로 봄)에 맡긴다.
+    "a smartphone",
+    "a photo displayed on a phone screen",
+    "a person holding up a phone showing a picture",
 ]
 
 
