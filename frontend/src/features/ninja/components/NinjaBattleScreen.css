@@ -784,6 +784,37 @@
   color: var(--pap-festival-coral);
 }
 
+/* 연결 상태 알림은 처치/공격 알림과 겹치지 않도록 한 줄 아래에 둔다. 암전 중에도 재연결
+   상태를 잃지 않게 시네마틱보다 높은 레이어에서 표시한다. */
+.ninja-connection-toast {
+  position: absolute;
+  top: 76px;
+  left: 50%;
+  z-index: 80;
+  max-width: min(760px, calc(100% - 48px));
+  padding: 11px 20px;
+  border: 3px solid var(--pap-play-yellow);
+  border-radius: var(--pap-radius);
+  background: rgb(18 11 33 / 0.96);
+  box-shadow: 5px 5px 0 rgb(0 0 0 / 0.5);
+  color: var(--pap-white);
+  font-family: var(--pap-font-pixel);
+  font-size: 19px;
+  line-height: 1.35;
+  text-align: center;
+  transform: translateX(-50%);
+  pointer-events: none;
+  animation: ninja-toast-in 140ms ease-out;
+}
+
+.ninja-connection-toast--danger {
+  border-color: var(--pap-festival-coral);
+}
+
+.ninja-connection-toast--success {
+  border-color: var(--pap-arcade-teal);
+}
+
 .ninja-toast__kunai {
   width: 24px;
   height: 24px;
@@ -816,6 +847,7 @@
   .ninja-tile--cinematic-target,
   .ninja-waiting,
   .ninja-toast,
+  .ninja-connection-toast,
   .ninja-waiting__dots {
     animation: none;
   }

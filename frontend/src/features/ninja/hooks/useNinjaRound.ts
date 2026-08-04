@@ -206,7 +206,7 @@ export function useNinjaRound(
     }
   }, []);
 
-  useNinjaRealtime(roomId, accessToken, handleNinjaEvent, syncState);
+  const connectionState = useNinjaRealtime(roomId, accessToken, handleNinjaEvent, syncState);
 
   // 마운트 직후 1회 동기화 — STOMP 연결이 늦거나 실패해도 최소한 현재 스냅샷은 그린다.
   // (재연결 동기화는 useNinjaRealtime.onConnected가 담당)
@@ -426,5 +426,6 @@ export function useNinjaRound(
     countdownSeconds,
     lastAttack,
     roundResult,
+    connectionState,
   };
 }
