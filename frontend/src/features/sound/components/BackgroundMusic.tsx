@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { useOptionalVoiceVolume } from '../context/voiceVolume';
+import { useSfxVolume } from '../hooks/useSfxVolume';
 import './BackgroundMusic.css';
 
 const MUSIC_ENABLED_KEY = 'camon:background-music-enabled';
@@ -116,6 +117,8 @@ export function BackgroundMusic({
   const panelId = useId();
   // 방 밖(랜딩)에서는 null — 들을 참가자 음성이 없으므로 음성 슬라이더를 그리지 않는다.
   const voice = useOptionalVoiceVolume();
+  // 효과음은 랜딩의 버튼 클릭음부터 있으므로 어디서든 조절할 수 있게 둔다.
+  const { sfxVolume, setSfxVolume } = useSfxVolume();
 
   // 오디오 생성 효과가 volume에 의존하면 슬라이더를 움직일 때마다 Audio가 새로 만들어져
   // 곡이 처음부터 다시 재생된다. 그래서 현재 음량은 ref로 읽고, 의존성은 source만 둔다.
@@ -284,6 +287,10 @@ export function BackgroundMusic({
           disabled={!enabled}
           disabledHint="배경음악이 꺼져 있어요"
         />
+
+        {/* 버튼 클릭음·스킬 이펙트음·카운트다운 등 효과음 전체. 각 효과음이 가진 기준 음량
+            (버튼 0.55, 이펙트 0.85 …)에 이 값을 곱하므로 서로의 상대적 크기는 유지된다. */}
+        <VolumeRow label="효과" value={sfxVolume} onChange={setSfxVolume} />
 
         {/* 참가자 음성은 방 안에서만 존재한다 — LiveKit의 RoomAudioRenderer 볼륨으로 이어진다.
             배경음악과 한 슬라이더를 공유하면 "음악만 줄이고 말은 크게" 같은 조절이 불가능하다. */}
