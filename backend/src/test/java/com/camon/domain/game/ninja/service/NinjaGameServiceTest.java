@@ -490,6 +490,43 @@ class NinjaGameServiceTest {
     }
 
     @Test
+    void target_assignsSameFinalRank_whenSessionTotalsAreTied() {
+        int lastRound = 3;
+        when(ninjaRedis.getCurrentRound(roomCode, seq)).thenReturn(lastRound);
+        when(ninjaRedis.getCurrentExchange(roomCode, seq)).thenReturn(exchange);
+        when(ninjaRedis.getAttacker(roomCode, seq, lastRound, exchange)).thenReturn(attacker);
+        when(ninjaRedis.isAlive(roomCode, seq, lastRound, target)).thenReturn(true);
+        when(ninjaRedis.claimTarget(roomCode, seq, lastRound, exchange, target)).thenReturn(true);
+        when(ninjaRedis.closeExchange(roomCode, seq, lastRound, exchange, "TARGET")).thenReturn(true);
+        when(ninjaRedis.getExchangeSkillId(roomCode, seq, lastRound, exchange)).thenReturn(10L);
+        when(skillRepository.findById(10L)).thenReturn(Optional.of(skill));
+        when(ninjaRedis.decrementHp(roomCode, seq, lastRound, target, 20)).thenReturn(-5L);
+        when(ninjaRedis.getAlivePlayers(roomCode, seq, lastRound)).thenReturn(Set.of(attacker));
+        when(ninjaRedis.getAllHp(roomCode, seq, lastRound)).thenReturn(Map.<Object, Object>of(attacker, "60"));
+        when(ninjaRedis.getEliminatedWithTimeDesc(roomCode, seq, lastRound))
+            .thenReturn(List.of(Map.entry(target, 2000L), Map.entry(third, 1000L)));
+        when(ninjaRedis.getTotalRounds(roomCode, seq)).thenReturn(lastRound);
+        when(ninjaRedis.getParticipants(roomCode, seq)).thenReturn(Set.of(attacker, target, third));
+        when(gameScoreService.getSessionTotals(roomId, seq))
+            .thenReturn(Map.of(p1, 10L, p2, 10L, p3, 5L));
+
+        TargetResponse response = service.target(roomId, lastRound, attacker, new TargetRequest(target));
+
+        assertThat(response.gameEnded()).isTrue();
+        captureScheduledTask().run();
+
+        ArgumentCaptor<Object> payloadCaptor = ArgumentCaptor.forClass(Object.class);
+        verify(eventPublisher).publish(eq(roomId), eq("ninja:game-ended"), payloadCaptor.capture());
+        GameEndedPayload payload = (GameEndedPayload) payloadCaptor.getValue();
+        assertThat(payload.ranking()).extracting(RankingEntry::rank).containsExactly(1, 1, 3);
+        verify(gameScoreService).saveCourseRanking(
+            eq(roomId),
+            eq(seq),
+            eq(Map.of(p1, 1, p2, 1, p3, 3))
+        );
+    }
+
+    @Test
     void target_throws_whenCallerIsNotAttacker() {
         when(ninjaRedis.getCurrentRound(roomCode, seq)).thenReturn(round);
         when(ninjaRedis.getCurrentExchange(roomCode, seq)).thenReturn(exchange);

@@ -427,6 +427,12 @@
   pointer-events: none;
 }
 
+/* 공동 우승자는 큰 우승자 화면 한 칸에서 순환하며, 현재 보이는 사람을 순위표에서도 표시한다. */
+.course-result__row--active-winner {
+  outline: calc(var(--u) * 0.16) solid #ffffff;
+  outline-offset: calc(var(--u) * -0.25);
+}
+
 @keyframes course-result-first-shine {
   from {
     left: -35%;
