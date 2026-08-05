@@ -1,0 +1,72 @@
+.room-topbar {
+  position: relative;
+  z-index: 20;
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 52px;
+}
+
+.room-topbar__logo-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 154px;
+  height: 58px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.room-topbar__logo {
+  display: block;
+  width: 154px;
+  height: 58px;
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+
+.room-topbar__center {
+  min-width: 0;
+  margin-left: auto;
+}
+
+.room-topbar__actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+}
+
+.room-topbar__sound .background-music__toggle {
+  min-width: 104px;
+  height: 44px;
+  padding: 0 12px;
+  font-size: 13px;
+}
+
+.room-topbar__sound.background-music--open {
+  z-index: 30;
+}
+
+.room-topbar__leave {
+  --pap-shadow-offset: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  padding: 0;
+  border-radius: 8px;
+}
+
+.room-topbar__leave svg {
+  width: 22px;
+  height: 22px;
+}

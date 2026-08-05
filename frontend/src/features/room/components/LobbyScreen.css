@@ -83,10 +83,21 @@
 
 /* ---------- 로고 ---------- */
 
-.lobby-screen__logo {
+.lobby-screen__logo-button {
   position: absolute;
   top: 41px;
   left: 52px;
+  z-index: 2;
+  width: 172px;
+  height: 65px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.lobby-screen__logo {
+  display: block;
   width: 172px;
   height: 65px;
   object-fit: contain;
@@ -95,9 +106,19 @@
 }
 
 @media (max-height: 780px) {
-  .lobby-screen__logo {
+  .lobby-screen__logo-button {
     top: 20px;
   }
+}
+
+.lobby-screen__header-actions {
+  position: absolute;
+  top: 48px;
+  right: var(--lobby-pad-x);
+  z-index: 9;
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 /* ---------- 본문 2열 (스테이지 | 사이드) ---------- */
@@ -105,13 +126,11 @@
 /* className은 BackgroundMusic의 래퍼에 붙는다(음량 창이 버튼 기준으로 떠야 해서).
    .background-music을 함께 적어 컴포넌트 기본값(position: relative)을 순서와 무관하게 덮는다. */
 .lobby-screen__music-toggle.background-music {
-  position: absolute;
-  top: 48px;
-  right: var(--lobby-pad-x);
+  position: relative;
   z-index: 2;
 }
 
-.lobby-screen__music-toggle .background-music__toggle {
+.lobby-screen__music-toggle:not(.background-music--compact) .background-music__toggle {
   min-width: 104px;
   padding: 8px 12px;
   font-size: 13px;
@@ -124,8 +143,26 @@
   z-index: 9;
 }
 
+.lobby-screen__leave {
+  --pap-shadow-offset: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  min-height: 40px;
+  padding: 0;
+  border-radius: 8px;
+}
+
+.lobby-screen__leave svg {
+  width: 20px;
+  height: 20px;
+}
+
 @media (max-height: 780px) {
-  .lobby-screen__music-toggle.background-music {
+  .lobby-screen__header-actions {
     top: 27px;
   }
 }
@@ -186,10 +223,93 @@
   box-shadow: 5px 5px 0 rgb(43 24 51 / 0.52);
 }
 
-.lobby-tile--p1 { border-color: var(--pap-player-1); }
-.lobby-tile--p2 { border-color: var(--pap-player-2); }
-.lobby-tile--p3 { border-color: var(--pap-player-3); }
-.lobby-tile--p4 { border-color: var(--pap-player-4); }
+.lobby-tile--p1 {
+  --lobby-player-color: var(--pap-player-1);
+  border-color: var(--lobby-player-color);
+}
+
+.lobby-screen__music-toggle.background-music--compact {
+  top: 42px;
+}
+
+.lobby-tile--p2 {
+  --lobby-player-color: var(--pap-player-2);
+  border-color: var(--lobby-player-color);
+}
+
+.lobby-tile--p3 {
+  --lobby-player-color: var(--pap-player-3);
+  border-color: var(--lobby-player-color);
+}
+
+.lobby-tile--p4 {
+  --lobby-player-color: var(--pap-player-4);
+  border-color: var(--lobby-player-color);
+}
+
+/* 발화 중에는 상단 배지를 추가하지 않고 참여자 색상으로 카드 전체를 강조한다.
+   기본 테두리와 구분되도록 색을 밝히고, 같은 참여자 색상의 이중 네온 광원을 바깥에 더한다.
+   outline과 box-shadow는 카드 내부 크기나 영상 비율을 바꾸지 않는다. */
+.lobby-tile--speaking {
+  z-index: 1;
+  outline: 4px solid color-mix(
+    in srgb,
+    var(--lobby-player-color, var(--pap-arcade-blue)) 72%,
+    white 28%
+  );
+  outline-offset: 0;
+  box-shadow:
+    0 0 8px 3px color-mix(
+      in srgb,
+      var(--lobby-player-color, var(--pap-arcade-blue)) 72%,
+      transparent
+    ),
+    0 0 20px 7px color-mix(
+      in srgb,
+      var(--lobby-player-color, var(--pap-arcade-blue)) 42%,
+      transparent
+    ),
+    5px 5px 0 rgb(43 24 51 / 0.52);
+  animation: lobby-speaking-glow 900ms ease-in-out infinite alternate;
+}
+
+@keyframes lobby-speaking-glow {
+  from {
+    box-shadow:
+      0 0 6px 2px color-mix(
+        in srgb,
+        var(--lobby-player-color, var(--pap-arcade-blue)) 62%,
+        transparent
+      ),
+      0 0 15px 5px color-mix(
+        in srgb,
+        var(--lobby-player-color, var(--pap-arcade-blue)) 32%,
+        transparent
+      ),
+      5px 5px 0 rgb(43 24 51 / 0.52);
+  }
+
+  to {
+    box-shadow:
+      0 0 10px 4px color-mix(
+        in srgb,
+        var(--lobby-player-color, var(--pap-arcade-blue)) 82%,
+        transparent
+      ),
+      0 0 25px 9px color-mix(
+        in srgb,
+        var(--lobby-player-color, var(--pap-arcade-blue)) 48%,
+        transparent
+      ),
+      5px 5px 0 rgb(43 24 51 / 0.52);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lobby-tile--speaking {
+    animation: none;
+  }
+}
 
 /* 캠이 꺼졌거나 아직 붙지 않은 자리 — Figma는 크림 원 + 대표색 원 + 이니셜.
    타일 크기가 유동이므로 절대좌표 대신 중앙 정렬 + Figma의 중심 오프셋(-34)을 쓴다. */
@@ -266,38 +386,43 @@
 
 /* ---------- 영상 위 오버레이 배지 ---------- */
 
-/* 준비 완료 — 영상 좌측 상단에 아케이드 스티커처럼 얹는다.
-   색·외곽선·그림자는 Pixel Arcade Plaza 규격 (선택 상태 살구색 + 잉크 외곽선 2 + 그림자 2). */
+/* 준비 완료 — 기존 스티커를 작게 다듬고 참여자 고유색을 입힌다.
+   방장 왕관과 같은 우측 상단 슬롯을 사용하지만 두 상태는 동시에 나타나지 않는다. */
 .lobby-tile__ready-badge {
   position: absolute;
   top: 12px;
-  left: 12px;
+  right: 12px;
   z-index: 3;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   box-sizing: border-box;
-  height: 30px;
-  padding: 0 11px;
+  height: 28px;
+  padding: 0 9px 0 8px;
   border: var(--pap-stroke-control) solid var(--pap-ink);
-  border-radius: var(--pap-radius);
-  background: var(--pap-selection-apricot);
+  border-radius: 5px;
+  background: color-mix(
+    in srgb,
+    var(--lobby-player-color, var(--pap-selection-apricot)) 72%,
+    white 28%
+  );
   color: var(--pap-ink);
   box-shadow: var(--pap-shadow-icon) var(--pap-shadow-icon) 0 rgb(41 33 58 / 0.5);
-  font-size: 14px;
+  font-family: var(--pap-font-pixel);
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0;
   line-height: 1;
   white-space: nowrap;
-  /* 살짝 기울여 붙인 스티커 느낌 (티켓 코드 타일과 같은 각도) */
-  transform: rotate(-2deg);
+  transform: rotate(1deg);
   pointer-events: none;
 }
 
 .lobby-tile__ready-badge svg {
   flex: none;
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
+  transform: translateY(-1px);
 }
 
 /* 아직 코스 결과 화면에 남아 있는 참가자 — 방을 떠난 게 아니라 자리를 지키고 있는 상태이므로
@@ -355,6 +480,7 @@
   position: relative;
   z-index: 4;
   flex: none;
+  margin-top: auto;
   box-sizing: border-box;
   height: 64px;
   border-top: var(--pap-stroke-control) solid var(--pap-ink);
@@ -400,16 +526,42 @@
 }
 
 /* 강퇴만 오조작 위험이 있어 hover/포커스 때만 노출한다 */
-.lobby-tile__controls--kick {
+.lobby-tile__controls--remote {
+  justify-content: flex-start;
   opacity: 0;
-  transition: opacity 100ms ease-out;
   pointer-events: none;
 }
 
-.lobby-tile:hover .lobby-tile__controls--kick,
-.lobby-tile:focus-within .lobby-tile__controls--kick {
+/* 방장: 음량 버튼 왼쪽, 강퇴 버튼 오른쪽. */
+.lobby-tile__controls--remote-host {
+  width: 70px;
+  gap: 14px;
+}
+
+/* 일반 참가자: 강퇴 버튼이 없으므로 음량 버튼을 카드의 오른쪽 끝에 둔다. */
+.lobby-tile__controls--remote-guest {
+  width: 28px;
+}
+
+.lobby-tile:hover .lobby-tile__controls--remote,
+.lobby-tile:focus-within .lobby-tile__controls--remote {
   opacity: 1;
   pointer-events: auto;
+}
+
+/* 사용자가 이 브라우저에서 음소거한 상대는 카드에서 커서가 빠져도 상태 아이콘을 남긴다. */
+.lobby-tile__controls--remote:has(.participant-audio--muted) {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.lobby-tile__controls--remote:has(.participant-audio--open) {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.lobby-tile:has(.participant-audio--open) {
+  z-index: 7;
 }
 
 .lobby-tile__control {
@@ -450,6 +602,39 @@
 .lobby-tile__control--kick:hover {
   background: var(--pap-festival-coral);
   color: var(--pap-white);
+}
+
+/* 강퇴 버튼은 아이콘만으로 의미가 모호하므로 hover/focus 때 즉시 짧은 설명을 보여준다. */
+.lobby-tile__control--kick::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  z-index: 6;
+  box-sizing: border-box;
+  min-width: 44px;
+  padding: 6px 8px;
+  border: 2px solid var(--pap-ink);
+  border-radius: 5px;
+  background: var(--pap-ink);
+  color: var(--pap-white);
+  box-shadow: 2px 2px 0 rgb(43 24 51 / 0.35);
+  font-family: var(--pap-font-pixel);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  text-align: center;
+  white-space: nowrap;
+  opacity: 0;
+  transform: translateY(3px);
+  transition: opacity 80ms ease-out, transform 80ms ease-out;
+  pointer-events: none;
+}
+
+.lobby-tile__control--kick:hover::after,
+.lobby-tile__control--kick:focus-visible::after {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 /* ---------- 타일 부가 상태 ---------- */
@@ -872,13 +1057,38 @@
 
 .lobby-screen__course-empty {
   position: absolute;
-  top: 62px;
+  top: 54px;
+  right: 14px;
+  bottom: 14px;
   left: 14px;
-  width: calc(100% - 28px);
-  margin: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: 10px 18px;
+  border: 2px dashed rgb(43 24 51 / 0.34);
+  border-radius: var(--pap-radius);
   color: var(--pap-text-muted);
   font-size: 12px;
-  line-height: 16px;
+  line-height: 19px;
+  text-align: center;
+}
+
+.lobby-screen__course-error {
+  position: absolute;
+  right: 14px;
+  bottom: 4px;
+  left: 14px;
+  z-index: 1;
+  margin: 0;
+  overflow: hidden;
+  color: var(--pap-danger, #c9485b);
+  font-size: 10px;
+  line-height: 12px;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ---------- 채팅 카드 (높이 유동) ---------- */
@@ -989,10 +1199,15 @@
   background: var(--pap-selection-apricot);
 }
 
-/* 준비 하기 / 준비 완료 라벨은 Figma 13px (환경설정 14 · 게임 시작 15와 별도) */
+/* 준비 버튼은 환경설정 라벨과 같은 크기를 사용한다. */
 .lobby-screen__actions .lobby-screen__ready-btn--on,
 .lobby-screen__actions .lobby-screen__primary-btn--ready {
-  font-size: 13px;
+  font-size: 14px;
+}
+
+.lobby-screen__actions .lobby-screen__ready-btn--on svg,
+.lobby-screen__actions .lobby-screen__primary-btn--ready svg {
+  transform: translateY(-1px);
 }
 
 /* 주 액션(방장 시작 / 참가자 준비)을 감싸는 래퍼 — 안 눌리는 이유(data-hint)를 말풍선으로
@@ -1002,20 +1217,35 @@
   display: inline-flex;
 }
 
-.lobby-screen__start-wrap[data-hint]:hover::after {
+.lobby-screen__start-wrap[data-hint]::after {
   content: attr(data-hint);
   position: absolute;
-  bottom: calc(100% + 10px);
+  bottom: calc(100% + 8px);
   left: 50%;
   z-index: 10;
-  padding: 8px 12px;
-  border: var(--pap-stroke-control) solid var(--pap-white);
-  border-radius: var(--pap-radius);
-  background: rgb(43 24 51 / 0.95);
+  box-sizing: border-box;
+  padding: 6px 8px;
+  border: 2px solid var(--pap-ink);
+  border-radius: 5px;
+  background: var(--pap-ink);
   color: var(--pap-white);
-  font-size: 12px;
+  box-shadow: 2px 2px 0 rgb(43 24 51 / 0.35);
+  font-family: var(--pap-font-pixel);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  text-align: center;
   white-space: nowrap;
-  transform: translateX(-50%);
+  opacity: 0;
+  transform: translate(-50%, 3px);
+  transition: opacity 80ms ease-out, transform 80ms ease-out;
+  pointer-events: none;
+}
+
+.lobby-screen__start-wrap[data-hint]:hover::after,
+.lobby-screen__start-wrap[data-hint]:focus-within::after {
+  opacity: 1;
+  transform: translate(-50%, 0);
 }
 
 /* ---------- 에러 ---------- */
@@ -1089,14 +1319,19 @@
     overflow-y: auto;
   }
 
-  .lobby-screen__logo {
+  .lobby-screen__logo-button {
     top: 24px;
     left: 18px;
     width: 144px;
     height: auto;
   }
 
-  .lobby-screen__music-toggle {
+  .lobby-screen__logo {
+    width: 144px;
+    height: auto;
+  }
+
+  .lobby-screen__header-actions {
     top: 28px;
     right: 18px;
   }

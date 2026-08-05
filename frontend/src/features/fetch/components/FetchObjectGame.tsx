@@ -8,9 +8,9 @@ import {
 import { Track } from 'livekit-client';
 import { PixelConfirmModal } from '../../system/components/PixelConfirmModal';
 import { CamOffIcon } from '../../room/components/lobbyIcons';
-import { BackgroundMusic } from '../../sound/components/BackgroundMusic';
-import { SpeakingIndicator } from '../../webrtc/components/SpeakingIndicator';
+import { RoomTopBar } from '../../room/components/RoomTopBar';
 import { useSpeakingIdentities } from '../../webrtc/hooks/useSpeakingIdentities';
+import { ParticipantAudioControl } from '../../webrtc/components/ParticipantAudioControl';
 import { useCountdownSound } from '../../sound/hooks/useCountdownSound';
 import { useFetchDetection } from '../hooks/useFetchDetection';
 import type { DetectionResult } from '../api/aiApi';
@@ -210,9 +210,9 @@ export function FetchObjectGame({
         key={seat.identity}
         className={`fetch-seat fetch-seat--p${colorOf(seat.identity)}${
           done ? ' fetch-seat--done' : ''
-        }`}
+        }${speakingIds.has(seat.identity) ? ' fetch-seat--speaking' : ''}`}
       >
-        <div className="fetch-seat__cam">
+        <div className="fetch-seat__cam participant-audio-host">
           {isMe ? (
             <video ref={videoRef} autoPlay playsInline muted className="fetch-seat__video" />
           ) : trackRef ? (
@@ -238,8 +238,7 @@ export function FetchObjectGame({
             </span>
           )}
           {done && <span className="fetch-seat__stamp">{rank + 1}위</span>}
-          <SpeakingIndicator active={speakingIds.has(seat.identity)} />
-
+          <ParticipantAudioControl identity={seat.identity} />
           {/* 닉네임 배지 — 캠 좌측 상단 픽셀 스티커. 닌자와 같은 방식 */}
           <span className={`fetch-seat__tag${isMe ? ' fetch-seat__tag--me' : ''}`}>
             {isMe ? myNickname : seatNickname}
@@ -266,18 +265,11 @@ export function FetchObjectGame({
         hurry ? ' fetch-game--hurry' : ''
       }`}
     >
-      <header className="fetch-game__head">
-        <img
-          className="fetch-game__logo pap-pixel-img"
-          src="/assets/cam-on-logo.png"
-          alt="CAM, ON!"
-          onClick={() => setConfirmLeave(true)}
-        />
-        <BackgroundMusic
-          source="/assets/sounds/find-thing.mp3"
-          className="fetch-game__music-toggle"
-        />
-      </header>
+      <RoomTopBar
+        musicSource="/assets/sounds/find-thing.mp3"
+        className="fetch-game__head"
+        onRequestLeave={() => setConfirmLeave(true)}
+      />
 
       <div className="fetch-game__floor">
         <section className="fetch-game__side">{leftSeats.map(renderSeat)}</section>
@@ -399,7 +391,7 @@ export function FetchObjectGame({
       {confirmLeave && (
         <PixelConfirmModal
           title="정말 방을 나갈까요?"
-          message="게임 중에 나가면 이번 게임 기록은 사라져요."
+          message="현재 방과 게임 결과에서 나가 메인 화면으로 이동해요."
           confirmLabel="방 나가기"
           cancelLabel="취소"
           tone="danger"

@@ -8,9 +8,9 @@ import { Track } from 'livekit-client';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { GesturePanel } from '../../gesture/components/GesturePanel';
 import { useGestureBoardStore } from '../../gesture/store/gestureBoardStore';
-import { BackgroundMusic } from '../../sound/components/BackgroundMusic';
-import { SpeakingIndicator } from '../../webrtc/components/SpeakingIndicator';
+import { RoomTopBar } from '../../room/components/RoomTopBar';
 import { useSpeakingIdentities } from '../../webrtc/hooks/useSpeakingIdentities';
+import { ParticipantAudioControl } from '../../webrtc/components/ParticipantAudioControl';
 import { useAnnouncementSound } from '../../sound/hooks/useAnnouncementSound';
 import { useCountdownSound } from '../../sound/hooks/useCountdownSound';
 import { useNinjaEliminationSound } from '../hooks/useNinjaEliminationSound';
@@ -331,9 +331,9 @@ export function NinjaBattleScreen({
         }}
         className={`ninja-tile ninja-tile--p${(seat % 4) + 1}${dead ? ' ninja-tile--dead' : ''}${
           cinematicPhase === 'focus' && effectTargetId === id ? ' ninja-tile--cinematic-target' : ''
-        }`}
+        }${!dead && speakingIds.has(id) ? ' ninja-tile--speaking' : ''}`}
       >
-        <div className="ninja-tile__cam">
+        <div className="ninja-tile__cam participant-audio-host">
           {trackRef ? (
             <ParticipantTile trackRef={trackRef} disableSpeakingIndicator />
           ) : (
@@ -345,9 +345,9 @@ export function NinjaBattleScreen({
           {/* 탈락하면 인식 루프와 브로드캐스트를 끊는다 — 판정에 쓰이지 않는 추론을 매 프레임
               돌릴 이유가 없다(제출도 훅에서 이미 막혀 있다). 다음 판이 열리면 다시 켜진다. */}
           {isMe && <GesturePanel variant="overlay" active={!isEliminated} />}
+          <ParticipantAudioControl identity={id} />
           {/* 탈락한 사람은 회색 오버레이 위에 표시가 겹치지 않게 뺀다 — 판에서 빠진 사람이라
               누가 말하는지 알려줄 대상이 아니다. */}
-          <SpeakingIndicator active={!dead && speakingIds.has(id)} />
           {/* 이펙트는 이 타일 안에서만 재생된다 — 컴포넌트가 호스트 div 크기에 맞춰 그린다.
               시드의 모든 스킬이 skillEffects의 BY_SKILL_ID에 있어서 폴백 파티클은 없앴다 —
               매핑이 빠진 스킬이 생기면 이펙트 없이 진동만 남으니 스킬 추가 시 표를 함께 고친다. */}
@@ -407,6 +407,12 @@ export function NinjaBattleScreen({
         className={`ninja-screen__bg${inEffectPlayback ? ` ${shake.className}` : ''}`}
         style={inEffectPlayback ? { animationIterationCount: shake.iterations } : undefined}
       />
+      {/* 닌자 전용 1440×810 스케일 캔버스 밖에 둬야 다른 게임과 같은 뷰포트 여백을 쓴다. */}
+      <RoomTopBar
+        musicSource="/assets/sounds/ninja-bgm.mp3"
+        className="ninja-screen__topbar"
+        onRequestLeave={() => setConfirmLeave(true)}
+      />
       {/* 여기서부터가 1440×810 고정 캔버스. 배경은 이 밖(뷰포트 전체)에 있어서 비율이 안 맞는
           화면에서도 레터박스 검은 띠 대신 야경 배경이 그대로 보인다. */}
       <div
@@ -425,19 +431,6 @@ export function NinjaBattleScreen({
             blackout={cinematicPhase === 'blackout'}
           />
         )}
-      <header className="ninja-screen__topbar">
-        <img
-          className="ninja-screen__logo pap-pixel-img"
-          src="/assets/cam-on-logo.png"
-          alt="CAM, ON!"
-          onClick={() => setConfirmLeave(true)}
-        />
-        <BackgroundMusic
-          source="/assets/sounds/ninja-bgm.mp3"
-          className="ninja-screen__music-toggle"
-        />
-      </header>
-
       <div className="ninja-screen__body">
         <section className="ninja-screen__col ninja-screen__col--left">
           {leftSeats.map((p) => renderTile(p.identity, seats.indexOf(p)))}
@@ -626,10 +619,10 @@ export function NinjaBattleScreen({
       {/* 스테이지 밖에 둔다 — 안에 넣으면 --ninja-scale 확대/축소를 같이 받는다 */}
       {confirmLeave && (
         <PixelConfirmModal
-          title="방을 나가시겠습니까?"
-          message="게임 중에 나가면 이번 게임 기록은 사라져요."
-          confirmLabel="예"
-          cancelLabel="아니오"
+          title="정말 방을 나갈까요?"
+          message="현재 방과 게임 결과에서 나가 메인 화면으로 이동해요."
+          confirmLabel="방 나가기"
+          cancelLabel="취소"
           tone="danger"
           onConfirm={onLeave}
           onCancel={() => setConfirmLeave(false)}
