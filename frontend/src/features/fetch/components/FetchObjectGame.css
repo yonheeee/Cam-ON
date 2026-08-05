@@ -162,6 +162,19 @@
   box-shadow: 5px 5px 0 0 rgb(0 0 0 / 0.35);
 }
 
+.fetch-seat--speaking .fetch-seat__cam {
+  border-color: color-mix(in srgb, var(--seat) 78%, white);
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--seat) 88%, white),
+    0 0 14px 4px color-mix(in srgb, var(--seat) 70%, transparent),
+    5px 5px 0 rgb(0 0 0 / 0.35);
+  animation: fetch-speaking-glow 900ms ease-in-out infinite alternate;
+}
+
+@keyframes fetch-speaking-glow {
+  to { filter: brightness(1.12); }
+}
+
 .fetch-seat__video,
 .fetch-seat__cam .lk-participant-tile {
   width: 100%;

@@ -2,9 +2,9 @@ import { ParticipantTile, useLocalParticipant, useParticipants, useTracks } from
 import { Track } from 'livekit-client';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { roomApi } from '../../room/api/roomApi';
-import { BackgroundMusic } from '../../sound/components/BackgroundMusic';
-import { SpeakingIndicator } from '../../webrtc/components/SpeakingIndicator';
+import { RoomTopBar } from '../../room/components/RoomTopBar';
 import { useSpeakingIdentities } from '../../webrtc/hooks/useSpeakingIdentities';
+import { ParticipantAudioControl } from '../../webrtc/components/ParticipantAudioControl';
 import { useCountdownSound } from '../../sound/hooks/useCountdownSound';
 import { PixelConfirmModal } from '../../system/components/PixelConfirmModal';
 import { useCharadesRound } from '../hooks/useCharadesRound';
@@ -187,26 +187,16 @@ export function CharadesGamePanel({
     // .camon-stage = 뷰포트를 덮는 전체 화면 껍데기(스크롤 없음). 픽셀 폰트 상속과
     // letter-spacing: 0 리셋(Mona12는 자간 0이 원본)이 여기서 온다 — 대기방과 같은 방식.
     <div className="charades-screen camon-stage">
-      <header className="charades-topbar">
-        {/* 확정안: 방 안에서 로고 클릭 = 바로 이동이 아니라 나가기 확인 팝업 */}
-        <img
-          className="charades-topbar__logo"
-          src="/assets/cam-on-logo.png"
-          alt="CAM, ON!"
-          onClick={() => setConfirmLeave(true)}
-        />
-        <BackgroundMusic
-          source="/assets/sounds/silent-charades.mp3"
-          className="charades-topbar__music-toggle"
-        />
-        {/* 단일 라운드 정책(참가자 전원이 한 번씩 표현하면 게임 종료)이라 라운드가 아니라
-            "몇 번째 표현자인지"가 진행도다 — 서버가 turn/totalTurnsInRound로 내려준다. */}
-        <div className="charades-header__badge">
+      <RoomTopBar
+        musicSource="/assets/sounds/silent-charades.mp3"
+        className="charades-topbar"
+        onRequestLeave={() => setConfirmLeave(true)}
+        center={<div className="charades-header__badge">
           <span className="charades-header__round">
             TURN {turn} / {totalTurnsInRound}
           </span>
-        </div>
-      </header>
+        </div>}
+      />
 
       {phase === 'preview' && (
         <div className="charades-preview-overlay">
@@ -305,20 +295,27 @@ export function CharadesGamePanel({
             {/* 출제자도 다른 참가자와 똑같이 자기 좌석색을 쓴다("출제자 = 골드" 규칙 없음).
                 --seat을 프레임에 걸어두면 안쪽 이름표·이니셜 아바타가 같이 상속받는다. */}
             <div
-              className="charades-stage__box"
+              className={`charades-stage__box${
+                presenterId && speakingIds.has(presenterId) ? ' charades-stage__box--speaking' : ''
+              }`}
               ref={stageBoxRef}
               style={presenterId ? ({ '--seat': seatColor(presenterId) } as CSSProperties) : undefined}
             >
-              <div className="charades-stage__screen">
+              <div className="charades-stage__screen participant-audio-host">
                 {presenterTrack ? (
                   <ParticipantTile trackRef={presenterTrack} disableSpeakingIndicator />
                 ) : (
                   <span className="charades-stage__avatar">{displayName(presenterId).slice(0, 1)}</span>
                 )}
+                {presenterId && (
+                  <ParticipantAudioControl
+                    identity={presenterId}
+                    allowLocalToggle={presenterId !== myParticipantId}
+                  />
+                )}
                 {/* 표현자는 자기 차례에 마이크가 꺼지므로 평소엔 켜지지 않는다. 그래도 그리는 이유는
                     음소거가 실패했을 때(useCharadesMicrophone이 microphoneError로 알린다) 소리가
                     나가고 있다는 사실이 화면에도 보여야 하기 때문이다. */}
-                {presenterId && <SpeakingIndicator active={speakingIds.has(presenterId)} />}
               </div>
               {/* --seat는 위 .charades-stage__box에서 상속받는다 */}
               <span className="charades-cam-name charades-cam-name--stage">
@@ -350,10 +347,10 @@ export function CharadesGamePanel({
       {error && <p className="charades-error">{error}</p>}
       {confirmLeave && (
         <PixelConfirmModal
-          title="방을 나가시겠습니까?"
-          message="게임 중에 나가면 이번 게임 기록은 사라져요."
-          confirmLabel="예"
-          cancelLabel="아니오"
+          title="정말 방을 나갈까요?"
+          message="현재 방과 게임 결과에서 나가 메인 화면으로 이동해요."
+          confirmLabel="방 나가기"
+          cancelLabel="취소"
           tone="danger"
           onConfirm={onLeave}
           onCancel={() => setConfirmLeave(false)}
@@ -377,15 +374,18 @@ function SidebarCard({
   speaking: boolean;
 }) {
   return (
-    <div className="charades-sidebar__card" style={{ '--seat': seat } as CSSProperties}>
-      <div className="charades-sidebar__cam">
+    <div
+      className={`charades-sidebar__card${speaking ? ' charades-sidebar__card--speaking' : ''}`}
+      style={{ '--seat': seat } as CSSProperties}
+    >
+      <div className="charades-sidebar__cam participant-audio-host">
         {trackRef ? (
           <ParticipantTile trackRef={trackRef} disableSpeakingIndicator />
         ) : (
           <span className="charades-sidebar__avatar">{name.slice(0, 1)}</span>
         )}
+        {trackRef && <ParticipantAudioControl identity={trackRef.participant.identity} />}
         <span className="charades-cam-name">{name}</span>
-        <SpeakingIndicator active={speaking} />
       </div>
       {/* 말풍선은 캠 "밖" 카드 레벨에서 absolute로 띄운다 — 캠 자체는 overflow:hidden이라 안에 두면
           잘려서 안 보인다. 카드 위치/사이드바 세로 배치는 그대로, 캠과 다음 캠 사이 여백에 걸친다. */}

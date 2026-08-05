@@ -27,7 +27,7 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding: 16px 20px;
+  padding: 84px 20px 16px;
   box-sizing: border-box;
   font-family: var(--pap-font-body);
   color: var(--pap-white);
@@ -271,10 +271,14 @@
 
 /* ---- 헤더 ---- */
 .ninja-screen__topbar {
+  position: absolute;
+  top: 20px;
+  right: 24px;
+  left: 24px;
+  z-index: 30;
   display: flex;
   align-items: center;
-  gap: 14px;
-  flex-shrink: 0;
+  width: auto;
 }
 
 .ninja-screen__logo {
@@ -345,6 +349,19 @@
 
 .ninja-tile {
   border-color: var(--ninja-seat-color, var(--pap-ink));
+}
+
+.ninja-tile--speaking {
+  border-color: color-mix(in srgb, var(--ninja-seat-color) 78%, white);
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--ninja-seat-color) 88%, white),
+    0 0 18px 5px color-mix(in srgb, var(--ninja-seat-color) 72%, transparent),
+    5px 5px 0 rgb(0 0 0 / 0.35);
+  animation: ninja-speaking-glow 900ms ease-in-out infinite alternate;
+}
+
+@keyframes ninja-speaking-glow {
+  to { filter: brightness(1.14); }
 }
 
 .ninja-tile--cinematic-target {

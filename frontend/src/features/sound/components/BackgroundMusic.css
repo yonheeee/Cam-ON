@@ -66,11 +66,11 @@
   z-index: 5;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 9px;
   /* 슬라이더가 눌릴 만큼의 폭은 확보하되, 게임 화면 헤더 위에서 과하게 넓어지지 않게 둔다.
      라벨(음악/음성) 열이 붙으면서 조금 넓어졌다. */
-  width: 232px;
-  padding: 12px;
+  width: 276px;
+  padding: 12px 14px 14px;
   background: var(--pap-plaza-cream);
   font-family: var(--pap-font-pixel);
   text-align: left;
@@ -80,23 +80,53 @@
   display: none;
 }
 
-.background-music__mute {
-  --pap-shadow-offset: var(--pap-shadow-icon);
-  display: inline-flex;
-  gap: 8px;
+.background-music__panel-head {
+  display: flex;
   align-items: center;
-  justify-content: center;
-  padding: 7px 10px;
-  font-size: 12px;
+  justify-content: flex-start;
+  min-height: 28px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid rgb(43 24 51 / 0.18);
+  font-size: 13px;
+}
+
+.background-music__toggle > span {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  line-height: 18px;
+}
+
+.background-music__toggle svg {
+  display: block;
 }
 
 /* 음악/음성 두 줄. grid로 라벨·슬라이더·퍼센트 열을 맞춰서, 두 줄의 슬라이더 시작점과
    퍼센트 위치가 어긋나지 않게 한다(flex로 하면 라벨 글자수에 따라 밀린다). */
 .background-music__row {
   display: grid;
-  grid-template-columns: 28px 1fr 40px;
-  gap: 8px;
+  grid-template-columns: 24px 76px 1fr 36px;
+  gap: 7px;
   align-items: center;
+  min-height: 28px;
+}
+
+.background-music__row-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--pap-ink);
+  cursor: pointer;
+}
+
+.background-music__row-icon svg {
+  width: 20px;
+  height: 20px;
 }
 
 .background-music__row-label {
@@ -126,9 +156,15 @@
 .background-music__range {
   flex: 1 1 auto;
   min-width: 0;
-  height: 18px;
+  height: 14px;
   margin: 0;
-  background: transparent;
+  border-radius: 999px;
+  background:
+    linear-gradient(
+      to right,
+      var(--pap-ink) 0 var(--background-music-progress),
+      rgb(43 23 51 / 0.16) var(--background-music-progress) 100%
+    ) center / 100% 6px no-repeat;
   cursor: pointer;
   appearance: none;
   -webkit-appearance: none;
@@ -140,41 +176,130 @@
 }
 
 .background-music__range::-webkit-slider-runnable-track {
-  height: 10px;
-  background: var(--pap-white);
-  border: var(--pap-stroke-control) solid var(--pap-ink);
-  border-radius: 0;
+  height: 6px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
 }
 
 .background-music__range::-webkit-slider-thumb {
-  width: 12px;
-  height: 18px;
-  margin-top: -6px;
-  background: var(--pap-arcade-orange);
+  width: 14px;
+  height: 14px;
+  margin-top: -4px;
+  background: var(--pap-arcade-blue);
   border: var(--pap-stroke-control) solid var(--pap-ink);
-  border-radius: 0;
+  border-radius: 50%;
   appearance: none;
   -webkit-appearance: none;
 }
 
 .background-music__range::-moz-range-track {
-  height: 10px;
-  background: var(--pap-white);
-  border: var(--pap-stroke-control) solid var(--pap-ink);
-  border-radius: 0;
+  height: 6px;
+  border: 0;
+  border-radius: 999px;
+  background: rgb(43 23 51 / 0.16);
+}
+
+.background-music__range::-moz-range-progress {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--pap-ink);
 }
 
 .background-music__range::-moz-range-thumb {
-  width: 12px;
-  height: 18px;
-  background: var(--pap-arcade-orange);
+  width: 14px;
+  height: 14px;
+  background: var(--pap-arcade-blue);
   border: var(--pap-stroke-control) solid var(--pap-ink);
-  border-radius: 0;
+  border-radius: 50%;
 }
 
 .background-music__range:focus-visible {
   outline: 3px solid var(--pap-arcade-teal);
   outline-offset: 2px;
+}
+
+/* Figma `Settings / Sound Controls Compact`를 그대로 옮긴 한 줄형 컨트롤. */
+.background-music--compact {
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: 20px 8px 130px 15px 1px 14px 20px 8px 130px;
+  align-items: center;
+  width: 375px;
+  height: 40px;
+  padding: 0 13px 0 12px;
+  border: 2px solid var(--pap-ink);
+  border-radius: 6px;
+  background: #fffef7;
+  box-shadow: 5px 5px 0 rgb(43 24 51 / 0.5);
+}
+
+.background-music--compact > :nth-child(1) { grid-column: 1; }
+.background-music--compact > :nth-child(2) { grid-column: 3; }
+.background-music--compact > :nth-child(3) { grid-column: 5; }
+.background-music--compact > :nth-child(4) { grid-column: 7; }
+.background-music--compact > :nth-child(5) { grid-column: 9; }
+
+.background-music__compact-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--pap-ink);
+  cursor: pointer;
+}
+
+.background-music__compact-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.background-music__compact-icon:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.background-music__compact-divider {
+  width: 1px;
+  height: 24px;
+  background: rgb(43 23 51 / 0.18);
+}
+
+.background-music__range--compact {
+  width: 130px;
+  height: 14px;
+  background:
+    linear-gradient(
+      to right,
+      rgb(43 23 51 / 0.76) 0 var(--background-music-progress),
+      rgb(43 23 51 / 0.16) var(--background-music-progress) 100%
+    ) center / 100% 6px no-repeat;
+}
+
+.background-music__range--compact::-webkit-slider-runnable-track {
+  height: 6px;
+}
+
+.background-music__range--compact::-webkit-slider-thumb {
+  width: 14px;
+  height: 14px;
+  margin-top: -4px;
+  border-width: 2px;
+}
+
+.background-music__range--compact::-moz-range-track,
+.background-music__range--compact::-moz-range-progress {
+  height: 6px;
+}
+
+.background-music__range--compact::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-width: 2px;
 }
 
 @media (prefers-reduced-motion: reduce) {

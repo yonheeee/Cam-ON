@@ -4,8 +4,8 @@ import { Track } from 'livekit-client';
 import { ChatPanel } from '../../chat/components/ChatPanel';
 import type { ChatMessage } from '../../chat/hooks/useRoomChat';
 import { BackgroundMusic } from '../../sound/components/BackgroundMusic';
-import { SpeakingIndicator } from '../../webrtc/components/SpeakingIndicator';
 import { useSpeakingIdentities } from '../../webrtc/hooks/useSpeakingIdentities';
+import { ParticipantAudioControl } from '../../webrtc/components/ParticipantAudioControl';
 import { PixelConfirmModal } from '../../system/components/PixelConfirmModal';
 import { roomApi, RoomApiError } from '../api/roomApi';
 import { SettingsModal } from './SettingsModal';
@@ -339,17 +339,33 @@ export function LobbyScreen({
     <div className="lobby-screen camon-stage">
       <div className="lobby-screen__bg-bottom" />
 
-      {/* 확정안: 방 안에서 로고 클릭 = 바로 이동이 아니라 나가기 확인 팝업 */}
-      <img
-        className="lobby-screen__logo"
-        src="/assets/cam-on-logo-v3.png"
-        alt="CAM, ON!"
+      <button
+        type="button"
+        className="lobby-screen__logo-button"
         onClick={() => setConfirmLeave(true)}
-      />
-      <BackgroundMusic
-        source="/assets/sounds/cozy-cartridge-club.mp3"
-        className="lobby-screen__music-toggle"
-      />
+        aria-label="방 나가기 확인"
+      >
+        <img className="lobby-screen__logo" src="/assets/cam-on-logo-v3.png" alt="CAM, ON!" />
+      </button>
+      <div className="lobby-screen__header-actions">
+        <BackgroundMusic
+          source="/assets/sounds/cozy-cartridge-club.mp3"
+          className="lobby-screen__music-toggle"
+        />
+        <button
+          type="button"
+          className="lobby-screen__leave pap-pixel-btn pap-pixel-btn--coral"
+          onClick={() => setConfirmLeave(true)}
+          data-button-sound="cancel"
+          aria-label="방 나가기"
+          title="방 나가기"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden>
+            <path d="M10 4H5v16h5" />
+            <path d="M14 8l4 4-4 4M18 12H9" />
+          </svg>
+        </button>
+      </div>
 
       <div className="lobby-screen__body">
         <section className="lobby-screen__stage">
@@ -374,15 +390,16 @@ export function LobbyScreen({
               // 연결이 끊긴 참가자는 재접속 유예(15초) 동안 자리를 지킨 채 회색으로만 표시된다.
               // 유예가 끝나면 서버가 member:left를 보내고 그때 타일이 사라진다(방장이면 위임까지).
               const offline = info?.offline ?? false;
+              const speaking = !inResult && speakingIds.has(identity);
               const nickname = info?.nickname ?? trackRef.participant.name ?? '...';
               return (
                 <div
                   key={identity}
-                  className={`lobby-tile${info ? ` lobby-tile--p${info.colorIndex}` : ''}${
+                  className={`lobby-tile participant-audio-host${info ? ` lobby-tile--p${info.colorIndex}` : ''}${
                     showReady ? ' lobby-tile--ready' : ''
                   }${offline ? ' lobby-tile--offline' : ''}${
                     inResult ? ' lobby-tile--in-result' : ''
-                  }`}
+                  }${speaking ? ' lobby-tile--speaking' : ''}`}
                 >
                   {/* Figma의 캠 대기 화면 — 크림 원 + 대표색 원 + 이니셜.
                       비디오 트랙이 붙으면 위에 얹히는 <video>가 그대로 덮는다. */}
@@ -397,7 +414,6 @@ export function LobbyScreen({
                   {!inResult && <ParticipantTile trackRef={trackRef} disableSpeakingIndicator />}
                   {/* 캠을 내린 사람(결과 화면에 남아 있는 사람)은 말하는 표시도 내린다 —
                       아바타만 남은 자리에 테두리가 켜지면 여기 있는 사람처럼 보인다. */}
-                  <SpeakingIndicator active={!inResult && speakingIds.has(identity)} />
                   {/* 방장 표시 — 영상 우측 상단 왕관. 내 화면이든 게스트 화면이든 동일. */}
                   {isHost && (
                     <span className="lobby-tile__host-badge" title="방장" aria-label="방장">
@@ -467,19 +483,29 @@ export function LobbyScreen({
                     )}
                     {/* 방장에게만: 다른 참가자 타일에 강퇴 버튼. 대상이 방장 타일인 경우는
                         없다(방장=나, 내 타일엔 안 그림). 실제 실행은 확인 팝업을 거친다. */}
-                    {amHost && !isMe && info && (
-                      <span className="lobby-tile__controls lobby-tile__controls--kick">
-                        <button
-                          type="button"
-                          className="lobby-tile__control lobby-tile__control--kick"
-                          onClick={() =>
-                            setKickTarget({ participantId: identity, nickname: info.nickname })
-                          }
-                          title="강퇴"
-                          aria-label={`${info.nickname} 강퇴`}
-                        >
-                          {KickIcon}
-                        </button>
+                    {!isMe && info && (
+                      <span
+                        className={`lobby-tile__controls lobby-tile__controls--remote ${
+                          amHost
+                            ? 'lobby-tile__controls--remote-host'
+                            : 'lobby-tile__controls--remote-guest'
+                        }`}
+                      >
+                        <ParticipantAudioControl identity={identity} variant="lobby" />
+                        {amHost && (
+                          <button
+                            type="button"
+                            className="lobby-tile__control lobby-tile__control--kick"
+                            data-tooltip="강퇴"
+                            onClick={() =>
+                              setKickTarget({ participantId: identity, nickname: info.nickname })
+                            }
+                            title="강퇴"
+                            aria-label={`${info.nickname} 강퇴`}
+                          >
+                            {KickIcon}
+                          </button>
+                        )}
                       </span>
                     )}
                     {/* 준비 상태는 영상 좌측 상단 READY! 배지가 전담한다 — 하단 바에는 표시하지 않는다 */}
@@ -586,13 +612,13 @@ export function LobbyScreen({
               ))}
             </ol>
             {courseItems.length === 0 && (
-              <p className="lobby-screen__course-empty">
+              <div className="lobby-screen__course-empty">
                 {amHost
-                  ? '구성 변경을 눌러 게임을 담아 주세요.'
-                  : '방장이 게임을 정하는 중이에요.'}
-              </p>
+                  ? <><span>구성 변경을 눌러</span><span>플레이할 게임을 추가해 주세요.</span></>
+                  : <><span>방장이 플레이할 게임을</span><span>구성하고 있어요.</span></>}
+              </div>
             )}
-              {courseError && <p className="lobby-screen__course-empty">{courseError}</p>}
+              {courseError && <p className="lobby-screen__course-error">{courseError}</p>}
             </div>
           )}
 
