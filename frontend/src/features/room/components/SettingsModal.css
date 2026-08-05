@@ -239,9 +239,9 @@
   pointer-events: none;
 }
 
-/* 손 인식 안내 문구(.hand-coach)는 기본이 미리보기 맨 아래인데, dev·?gestureDebug 빌드에서는
-   바로 위 readout과 겹친다 — 그 높이(11px 한 줄 + 여백 ≈ 33px)만큼 띄운다. 디버그가 꺼져 있어도
-   같은 위치라 빌드에 따라 문구가 움직이지 않는다. */
+/* 손 인식 안내 문구(.hand-coach)는 기본 위치(아래에서 12%)가 이 미리보기 크기에서는 dev·
+   ?gestureDebug 빌드의 readout과 겹친다 — 그 높이(11px 한 줄 + 여백 ≈ 33px) 위로 올린다.
+   디버그가 꺼져 있어도 같은 위치라 빌드에 따라 문구가 움직이지 않는다. */
 /* 선택자를 두 단계로 잡은 건 특정도 때문이다 — .hand-coach의 bottom과 같은 급이면 CSS 파일이
    합쳐지는 순서에 따라 이겼다 졌다 한다. */
 .settings-modal__preview .settings-modal__coach {

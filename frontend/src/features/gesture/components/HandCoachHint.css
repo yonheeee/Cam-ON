@@ -1,22 +1,31 @@
-/* 손 인식 안내 문구 (HandCoachHint.tsx). 캠 칸 아래쪽 가운데에 얹는다.
-   z-index 4 = 닉네임 배지와 같은 층 — 스켈레톤(2)·이펙트(3)보다는 위, 시네마틱 오버레이보다는 아래. */
+/* 손 인식 안내 문구 (HandCoachHint.tsx). 캠 화면 아래쪽에 반투명하게 얹는다.
+ *
+ * 톤: 경고가 아니라 곁눈질로 읽는 힌트다. 닌자에서 시선이 머무는 곳은 가운데 인술 카드라
+ * 캠 위 문구가 또렷하면 그쪽으로 시선을 뺏는다 — 작게(12px) + 60% 불투명도로 두면 "뭔가
+ * 떴다"는 건 주변시에 들어오되 플레이를 끊지 않는다. 타일 맨 아래 가장자리에 붙이지 않고
+ * 조금 띄워서, 캠 영상 위에 떠 있는 자막처럼 보이게 한다.
+ *
+ * z-index 4 = 닉네임 배지와 같은 층 — 스켈레톤(2)·이펙트(3)보다는 위, 시네마틱 오버레이보다는 아래. */
 .hand-coach {
   position: absolute;
   left: 50%;
-  bottom: 8px;
+  bottom: 12%;
   z-index: 4;
-  max-width: calc(100% - 16px);
+  max-width: calc(100% - 24px);
   margin: 0;
-  padding: 5px 10px;
-  border: 2px solid var(--pap-play-yellow);
+  padding: 3px 8px;
+  border: 1px solid var(--pap-play-yellow);
   border-radius: var(--pap-radius);
-  background: rgb(18 11 33 / 0.9);
+  background: rgb(18 11 33 / 0.78);
   color: var(--pap-white);
   font-family: var(--pap-font-pixel);
-  font-size: 15px;
+  font-size: 12px;
   line-height: 1.35;
   text-align: center;
   text-wrap: balance;
+  /* 흐리게 깔린 글자가 밝은 배경(창가·흰 벽) 위에서 사라지지 않게 붙잡아 준다. */
+  text-shadow: 0 1px 2px rgb(0 0 0 / 0.7);
+  opacity: 0.6;
   /* 캠 타일 위 안내라 클릭 대상이 아니다 — 닌자에서 상대 타일은 "공격!" 버튼이 되므로
      문구가 그 클릭을 먹으면 안 된다(지금은 내 타일에만 뜨지만 규칙으로 못 박아 둔다). */
   pointer-events: none;
@@ -33,14 +42,15 @@
   border-color: var(--pap-arcade-teal);
 }
 
+/* 끝값이 1이 아니라 0.6이어야 한다 — 애니메이션이 끝나는 순간 흐려지며 튀지 않는다. */
 @keyframes hand-coach-in {
   from {
-    transform: translate(-50%, 6px);
+    transform: translate(-50%, 4px);
     opacity: 0;
   }
   to {
     transform: translate(-50%, 0);
-    opacity: 1;
+    opacity: 0.6;
   }
 }
 
