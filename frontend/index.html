@@ -4,7 +4,13 @@
 <html lang="ko">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!-- 파비콘은 assets/cam-on-v3-o-symbol-transparent.png(324×388)에서 만든다. 원본이 정사각이
+         아니라 그대로 걸면 브라우저가 정사각 칸에 맞추며 가로로 눌리므로, 좌우에 투명 여백을
+         넣어 388×388로 맞춘 favicon.png를 쓴다. 탭에 실제로 그려지는 크기용으로 32×32를 따로
+         두는 건 픽셀 아트라서다 — 큰 이미지를 브라우저가 알아서 줄이면 격자가 뭉개진다. -->
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="388x388" href="/favicon.png" />
+    <link rel="apple-touch-icon" href="/favicon.png" />
     <link
       rel="preload"
       as="audio"
