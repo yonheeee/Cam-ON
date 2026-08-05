@@ -344,7 +344,16 @@ export function NinjaBattleScreen({
               인식 루프를 소유하므로 게임 중 정확히 한 번만 마운트된다. */}
           {/* 탈락하면 인식 루프와 브로드캐스트를 끊는다 — 판정에 쓰이지 않는 추론을 매 프레임
               돌릴 이유가 없다(제출도 훅에서 이미 막혀 있다). 다음 판이 열리면 다시 켜진다. */}
-          {isMe && <GesturePanel variant="overlay" active={!isEliminated} />}
+          {/* 안내 문구(coach)는 실제로 손을 들고 있어야 하는 구간에서만 — 교환 사이 인터미션이나
+              이펙트 재생 중에는 손을 내리는 게 정상이라 그때까지 "손을 보여주세요"가 뜨면 잔소리다.
+              카운트다운은 자세를 잡는 시간이라 켜 둔다(그때 위치를 고치는 게 가장 도움이 된다). */}
+          {isMe && (
+            <GesturePanel
+              variant="overlay"
+              active={!isEliminated}
+              coach={(!isIntermission || inCountdown) && !inEffectPlayback}
+            />
+          )}
           <ParticipantAudioControl identity={id} />
           {/* 탈락한 사람은 회색 오버레이 위에 표시가 겹치지 않게 뺀다 — 판에서 빠진 사람이라
               누가 말하는지 알려줄 대상이 아니다. */}

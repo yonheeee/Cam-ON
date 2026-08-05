@@ -3,6 +3,8 @@ import { useLocalParticipant, useMediaDeviceSelect } from '@livekit/components-r
 import type { LocalAudioTrack } from 'livekit-client';
 import { DrawingUtils, HandLandmarker } from '@mediapipe/tasks-vision';
 import { useHandGestureRecognition } from '../../gesture/hooks/useHandGestureRecognition';
+import { useHandCoachHint } from '../../gesture/hooks/useHandCoachHint';
+import { HandCoachHint } from '../../gesture/components/HandCoachHint';
 import { aiApi } from '../../fetch/api/aiApi';
 import './SettingsModal.css';
 
@@ -244,6 +246,9 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   const previewActive = isCameraEnabled && camStatus === 'ok' && Boolean(track);
   const { results, combo, depth, ready: handReady } = useHandGestureRecognition(videoRef, previewActive);
   const handDetected = results.length > 0;
+  // 인식 범위를 확인하는 화면이라 "왜 안 잡히는지"를 여기서 알려주는 게 가장 값싸다 —
+  // 게임에 들어가기 전에 자리(거리)를 잡을 수 있다.
+  const coachIssue = useHandCoachHint(results.length, depth, previewActive && handReady);
   // 손동작 판정 디버그 표시 — 라벨/신뢰도와 함께 두 손 사이 거리(손바닥 길이 단위)와 그 라벨의
   // 허용 한계, 그리고 카메라와의 거리 지표(depth)와 그 하한을 같이 보여준다.
   // handProximity.ts의 라벨별 거리 한계와 handSelection.ts의 깊이 하한을 실측으로 튜닝하는
@@ -450,6 +455,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                     {handDetected && (
                       <span className="settings-modal__preview-badge">손동작 인식 중</span>
                     )}
+                    <HandCoachHint issue={coachIssue} className="settings-modal__coach" />
                     {gestureDebug && (
                       <span className="settings-modal__gesture-debug">
                         {combo.label
