@@ -52,10 +52,16 @@ import org.springframework.transaction.annotation.Transactional;
 public class FetchObjectGameService {
 
     static final Duration COUNTDOWN_DURATION = Duration.ofSeconds(3);
-    static final Duration PLAY_DURATION = Duration.ofSeconds(20);
+    // 20초 → 40초 (2026-08-04 플레이테스트 피드백): 물건 찾으러 자리를 뜨는 게임이라
+    // 20초는 방 반대편 물건이 사실상 불가능했다. "아무도 못 찾는 라운드가 길어지는" 부작용은
+    // 그레이스 단축 + (예정) 스킵 투표가 상한을 잡는다. 프론트 폴백(fetchGame.ts의
+    // ROUND_DURATION_MS)과 함께 바꿔야 한다 — 스냅샷 복구 타이머가 어긋난다.
+    static final Duration PLAY_DURATION = Duration.ofSeconds(40);
     // 첫 정답 이후 나머지에게 주는 마지막 제출 기회 — 이 시간이 지나면 라운드를 조기 마감한다.
     // (첫 정답 즉시 종료로 하면 "빨리 가져온 순서대로 1~4위" 경쟁이 사라져 그레이스를 둔다)
-    static final Duration FIRST_SUBMISSION_GRACE = Duration.ofSeconds(5);
+    // 5초 → 10초: 기본 시간이 40초로 늘며 "멀리 있는 물건"이 정상 플레이가 됐는데,
+    // 5초는 찾고도 못 돌아오는 억울함이 있었다. 성공 후 지루함의 상한이기도 하다.
+    static final Duration FIRST_SUBMISSION_GRACE = Duration.ofSeconds(10);
     static final Duration ROUND_DURATION =
         COUNTDOWN_DURATION.plus(PLAY_DURATION);
     private static final int MIN_PLAYERS = 2;
