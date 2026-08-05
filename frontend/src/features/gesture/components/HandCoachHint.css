@@ -1,0 +1,51 @@
+/* 손 인식 안내 문구 (HandCoachHint.tsx). 캠 칸 아래쪽 가운데에 얹는다.
+   z-index 4 = 닉네임 배지와 같은 층 — 스켈레톤(2)·이펙트(3)보다는 위, 시네마틱 오버레이보다는 아래. */
+.hand-coach {
+  position: absolute;
+  left: 50%;
+  bottom: 8px;
+  z-index: 4;
+  max-width: calc(100% - 16px);
+  margin: 0;
+  padding: 5px 10px;
+  border: 2px solid var(--pap-play-yellow);
+  border-radius: var(--pap-radius);
+  background: rgb(18 11 33 / 0.9);
+  color: var(--pap-white);
+  font-family: var(--pap-font-pixel);
+  font-size: 15px;
+  line-height: 1.35;
+  text-align: center;
+  text-wrap: balance;
+  /* 캠 타일 위 안내라 클릭 대상이 아니다 — 닌자에서 상대 타일은 "공격!" 버튼이 되므로
+     문구가 그 클릭을 먹으면 안 된다(지금은 내 타일에만 뜨지만 규칙으로 못 박아 둔다). */
+  pointer-events: none;
+  transform: translateX(-50%);
+  animation: hand-coach-in 140ms ease-out;
+}
+
+/* 원인별 테두리 색 — 문구를 안 읽어도 "또 그거구나"가 색으로 먼저 온다. */
+.hand-coach--too-far {
+  border-color: var(--pap-play-yellow);
+}
+
+.hand-coach--hands-missing {
+  border-color: var(--pap-arcade-teal);
+}
+
+@keyframes hand-coach-in {
+  from {
+    transform: translate(-50%, 6px);
+    opacity: 0;
+  }
+  to {
+    transform: translate(-50%, 0);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hand-coach {
+    animation: none;
+  }
+}
