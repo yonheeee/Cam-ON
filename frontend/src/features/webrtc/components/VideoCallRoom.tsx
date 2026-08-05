@@ -443,6 +443,9 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
   const nextItem = finishedSet
     ? courseItems.find((item) => item.idx === finishedSet.sessionSeq + 1)
     : undefined;
+  const finishedGameName = finishedSet
+    ? (courseItems.find((item) => item.idx === finishedSet.sessionSeq)?.gameName ?? null)
+    : null;
   // 게임이 열리기 전 대기(코스 첫 게임 앞) 또는 게임 사이 대기. 이 동안엔 대기방을 그리지 않고
   // 룰 설명 화면이 자리를 차지한다 — 첫 게임 앞에는 아직 열린 세션이 없어(inGame=false) 이
   // 조건이 없으면 대기방이 그대로 보인다.
@@ -522,6 +525,7 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
           totalSets={courseItems.length || finishedSet.sessionSeq}
           setResult={finishedSet.setResult}
           courseRanking={finishedSet.courseRanking}
+          gameName={finishedGameName}
           nicknameById={nicknameById}
           nextGameLabel={nextItem ? GAME_LABELS[nextItem.gameName] : null}
           participantId={participantId}

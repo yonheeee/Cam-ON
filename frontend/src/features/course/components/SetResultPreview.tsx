@@ -8,6 +8,7 @@ export function SetResultPreview() {
       setIndex={1}
       totalSets={3}
       participantId="p2"
+      gameName="FETCH_OBJECT"
       setResult={[
         { participantId: 'p1', score: 100, rank: 1 },
         { participantId: 'p2', score: 70, rank: 2 },
