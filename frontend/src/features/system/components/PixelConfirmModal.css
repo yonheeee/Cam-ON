@@ -50,3 +50,29 @@
 .confirm-modal__actions .pap-pixel-btn--primary {
   background: var(--camon-color-action-orange);
 }
+
+/* 게임별 다크 테마가 공용 확인창까지 덮어쓰지 않게 한다.
+   방 나가기 확인창은 어느 화면에서 열어도 대기방 확정안과 동일하다. */
+.ninja-screen .pap-modal-backdrop .confirm-modal {
+  background: var(--pap-plaza-cream);
+  border: 3px solid var(--pap-ink);
+  box-shadow: 5px 5px 0 rgb(43 24 51 / 0.5);
+  color: var(--pap-ink);
+}
+
+.ninja-screen .pap-modal-backdrop .confirm-modal__title,
+.ninja-screen .pap-modal-backdrop .confirm-modal__message {
+  color: var(--pap-ink);
+}
+
+.ninja-screen .pap-modal-backdrop .confirm-modal .pap-pixel-btn {
+  background: var(--pap-plaza-cream);
+  border-color: var(--pap-ink);
+  box-shadow: 3px 3px 0 rgb(43 24 51 / 0.5);
+  color: var(--pap-ink);
+}
+
+.ninja-screen .pap-modal-backdrop .confirm-modal .pap-pixel-btn--coral {
+  background: var(--pap-festival-coral);
+  color: var(--pap-white);
+}

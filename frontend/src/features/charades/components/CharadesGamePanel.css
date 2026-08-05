@@ -420,6 +420,15 @@
   animation: charades-stage-glow 3.6s ease-in-out infinite;
 }
 
+.charades-stage__box--speaking {
+  outline: 4px solid color-mix(in srgb, var(--seat) 78%, white);
+  outline-offset: 2px;
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--seat) 88%, white),
+    0 0 24px 7px color-mix(in srgb, var(--seat) 68%, transparent),
+    0 16px 44px rgb(0 0 0 / 0.6);
+}
+
 @keyframes charades-stage-glow {
   0%, 100% { box-shadow: 0 0 30px rgb(255 209 90 / 0.24), 0 16px 44px rgb(0 0 0 / 0.6); }
   50% { box-shadow: 0 0 52px rgb(255 209 90 / 0.4), 0 16px 44px rgb(0 0 0 / 0.6); }
@@ -674,6 +683,19 @@
   aspect-ratio: 16 / 9;
   flex: none;
   background: var(--pap-ink);
+}
+
+.charades-sidebar__card--speaking .charades-sidebar__cam {
+  border-color: color-mix(in srgb, var(--seat) 78%, white);
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--seat) 88%, white),
+    0 0 16px 5px color-mix(in srgb, var(--seat) 68%, transparent),
+    var(--pap-shadow-offset) var(--pap-shadow-offset) 0 rgb(43 24 51 / 0.45);
+  animation: charades-speaking-glow 900ms ease-in-out infinite alternate;
+}
+
+@keyframes charades-speaking-glow {
+  to { filter: brightness(1.12); }
 }
 
 .charades-sidebar__cam .lk-participant-tile {

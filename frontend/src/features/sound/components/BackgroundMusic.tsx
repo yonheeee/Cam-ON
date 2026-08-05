@@ -1,5 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react';
-import { useOptionalVoiceVolume } from '../context/voiceVolume';
+import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { useSfxVolume } from '../hooks/useSfxVolume';
 import './BackgroundMusic.css';
 
@@ -11,6 +10,7 @@ const MUSIC_VOLUME_KEY = 'camon:background-music-volume';
 interface BackgroundMusicProps {
   source: string;
   className: string;
+  variant?: 'popover' | 'compact';
   /** 저장된 음량이 없을 때 쓰는 초기값. 사용자가 슬라이더를 만지면 그 값이 우선한다. */
   volume?: number;
 }
@@ -54,6 +54,9 @@ function SpeakerIcon({ muted }: { muted: boolean }) {
 
 interface VolumeRowProps {
   label: string;
+  icon: ReactNode;
+  iconLabel: string;
+  onIconClick: () => void;
   /** 0.0 ~ 1.0 */
   value: number;
   onChange: (value: number) => void;
@@ -62,10 +65,28 @@ interface VolumeRowProps {
   disabledHint?: string;
 }
 
-function VolumeRow({ label, value, onChange, disabled = false, disabledHint }: VolumeRowProps) {
+function VolumeRow({
+  label,
+  icon,
+  iconLabel,
+  onIconClick,
+  value,
+  onChange,
+  disabled = false,
+  disabledHint,
+}: VolumeRowProps) {
   const percent = Math.round(value * 100);
   return (
     <div className="background-music__row">
+      <button
+        type="button"
+        className="background-music__row-icon"
+        onClick={onIconClick}
+        aria-label={iconLabel}
+        title={iconLabel}
+      >
+        {icon}
+      </button>
       <span className="background-music__row-label">{label}</span>
       <input
         className="background-music__range"
@@ -74,6 +95,7 @@ function VolumeRow({ label, value, onChange, disabled = false, disabledHint }: V
         max={100}
         step={1}
         value={percent}
+        style={{ '--background-music-progress': `${percent}%` } as CSSProperties}
         onChange={(event) => onChange(clampVolume(Number(event.target.value) / 100))}
         aria-label={disabled && disabledHint ? `${label} 음량 (${disabledHint})` : `${label} 음량`}
         aria-valuetext={`${percent}퍼센트`}
@@ -81,6 +103,26 @@ function VolumeRow({ label, value, onChange, disabled = false, disabledHint }: V
       />
       <span className="background-music__value">{percent}%</span>
     </div>
+  );
+}
+
+function MusicIcon({ muted }: { muted: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden>
+      <path d="M9 18V6l10-2v12" />
+      <circle cx="6" cy="18" r="3" />
+      <circle cx="16" cy="16" r="3" />
+      {muted && <path d="M3 3l18 18" />}
+    </svg>
+  );
+}
+
+function EffectsIcon({ muted }: { muted: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden>
+      <path d="M4 14v-4M8 17V7M12 20V4M16 17V7M20 14v-4" />
+      {muted && <path d="M3 3l18 18" />}
+    </svg>
   );
 }
 
@@ -104,6 +146,7 @@ function CaretIcon() {
 export function BackgroundMusic({
   source,
   className,
+  variant = 'popover',
   volume: defaultVolume = 0.35,
 }: BackgroundMusicProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -114,11 +157,10 @@ export function BackgroundMusic({
   const [volume, setVolume] = useState(() => readStoredVolume(defaultVolume));
   const [waitingForInteraction, setWaitingForInteraction] = useState(false);
   const [open, setOpen] = useState(false);
-  const panelId = useId();
-  // 방 밖(랜딩)에서는 null — 들을 참가자 음성이 없으므로 음성 슬라이더를 그리지 않는다.
-  const voice = useOptionalVoiceVolume();
-  // 효과음은 랜딩의 버튼 클릭음부터 있으므로 어디서든 조절할 수 있게 둔다.
+  const lastMusicVolumeRef = useRef(volume > 0 ? volume : defaultVolume);
   const { sfxVolume, setSfxVolume } = useSfxVolume();
+  const lastSfxVolumeRef = useRef(sfxVolume > 0 ? sfxVolume : 0.7);
+  const panelId = useId();
 
   // 오디오 생성 효과가 volume에 의존하면 슬라이더를 움직일 때마다 Audio가 새로 만들어져
   // 곡이 처음부터 다시 재생된다. 그래서 현재 음량은 ref로 읽고, 의존성은 source만 둔다.
@@ -206,33 +248,40 @@ export function BackgroundMusic({
     };
   }, [open]);
 
-  const toggleMusic = async () => {
-    const audio = audioRef.current;
-
-    // 자동 재생이 막힌 상태에서 누른 것은 "끄기"가 아니라 사용자가 직접 재생을 허용한 것으로
-    // 처리한다.
-    if (enabled && waitingForInteraction) {
-      try {
-        await audio?.play();
-        setWaitingForInteraction(false);
-      } catch {
-        setWaitingForInteraction(true);
-      }
-      return;
-    }
-
-    if (!enabled) {
+  const changeMusicVolume = (next: number) => {
+    if (next > 0) {
+      lastMusicVolumeRef.current = next;
       setEnabled(true);
-      try {
-        await audio?.play();
-        setWaitingForInteraction(false);
-      } catch {
-        setWaitingForInteraction(true);
-      }
+    } else {
+      setEnabled(false);
+    }
+    setVolume(next);
+  };
+
+  const toggleMusicMute = () => {
+    if (enabled && volume > 0) {
+      lastMusicVolumeRef.current = volume;
+      setVolume(0);
+      setEnabled(false);
       return;
     }
 
-    setEnabled(false);
+    setVolume(Math.max(0.01, lastMusicVolumeRef.current || defaultVolume));
+    setEnabled(true);
+  };
+
+  const changeSfxVolume = (next: number) => {
+    if (next > 0) lastSfxVolumeRef.current = next;
+    setSfxVolume(next);
+  };
+
+  const toggleSfxMute = () => {
+    if (sfxVolume > 0) {
+      lastSfxVolumeRef.current = sfxVolume;
+      setSfxVolume(0);
+      return;
+    }
+    setSfxVolume(Math.max(0.01, lastSfxVolumeRef.current));
   };
 
   const muteLabel = !enabled
@@ -240,6 +289,65 @@ export function BackgroundMusic({
     : waitingForInteraction
       ? '화면을 클릭하면 배경음악이 재생됩니다'
       : '배경음악 끄기';
+
+  if (variant === 'compact') {
+    const musicPercent = Math.round(volume * 100);
+    const sfxPercent = Math.round(sfxVolume * 100);
+
+    return (
+      <div
+        className={`${className} background-music background-music--compact pap-pixel-card`}
+        role="group"
+        aria-label="사운드 설정"
+      >
+        <button
+          type="button"
+          className="background-music__compact-icon"
+          onClick={toggleMusicMute}
+          aria-label={!enabled || volume === 0 ? '배경음악 음소거 해제' : '배경음악 음소거'}
+          title="배경음악"
+        >
+          <MusicIcon muted={!enabled || volume === 0} />
+        </button>
+        <input
+          className="background-music__range background-music__range--compact"
+          type="range"
+          min={0}
+          max={100}
+          step={1}
+          value={musicPercent}
+          style={{ '--background-music-progress': `${musicPercent}%` } as CSSProperties}
+          onChange={(event) => changeMusicVolume(clampVolume(Number(event.target.value) / 100))}
+          aria-label="배경음악 볼륨"
+          aria-valuetext={`${musicPercent}퍼센트`}
+        />
+
+        <span className="background-music__compact-divider" aria-hidden />
+
+        <button
+          type="button"
+          className="background-music__compact-icon"
+          onClick={toggleSfxMute}
+          aria-label={sfxPercent === 0 ? '효과음 음소거 해제' : '효과음 음소거'}
+          title="효과음"
+        >
+          <EffectsIcon muted={sfxPercent === 0} />
+        </button>
+        <input
+          className="background-music__range background-music__range--compact"
+          type="range"
+          min={0}
+          max={100}
+          step={1}
+          value={sfxPercent}
+          style={{ '--background-music-progress': `${sfxPercent}%` } as CSSProperties}
+          onChange={(event) => changeSfxVolume(clampVolume(Number(event.target.value) / 100))}
+          aria-label="효과음 볼륨"
+          aria-valuetext={`${sfxPercent}퍼센트`}
+        />
+      </div>
+    );
+  }
 
   return (
     <div
@@ -258,7 +366,7 @@ export function BackgroundMusic({
         title={waitingForInteraction ? muteLabel : '배경음악 설정'}
       >
         <SpeakerIcon muted={!enabled} />
-        <span>BGM</span>
+        <span>사운드</span>
         <CaretIcon />
       </button>
 
@@ -266,37 +374,32 @@ export function BackgroundMusic({
         id={panelId}
         className="background-music__panel pap-pixel-card"
         role="group"
-        aria-label="배경음악 설정"
+        aria-label="사운드 설정"
         hidden={!open}
       >
-        <button
-          type="button"
-          className="background-music__mute pap-pixel-btn"
-          onClick={() => void toggleMusic()}
-          aria-pressed={enabled}
-          title={muteLabel}
-        >
-          <SpeakerIcon muted={!enabled} />
-          <span>{enabled ? '배경음악 켜짐' : '배경음악 꺼짐'}</span>
-        </button>
+        <div className="background-music__panel-head">
+          <strong>사운드 설정</strong>
+        </div>
 
         <VolumeRow
-          label="음악"
+          label="배경음악"
+          icon={<MusicIcon muted={!enabled || volume === 0} />}
+          iconLabel={!enabled || volume === 0 ? '배경음악 음소거 해제' : '배경음악 음소거'}
+          onIconClick={toggleMusicMute}
           value={volume}
-          onChange={setVolume}
+          onChange={changeMusicVolume}
           disabled={!enabled}
           disabledHint="배경음악이 꺼져 있어요"
         />
 
-        {/* 버튼 클릭음·스킬 이펙트음·카운트다운 등 효과음 전체. 각 효과음이 가진 기준 음량
-            (버튼 0.55, 이펙트 0.85 …)에 이 값을 곱하므로 서로의 상대적 크기는 유지된다. */}
-        <VolumeRow label="효과" value={sfxVolume} onChange={setSfxVolume} />
-
-        {/* 참가자 음성은 방 안에서만 존재한다 — LiveKit의 RoomAudioRenderer 볼륨으로 이어진다.
-            배경음악과 한 슬라이더를 공유하면 "음악만 줄이고 말은 크게" 같은 조절이 불가능하다. */}
-        {voice && (
-          <VolumeRow label="음성" value={voice.voiceVolume} onChange={voice.setVoiceVolume} />
-        )}
+        <VolumeRow
+          label="효과음"
+          icon={<EffectsIcon muted={sfxVolume === 0} />}
+          iconLabel={sfxVolume === 0 ? '효과음 음소거 해제' : '효과음 음소거'}
+          onIconClick={toggleSfxMute}
+          value={sfxVolume}
+          onChange={changeSfxVolume}
+        />
 
         {waitingForInteraction && (
           <p className="background-music__hint">화면을 한 번 클릭하면 재생돼요</p>
