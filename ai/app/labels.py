@@ -8,6 +8,7 @@
 #
 # 이전 버전 풀(50종 v1, 20종 v2, 12종)은 git 히스토리 참고.
 # v3 (2026-08-04): 휴대폰 제거(치팅 네거티브와 충돌) + 두루마리 휴지/옷걸이/책 추가 = 14종.
+# v4 (2026-08-05): 책 제거(QA 라벨 제거 결정, FetchObjectMissionCatalog와 동시 반영) = 13종.
 
 # 프롬프트 템플릿 — 단일 기본형만 사용한다.
 # ⚠ 촬영 맥락 템플릿("held up in a hand" 등)은 실측 후 롤백함 (2026-07-27):
@@ -53,10 +54,6 @@ MISSION_POOL: dict[str, list[str]] = {
     "옷걸이": [
         "a clothes hanger",
         "a plastic clothes hanger",
-    ],
-    "책": [
-        "a book",
-        "a paperback book",
     ],
     # 여기에 자유롭게 추가 — "제시어": ["허용 형태 1", "허용 형태 2", ...]
 }
