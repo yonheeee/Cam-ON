@@ -432,7 +432,38 @@ h2.pap-pixel-title {
 }
 
 .ninja-screen .pap-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
   background: rgb(0 0 0 / 0.55);
+}
+
+/* 공용 상단바는 게임 배경과 무관하게 대기방의 라이트 테마를 유지한다. */
+.ninja-screen .room-topbar__sound .background-music__toggle,
+.ninja-screen .room-topbar__sound .background-music__panel {
+  background: var(--pap-plaza-cream);
+  border-color: var(--pap-ink);
+  color: var(--pap-ink);
+  box-shadow: 5px 5px 0 rgb(43 24 51 / 0.5);
+}
+
+.ninja-screen .room-topbar__sound .background-music__row-icon,
+.ninja-screen .room-topbar__sound .background-music__row-label,
+.ninja-screen .room-topbar__sound .background-music__value,
+.ninja-screen .room-topbar__sound .background-music__icon,
+.ninja-screen .room-topbar__sound .background-music__caret {
+  color: var(--pap-ink);
+}
+
+.ninja-screen .room-topbar__sound .background-music__range {
+  opacity: 1;
+}
+
+.ninja-screen .room-topbar__leave.pap-pixel-btn--coral {
+  background: var(--pap-festival-coral);
+  border-color: var(--pap-ink);
+  color: var(--pap-white);
+  box-shadow: 4px 4px 0 rgb(43 24 51 / 0.5);
 }
 
 /* 라이트 테마에서 흰 배경 대비용으로 어둡게 보정했던 상태 텍스트는 다크에서 반대 방향(원색 그대로

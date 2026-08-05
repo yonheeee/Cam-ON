@@ -2,8 +2,10 @@ import { useEffect, useRef } from 'react';
 import { useDataChannel, useLocalParticipant } from '@livekit/components-react';
 import { DrawingUtils, HandLandmarker } from '@mediapipe/tasks-vision';
 import { useHandGestureRecognition } from '../hooks/useHandGestureRecognition';
+import { useHandCoachHint } from '../hooks/useHandCoachHint';
 import { GESTURE_RESULT_TOPIC, type GestureResultPayload } from '../lib/gestureBroadcast';
 import { useGestureBoardStore } from '../store/gestureBoardStore';
+import { HandCoachHint } from './HandCoachHint';
 import './GesturePanel.css';
 
 // 로컬 카메라 트랙에 손동작 인식(MediaPipe HandLandmarker + 포팅한 9클래스 양손 조합 분류기)을
@@ -33,9 +35,15 @@ interface GesturePanelProps {
    * 초당 2회 브로드캐스트도 그대로 나가서 낭비다. 기본값 true.
    */
   active?: boolean;
+  /**
+   * 손이 안 잡힐 때 캠 위에 안내 문구("조금만 더 가까이…")를 띄울지. 인식은 도는데 플레이어가
+   * 손을 들 차례가 아닌 구간(닌자 인터미션·이펙트 재생 등)에서는 꺼야 잔소리가 되지 않는다.
+   * 기본값 true.
+   */
+  coach?: boolean;
 }
 
-export function GesturePanel({ variant = 'panel', active = true }: GesturePanelProps = {}) {
+export function GesturePanel({ variant = 'panel', active = true, coach = true }: GesturePanelProps = {}) {
   const { cameraTrack, localParticipant } = useLocalParticipant();
   const { send } = useDataChannel(GESTURE_RESULT_TOPIC);
   const setEntry = useGestureBoardStore((state) => state.setEntry);
@@ -58,6 +66,9 @@ export function GesturePanel({ variant = 'panel', active = true }: GesturePanelP
     videoRef,
     active && Boolean(track),
   );
+
+  // 모델 로딩 중에는 손이 안 잡히는 게 당연하다 — ready 전에는 안내를 켜지 않는다.
+  const coachIssue = useHandCoachHint(results.length, depth, coach && active && ready && Boolean(track));
 
   // 훅이 내부적으로 소유한(React 트리 밖에서 생성된) mirrorCanvas를 스테이지의 첫 번째
   // 자식으로 직접 삽입한다 — 스켈레톤 캔버스보다 먼저 와야 그 아래(배경)에 깔린다.
@@ -145,6 +156,7 @@ export function GesturePanel({ variant = 'panel', active = true }: GesturePanelP
       <>
         <video ref={videoRef} autoPlay playsInline muted style={{ display: 'none' }} />
         <canvas ref={canvasRef} className="gesture-skeleton" aria-hidden />
+        <HandCoachHint issue={coachIssue} />
       </>
     );
   }
@@ -157,6 +169,7 @@ export function GesturePanel({ variant = 'panel', active = true }: GesturePanelP
       <div className="gesture-panel__stage" ref={stageRef}>
         <video ref={videoRef} autoPlay playsInline muted style={{ display: 'none' }} />
         <canvas ref={canvasRef} />
+        <HandCoachHint issue={coachIssue} />
       </div>
       <ul className="gesture-panel__results">
         {results.length < 2 && <li>양손이 다 잡혀야 스킬이 판정됩니다 (인식된 손 {results.length}개)</li>}

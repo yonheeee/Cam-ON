@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ChatMessage } from '../hooks/useRoomChat';
+import { mixSfxVolume } from '../../sound/lib/sfxVolume';
 import './ChatPanel.css';
 
 // 로비 채팅 전송 버튼 — Figma `Material / send` 16×16 (텍스트 "전송"은 쓰지 않는다)
@@ -28,7 +29,6 @@ export function ChatPanel({ messages, onSend, variant = 'floating', nicknameColo
   useEffect(() => {
     const audio = new Audio('/assets/sounds/button-click.mp3');
     audio.preload = 'auto';
-    audio.volume = 0.6;
     sendSoundRef.current = audio;
 
     return () => {
@@ -48,6 +48,8 @@ export function ChatPanel({ messages, onSend, variant = 'floating', nicknameColo
 
     const sendSound = sendSoundRef.current;
     if (sendSound) {
+      // 재사용하는 Audio라 재생 직전에 음량을 계산한다(슬라이더 변경 즉시 반영).
+      sendSound.volume = mixSfxVolume(0.6);
       sendSound.currentTime = 0;
       void sendSound.play().catch(() => {
         // 효과음 재생 실패가 채팅 전송을 막아서는 안 된다.

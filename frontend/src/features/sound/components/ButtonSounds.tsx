@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { mixSfxVolume } from '../lib/sfxVolume';
 
 const BUTTON_SOUNDS = {
   basic: { source: '/assets/sounds/basic-button.mp3', volume: 0.55 },
@@ -14,7 +15,6 @@ export function ButtonSounds() {
       Object.entries(BUTTON_SOUNDS).map(([name, config]) => {
         const audio = new Audio(config.source);
         audio.preload = 'auto';
-        audio.volume = config.volume;
         return [name, audio];
       }),
     ) as Record<ButtonSoundName, HTMLAudioElement>;
@@ -29,6 +29,9 @@ export function ButtonSounds() {
       if (soundName === 'none' || !(soundName in audioByName)) return;
 
       const audio = audioByName[soundName as ButtonSoundName];
+      // Audio는 한 번 만들어 두고 재사용하므로, 사용자가 슬라이더를 움직인 값이 즉시 먹게
+      // 생성 시점이 아니라 재생 직전에 음량을 계산한다.
+      audio.volume = mixSfxVolume(BUTTON_SOUNDS[soundName as ButtonSoundName].volume);
       audio.currentTime = 0;
       void audio.play().catch(() => {
         // 효과음 재생 실패가 버튼 동작을 막아서는 안 된다.

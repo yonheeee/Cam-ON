@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { mixSfxVolume } from '../../sound/lib/sfxVolume';
 
 export function useNinjaEliminationSound(
   round: number | null,
@@ -11,7 +12,6 @@ export function useNinjaEliminationSound(
   useEffect(() => {
     const audio = new Audio('/assets/sounds/ninja-die.mp3');
     audio.preload = 'auto';
-    audio.volume = 0.9;
     audioRef.current = audio;
 
     return () => {
@@ -40,6 +40,8 @@ export function useNinjaEliminationSound(
     const audio = audioRef.current;
     if (!audio) return;
 
+    // 재사용하는 Audio라 재생 직전에 음량을 계산한다(슬라이더 변경 즉시 반영).
+    audio.volume = mixSfxVolume(0.9);
     audio.currentTime = 0;
     void audio.play().catch(() => {
       // 효과음 재생 실패가 게임 진행을 막아서는 안 된다.

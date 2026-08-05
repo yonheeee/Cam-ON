@@ -7,7 +7,7 @@ import { COUNTDOWN_MS, type FetchGameState } from '../types/fetchGame';
 
 // 물건 가져오기의 백엔드 주도 진행 훅.
 //
-// 서버가 라운드를 전부 주도한다: round:start(제시어 포함, 3초 카운트다운+20초) →
+// 서버가 라운드를 전부 주도한다: round:start(제시어 포함, 3초 카운트다운+40초) →
 // 전원 제출 또는 타임아웃 시 round:end → 즉시 다음 round:start → 마지막 라운드 뒤 game:end.
 // 클라이언트는 이벤트를 소비해 화면 상태를 만들고, 인식 성공 시 POST submissions만 한다.
 //
@@ -18,7 +18,7 @@ interface RoundStartData {
   round: number;
   totalRounds: number;
   target: string;
-  startedAt: number; // epoch ms — 이 시각 기준 3초 카운트다운 + 20초 플레이
+  startedAt: number; // epoch ms — 이 시각 기준 3초 카운트다운 + 40초 플레이
 }
 
 interface RoundSuccessData {
@@ -166,7 +166,7 @@ export function useFetchRound(
             }
             case 'round:success': {
               // 도착 순서와 제출 시각은 서버 원본이며, 확정 라운드 점수표는 round:end가 준다.
-              // 첫 정답이면 서버가 마감을 그레이스(5초)로 단축한 새 마감(roundDeadlineAt)을
+              // 첫 정답이면 서버가 마감을 그레이스(10초)로 단축한 새 마감(roundDeadlineAt)을
               // 함께 실어 준다 — 타이머에도 즉시 반영한다.
               const data = event.data as RoundSuccessData;
               // 첫 round:start를 놓쳐 아직 복구 스냅샷을 기다리는 중이면 이 이벤트만으로는

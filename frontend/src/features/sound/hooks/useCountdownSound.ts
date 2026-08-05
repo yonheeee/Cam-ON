@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { mixSfxVolume } from '../lib/sfxVolume';
 
 /**
  * 카운트다운 효과음. countdown.mp3는 "3, 2, 1"을 1초에 하나씩 세는 3초짜리 음원이라,
@@ -19,7 +20,6 @@ export function useCountdownSound(
   useEffect(() => {
     const audio = new Audio('/assets/sounds/countdown.mp3');
     audio.preload = 'auto';
-    audio.volume = 0.8;
     audioRef.current = audio;
 
     return () => {
@@ -39,6 +39,8 @@ export function useCountdownSound(
     if (playedKeyRef.current === countdownKey) return;
 
     playedKeyRef.current = countdownKey;
+    // 재사용하는 Audio라 재생 직전에 음량을 계산한다(슬라이더 변경 즉시 반영).
+    audio.volume = mixSfxVolume(0.8);
     audio.playbackRate = playbackRate;
     audio.currentTime = Math.max(0, startOffsetSeconds);
     void audio.play().catch(() => {

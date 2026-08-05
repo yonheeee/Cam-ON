@@ -48,6 +48,7 @@ const FIREWORK_BURSTS = [
 const FIREWORK_PARTICLES = 14;
 const RANK_ROW_STAGGER_MS = 160;
 const RANK_SCORE_DURATION_MS = 900;
+const CO_WINNER_ROTATION_MS = 3000;
 
 const TrophyIcon = (
   <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -126,14 +127,30 @@ export function CourseResultScreen({
     );
   };
 
-  const winner = ranking[0] ?? null;
-  const runnersUp = ranking.slice(1, 4);
+  const coWinners = ranking.filter((entry) => entry.rank === 1);
+  const winnerSignature = coWinners.map((entry) => entry.participantId).join('|');
+  const [activeWinnerIndex, setActiveWinnerIndex] = useState(0);
+  const winner = coWinners[activeWinnerIndex] ?? ranking[0] ?? null;
+  const winnerRankingIndex = winner
+    ? ranking.findIndex((entry) => entry.participantId === winner.participantId)
+    : 0;
+  const runnersUp = ranking.filter((entry) => entry.rank > 1).slice(0, 3);
   const rankingSignature = ranking
     .map((entry) => `${entry.participantId}:${entry.rank}:${entry.totalScore}`)
     .join('|');
   const rankRevealDuration =
     Math.max(0, ranking.length - 1) * RANK_ROW_STAGGER_MS + RANK_SCORE_DURATION_MS;
   const [rankRevealElapsed, setRankRevealElapsed] = useState(0);
+
+  useEffect(() => {
+    setActiveWinnerIndex(0);
+    if (coWinners.length <= 1) return;
+
+    const intervalId = window.setInterval(() => {
+      setActiveWinnerIndex((current) => (current + 1) % coWinners.length);
+    }, CO_WINNER_ROTATION_MS);
+    return () => window.clearInterval(intervalId);
+  }, [coWinners.length, winnerSignature]);
 
   useEffect(() => {
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
@@ -189,12 +206,21 @@ export function CourseResultScreen({
             </span>
           ))}
         </div>
-        <p className="course-result__plate">오늘의 우승자!</p>
+        <p className="course-result__plate">
+          {coWinners.length > 1
+            ? `공동 우승자! ${activeWinnerIndex + 1}/${coWinners.length}`
+            : '오늘의 우승자!'}
+        </p>
 
         {/* 가운데 큰 화면 — 우승자 캠 */}
         <div
+          key={winner?.participantId ?? 'no-winner'}
           className="course-result__winner"
-          style={{ '--c': RANK_COLORS[0] } as React.CSSProperties}
+          style={
+            {
+              '--c': RANK_COLORS[Math.max(0, winnerRankingIndex) % RANK_COLORS.length],
+            } as React.CSSProperties
+          }
         >
           {winner ? renderCam(winner.participantId) : null}
         </div>
@@ -231,6 +257,10 @@ export function CourseResultScreen({
                   key={entry.participantId}
                   className={`course-result__row${
                     entry.rank === 1 ? ' course-result__row--first' : ''
+                  }${
+                    entry.participantId === winner?.participantId && coWinners.length > 1
+                      ? ' course-result__row--active-winner'
+                      : ''
                   }${progress === 1 ? ' course-result__row--settled' : ''}`}
                   style={
                     {
