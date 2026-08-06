@@ -22,6 +22,10 @@
   font-size: 12px;
   line-height: 1.35;
   text-align: center;
+  /* 줄바꿈은 띄어쓰기에서만 — 한국어의 기본 줄바꿈 규칙은 글자 단위라 "가까이 와주세요"가
+     "가까이 와주세" / "요"처럼 어절 한가운데서 끊긴다. keep-all이면 어절을 통째로 넘긴다.
+     balance는 그렇게 나뉜 줄들의 길이를 비슷하게 맞춘다(한 줄만 길고 한 줄은 한 단어인 꼴 방지). */
+  word-break: keep-all;
   text-wrap: balance;
   /* 흐리게 깔린 글자가 밝은 배경(창가·흰 벽) 위에서 사라지지 않게 붙잡아 준다. */
   text-shadow: 0 1px 2px rgb(0 0 0 / 0.7);
