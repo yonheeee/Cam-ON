@@ -530,7 +530,7 @@ export function NinjaBattleScreen({
                               <span className="ninja-seal__caption">{step.gestureLabelKr}</span>
                             </>
                           ) : (
-                            /* girl_V 등 이미지가 없는 손동작은 한글 라벨로 */
+                            /* beam 등 이미지가 없는 손동작은 한글 라벨로 */
                             <span className="ninja-seal__kr">{step.gestureLabelKr}</span>
                           )}
                           {index === stepIndex && !completed && (

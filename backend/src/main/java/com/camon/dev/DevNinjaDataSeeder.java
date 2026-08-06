@@ -69,18 +69,32 @@ public class DevNinjaDataSeeder implements ApplicationRunner {
             "spider", "sailor_moon", "cow", "rabbit", "Horse", "snake");
         // 콤보 4개짜리 고데미지 — 바람의 상처(45)와 같은 길이지만 손동작 구성이 겹치지 않게 잡았다.
         seedSkill(gestures, effect, "나선환", 50, "cat", "mouse", "rabbit", "snake");
+
+        // 아래 3종은 데미지 규칙(20→2단, 30→3단, 45→4단)에 맞춰 콤보 길이를 정했고, 어떤 콤보도
+        // 다른 콤보의 접두/접미가 되지 않게 잡았다 — app.py 프로토타입은 손동작 히스토리의 접미
+        // 매칭으로 스킬을 판정하므로, 짧은 콤보가 긴 콤보 도중에 먼저 터지면 안 된다.
+        // (실제 게임은 교환마다 서버가 요구 스킬을 하나 지정하므로 이 제약이 없지만, 두 쪽 콤보
+        //  선언을 같게 유지하려고 프로토타입 기준으로 맞춰 뒀다.)
+        //
+        // 주의: skill.id가 auto_increment라 이 호출 순서가 곧 프론트
+        // features/ninja/lib/skillEffects.tsx의 BY_SKILL_ID 키(8, 9, 10)다. 순서를 바꾸지 말 것.
+        seedSkill(gestures, effect, "벚꽃 참격", 30, "sailor_moon", "spider", "cat");
+        // 탈모빔은 beam으로 마무리한다 — 이름이 곧 마지막 손동작이라 콤보가 기억하기 쉽다.
+        // 같은 데미지(45)인 바람의 상처와 손동작 구성이 하나도 겹치지 않게 잡았다.
+        seedSkill(gestures, effect, "탈모빔", 45, "cow", "cat", "rabbit", "beam");
+        // 2단 3종(뇌절 20 / 냥냥펀치 15 / slap 20) 중 slap만 손동작 구성이 나머지 둘과 완전히 다르다.
+        seedSkill(gestures, effect, "slap", 20, "mouse", "spider");
     }
 
     // 손동작은 name이 곧 분류기 라벨과의 문자열 계약이라 그 값으로 존재 여부를 본다.
     //
-    // girl_V(브이)는 분류기는 인식하지만 어떤 스킬 콤보에도 넣지 않는다 — 손모양 이미지가 없어서
-    // (프론트 gestureImages.FILE_BY_GESTURE에 항목 없음) 인술 카드에 그림 대신 한글 글자만 뜬다.
-    // 나머지 8종과 섞이면 그 칸만 튀어서 따라하기 어렵다. 이미지가 생기면 콤보에 넣어도 된다.
+    // 9종 전부 손모양 이미지(frontend/public/assets/손모양)와 gestureImages.FILE_BY_GESTURE 항목이
+    // 있어서 인술 카드에 그림으로 뜬다 — 예전엔 girl_V(현 beam)만 이미지가 없어서 콤보에서 뺐다.
     private Map<String, Gesture> seedGestures() {
         Map<String, Gesture> existing = gestureRepository.findAll().stream()
             .collect(Collectors.toMap(Gesture::getName, g -> g));
         Stream.of(
-            gesture("snake", "뱀"), gesture("girl_V", "브이"), gesture("mouse", "쥐"),
+            gesture("snake", "뱀"), gesture("beam", "빔"), gesture("mouse", "쥐"),
             gesture("Horse", "말"), gesture("cow", "소"), gesture("rabbit", "토끼"),
             gesture("cat", "고양이"), gesture("spider", "거미"), gesture("sailor_moon", "세일러문")
         ).filter(g -> !existing.containsKey(g.getName()))

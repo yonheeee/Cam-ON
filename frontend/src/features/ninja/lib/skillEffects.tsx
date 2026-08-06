@@ -1,5 +1,9 @@
 import { PixelAmaterasuEffect, DURATION_MS as AMATERASU_MS } from '../components/PixelAmaterasuEffect';
 import { PixelCatPunchEffect, DURATION_MS as CAT_PUNCH_MS } from '../components/PixelCatPunchEffect';
+import {
+  PixelCherryBlossomSlashEffect,
+  DURATION_MS as CHERRY_BLOSSOM_MS,
+} from '../components/PixelCherryBlossomSlashEffect';
 import { PixelLightningEffect, DURATION_MS as LIGHTNING_MS } from '../components/PixelLightningEffect';
 import { PixelPhoenixFlowerEffect, DURATION_MS as PHOENIX_MS } from '../components/PixelPhoenixFlowerEffect';
 import { PixelRasenganEffect, DURATION_MS as RASENGAN_MS } from '../components/PixelRasenganEffect';
@@ -15,7 +19,12 @@ import '../components/pixelEffectOverlay.css';
 //
 // 시드의 모든 스킬이 여기 있어야 한다 — 매핑이 빠진 스킬은 이펙트 없이 진동만 남는다(파티클
 // 폴백을 없앴다). 스킬을 추가하면 DevNinjaDataSeeder와 이 표를 함께 고친다.
-// 아직 대응 스킬이 없는 CherryBlossomSlash는 프리뷰 전용으로 남아 있다.
+//
+// id는 DevNinjaDataSeeder의 seedSkill 호출 순서(auto_increment)에 묶여 있다 — 시더의 호출
+// 순서를 바꾸면 새 DB에서 이 표가 어긋난다. 순서를 바꾸지 말고 뒤에만 추가할 것.
+//
+// 이펙트가 8종뿐이라 9/10은 성격이 가까운 것을 재사용한다(탈모빔=뇌절과, slap=냥냥펀치와 같은
+// 연출로 보인다). 전용 Pixel*Effect가 생기면 여기만 바꾸면 된다.
 const BY_SKILL_ID: Record<number, () => React.ReactElement> = {
   1: () => <PixelLightningEffect />, // 뇌절
   2: () => <PixelPhoenixFlowerEffect variant="hit" />, // 봉선화의 술
@@ -24,6 +33,9 @@ const BY_SKILL_ID: Record<number, () => React.ReactElement> = {
   5: () => <PixelWindScarEffect />, // 바람의 상처
   6: () => <PixelAmaterasuEffect />, // 아마테라스
   7: () => <PixelRasenganEffect />, // 나선환
+  8: () => <PixelCherryBlossomSlashEffect />, // 벚꽃 참격
+  9: () => <PixelLightningEffect />, // 탈모빔 — 빔이라 번개 재사용
+  10: () => <PixelCatPunchEffect />, // slap — 손바닥 타격이라 냥냥펀치 재사용
 };
 
 // 각 이펙트가 실제로 재생되는 길이(컴포넌트의 DURATION_MS 그대로). 서버 이펙트 창(5초)이 아니라
@@ -36,6 +48,9 @@ const MS_BY_SKILL_ID: Record<number, number> = {
   5: WIND_SCAR_MS,
   6: AMATERASU_MS,
   7: RASENGAN_MS,
+  8: CHERRY_BLOSSOM_MS,
+  9: LIGHTNING_MS,
+  10: CAT_PUNCH_MS,
 };
 
 /** 매핑이 없는 스킬(파티클 폴백)의 재생 길이 — 픽셀 이펙트들의 평균 근처. */
@@ -55,6 +70,9 @@ const SHAKE_BY_SKILL_ID: Record<number, { name: string; cycleMs: number; fill?: 
   // 감각이 애매하면 CSS에 키프레임을 추가하고 여기만 바꾸면 된다.
   6: { name: 'base', cycleMs: 420, fill: true }, // 아마테라스 — 계속 타오르는 지속형
   7: { name: 'roll', cycleMs: 900, fill: true }, // 나선환 — 회전하며 갈아내는 느낌
+  8: { name: 'slash', cycleMs: 340 }, // 벚꽃 참격 — 참격이라 바람의 상처와 같은 밀림
+  9: { name: 'zap', cycleMs: 260 }, // 탈모빔 — 빔이라 고주파 1회
+  10: { name: 'punch', cycleMs: 460 }, // slap — 손바닥 타격 1회
 };
 
 const FALLBACK_SHAKE = { name: 'base', cycleMs: 420, fill: true };

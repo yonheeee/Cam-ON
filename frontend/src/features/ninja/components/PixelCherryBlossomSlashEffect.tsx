@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { Application, Container, Graphics } from 'pixi.js';
 
-const DURATION_MS = 2400;
+export const DURATION_MS = 2400;
 const BLOOM_AT_MS = 180;
 const PETAL_COUNT = 110;
 
