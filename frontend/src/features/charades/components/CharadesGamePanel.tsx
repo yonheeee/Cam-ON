@@ -1,7 +1,7 @@
 import { ParticipantTile, useLocalParticipant, useParticipants, useTracks } from '@livekit/components-react';
 import { Track } from 'livekit-client';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import { roomApi } from '../../room/api/roomApi';
+import { playerColor } from '../../room/lib/playerColor';
 import { RoomTopBar } from '../../room/components/RoomTopBar';
 import { useSpeakingIdentities } from '../../webrtc/hooks/useSpeakingIdentities';
 import { ParticipantAudioControl } from '../../webrtc/components/ParticipantAudioControl';
@@ -15,6 +15,7 @@ interface CharadesGamePanelProps {
   roomId: string;
   gameId: number;
   accessToken: string;
+  joinOrder: string[];
   onActiveChange: (active: boolean) => void;
   /** 로고 클릭 → 확인 팝업 → 방 나가기 (확정안: 방 안에서 로고는 항상 확인 팝업 경유) */
   onLeave: () => void;
@@ -34,6 +35,7 @@ export function CharadesGamePanel({
   roomId,
   gameId,
   accessToken,
+  joinOrder,
   onActiveChange,
   onLeave,
 }: CharadesGamePanelProps) {
@@ -77,29 +79,12 @@ export function CharadesGamePanel({
     return map;
   }, [participants, localParticipant.identity, localParticipant.name]);
 
-  // 플레이어 색은 "방 입장 순서" 고정 — DOM 순서(nth-child)로 칠하면 표현자가 빠진 자리에 따라
-  // 클라이언트마다 같은 사람이 다른 색으로 보인다. 대기방(LobbyScreen)과 같은 소스를 써서 색도 이어진다.
-  const [joinOrder, setJoinOrder] = useState<string[]>([]);
-  useEffect(() => {
-    let cancelled = false;
-    roomApi
-      .getRoom(roomId, accessToken)
-      .then((snapshot) => {
-        if (!cancelled) setJoinOrder(snapshot.participants.map((p) => p.participantId));
-      })
-      .catch((err) => {
-        // 실패해도 fallback(player-1)로 게임은 계속되지만, 원인 없이 삼키면 디버그가 안 되니 로그는 남긴다
-        console.error('[charades] 입장 순서 조회 실패 — 참가자 색이 전부 기본값으로 표시됩니다', err);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [roomId, accessToken]);
-
-  const seatColor = (token: string) => {
-    const index = joinOrder.indexOf(token);
-    return `var(--pap-player-${index < 0 ? 1 : (index % 4) + 1})`;
-  };
+  const fallbackOrder = useMemo(
+    () =>
+      [...new Set([...participants.map((p) => p.identity), localParticipant.identity])].sort(),
+    [participants, localParticipant.identity],
+  );
+  const seatColor = (token: string) => playerColor(token, joinOrder, fallbackOrder);
 
   const displayName = (token: string | null) => {
     if (!token) return '???';

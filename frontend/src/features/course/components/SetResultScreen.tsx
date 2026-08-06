@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { playerColor } from '../../room/lib/playerColor';
 import './SetResultScreen.css';
 
 // 코스의 게임 한 세트가 끝날 때마다 뜨는 중간 결과.
@@ -29,6 +30,7 @@ interface SetResultScreenProps {
   /** participantId → 닉네임. 이벤트 payload에는 id만 있고, 이름은 그릴 때 조회한다 —
    *  이벤트 수신 시점에 문자열로 박아두면 그때 아직 모르던 사람(늦게 입장 등)이 영영 "알 수 없음"이 된다 */
   nicknameById: Map<string, string>;
+  joinOrder: string[];
   /** 다음 세트 게임의 표시용 제목. null이면 다음 세트가 없다 */
   nextGameLabel: string | null;
   /** 내 participantId — 내 줄을 강조하려고 */
@@ -46,14 +48,6 @@ interface SetResultScreenProps {
   /** 요청을 보내고 다음 세트가 열리기를 기다리는 중 */
   starting?: boolean;
 }
-
-// 순위 순서대로 도는 플레이어 대표색. 등수 = 색이라 표(막대·점수·누적 카드)가 한눈에 이어진다.
-const RANK_COLORS = [
-  'var(--pap-festival-coral)',
-  'var(--pap-play-yellow)',
-  'var(--pap-arcade-teal)',
-  'var(--pap-lavender)',
-];
 
 // 점수 막대 칸 수. 1등이 꽉 차고 나머지는 1등 대비 비율로 채운다(절대 점수는 오른쪽 숫자가 말해준다).
 const BAR_CELLS = 18;
@@ -73,6 +67,7 @@ export function SetResultScreen({
   setResult,
   courseRanking,
   nicknameById,
+  joinOrder,
   nextGameLabel,
   participantId,
   isHost,
@@ -120,6 +115,10 @@ export function SetResultScreen({
   };
   // 끝내 이름을 모르는 경우는 내가 들어오기 전에 나간 사람뿐이다.
   const nicknameOf = (id: string) => nicknameById.get(id) ?? '나간 참가자';
+  const fallbackOrder = [
+    ...new Set([...setResult, ...courseRanking].map((row) => row.participantId)),
+  ].sort();
+  const colorOf = (id: string) => playerColor(id, joinOrder, fallbackOrder);
 
   return (
     <div className="set-result">
@@ -140,7 +139,7 @@ export function SetResultScreen({
                   }`}
                   style={
                     {
-                      '--c': RANK_COLORS[index % RANK_COLORS.length],
+                      '--c': colorOf(row.participantId),
                       '--row-index': index,
                     } as React.CSSProperties
                   }
@@ -177,7 +176,7 @@ export function SetResultScreen({
             <h2 className="set-result__deck-title">누적 순위</h2>
             <p className="set-result__deck-sub">순위 점수(5·3·2·1)를 누적한 현재 순위예요.</p>
             <ol className="set-result__cards">
-              {courseRanking.map((row, index) => {
+              {courseRanking.map((row) => {
                 const setRowIndex = setResult.findIndex(
                   (setRow) => setRow.participantId === row.participantId,
                 );
@@ -195,7 +194,7 @@ export function SetResultScreen({
                       row.participantId === participantId ? ' set-result__card--me' : ''
                     }`}
                     style={
-                      { '--c': RANK_COLORS[index % RANK_COLORS.length] } as React.CSSProperties
+                      { '--c': colorOf(row.participantId) } as React.CSSProperties
                     }
                   >
                     <span className="set-result__card-head">

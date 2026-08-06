@@ -5,6 +5,7 @@ import type { CourseScoreEntry } from '../hooks/useCourseProgress';
 import { useAnnouncementSound } from '../../sound/hooks/useAnnouncementSound';
 import { SpeakingIndicator } from '../../webrtc/components/SpeakingIndicator';
 import { useSpeakingIdentities } from '../../webrtc/hooks/useSpeakingIdentities';
+import { playerColor } from '../../room/lib/playerColor';
 import './CourseResultScreen.css';
 
 interface CourseResultScreenProps {
@@ -12,6 +13,7 @@ interface CourseResultScreenProps {
   totalSessions: number;
   /** participantId → 닉네임. 서버 payload에는 id만 있어 방 스냅샷에서 이름을 붙인다 */
   nicknameById: Map<string, string>;
+  joinOrder: string[];
   /** 내 participantId — 내 줄을 강조하려고 */
   participantId: string;
   /**
@@ -29,15 +31,6 @@ interface CourseResultScreenProps {
   returnError: string | null;
   onLeave: () => void;
 }
-
-// 등수별 색. 중간 결과(SetResultScreen)의 RANK_COLORS와 같은 순서 — 두 화면에서 같은 사람이
-// 같은 색으로 보인다. 1위(가운데 큰 화면)는 코랄, 2~4위 단상은 노랑/민트/보라.
-const RANK_COLORS = [
-  'var(--pap-festival-coral)',
-  'var(--pap-play-yellow)',
-  'var(--pap-arcade-teal)',
-  'var(--pap-lavender)',
-];
 
 const FIREWORK_COLORS = ['#ff6f61', '#ffd84d', '#52d6cc', '#a98bff', '#fff3c4'];
 const FIREWORK_BURSTS = [
@@ -76,6 +69,7 @@ export function CourseResultScreen({
   ranking,
   totalSessions,
   nicknameById,
+  joinOrder,
   returnedParticipantIds,
   onReturnToLobby,
   returning,
@@ -100,12 +94,17 @@ export function CourseResultScreen({
   const speakingIds = useSpeakingIdentities();
 
   const nicknameOf = (id: string) => nicknameById.get(id) ?? '알 수 없음';
+  const fallbackOrder = useMemo(
+    () => ranking.map((entry) => entry.participantId).sort(),
+    [ranking],
+  );
+  const colorOf = (id: string) => playerColor(id, joinOrder, fallbackOrder);
 
   // 캠이 아직 안 붙었거나 카메라를 끈 참가자는 닉네임 첫 글자를 아바타로 보여준다.
   // 먼저 대기방으로 간 사람도 마찬가지다 — LiveKit 트랙은 방을 떠나기 전까진 계속 살아 있어서
   // 그냥 두면 대기방에 있는 사람의 캠이 결과 화면에도 겹쳐 보인다. 자리(순위)는 그대로 두고
   // 캠만 아바타로 바꾸고 "대기방으로 갔어요"를 덧붙인다.
-  // 닉네임은 닌자 화면과 같은 방식(캠 위 픽셀 스티커, 배경 = 그 사람의 등수 색)으로 얹는다.
+  // 닉네임은 닌자 화면과 같은 방식(캠 위 픽셀 스티커, 배경 = 그 사람의 고유색)으로 얹는다.
   const renderCam = (id: string) => {
     const returned = returnedParticipantIds.has(id);
     const trackRef = returned ? undefined : trackByIdentity.get(id);
@@ -118,8 +117,8 @@ export function CourseResultScreen({
         )}
         {returned && <span className="course-result__left">대기방으로 갔어요</span>}
         {/* 먼저 대기방으로 간 사람은 캠과 함께 표시도 내린다(위 trackRef와 같은 이유) */}
-        <SpeakingIndicator active={!returned && speakingIds.has(id)} />
-        {/* 하단 그라데이션 바 + 등수 색 띠 + 흰 이름 (::before가 색 띠) */}
+        <SpeakingIndicator active={!returned && speakingIds.has(id)} color={colorOf(id)} />
+        {/* 하단 그라데이션 바 + 참가자 고유색 띠 + 흰 이름 (::before가 색 띠) */}
         <span className="course-result__cam-name">
           <span>{nicknameOf(id)}</span>
         </span>
@@ -131,9 +130,6 @@ export function CourseResultScreen({
   const winnerSignature = coWinners.map((entry) => entry.participantId).join('|');
   const [activeWinnerIndex, setActiveWinnerIndex] = useState(0);
   const winner = coWinners[activeWinnerIndex] ?? ranking[0] ?? null;
-  const winnerRankingIndex = winner
-    ? ranking.findIndex((entry) => entry.participantId === winner.participantId)
-    : 0;
   const runnersUp = ranking.filter((entry) => entry.rank > 1).slice(0, 3);
   const rankingSignature = ranking
     .map((entry) => `${entry.participantId}:${entry.rank}:${entry.totalScore}`)
@@ -218,7 +214,7 @@ export function CourseResultScreen({
           className="course-result__winner"
           style={
             {
-              '--c': RANK_COLORS[Math.max(0, winnerRankingIndex) % RANK_COLORS.length],
+              '--c': winner ? colorOf(winner.participantId) : 'var(--pap-player-1)',
             } as React.CSSProperties
           }
         >
@@ -227,11 +223,11 @@ export function CourseResultScreen({
 
         {/* 아래 3칸 — 2~4위 캠. 인원이 적으면 빈 칸을 만들지 않고 있는 만큼만 그린다 */}
         <div className="course-result__podium">
-          {runnersUp.map((entry, index) => (
+          {runnersUp.map((entry) => (
             <div
               key={entry.participantId}
               className="course-result__podium-tile"
-              style={{ '--c': RANK_COLORS[index + 1] } as React.CSSProperties}
+              style={{ '--c': colorOf(entry.participantId) } as React.CSSProperties}
             >
               {renderCam(entry.participantId)}
             </div>
@@ -264,7 +260,7 @@ export function CourseResultScreen({
                   }${progress === 1 ? ' course-result__row--settled' : ''}`}
                   style={
                     {
-                      '--c': RANK_COLORS[index % RANK_COLORS.length],
+                      '--c': colorOf(entry.participantId),
                       '--row-index': index,
                     } as React.CSSProperties
                   }

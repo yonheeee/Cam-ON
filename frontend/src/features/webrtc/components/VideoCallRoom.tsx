@@ -80,8 +80,7 @@ export function VideoCallRoom({ accessToken, token, roomId, participantId }: Vid
       ? null
       : 'VITE_LIVEKIT_URL이 설정되지 않았습니다 — frontend/.env를 확인하세요.',
   );
-  // 사용자가 스스로 나간 것(확인 팝업 경유)과 예기치 못한 종료를 구분한다 —
-  // 스스로 나가면 바로 메인으로, 예기치 못한 종료면 "방 종료" 팝업(피그마 방 종료 프레임)을 띄운다.
+  // 명시적으로 나가는 중 발생한 LiveKit disconnect는 방 종료로 처리하지 않는다.
   const leavingRef = useRef(false);
   const [closed, setClosed] = useState(false);
 
@@ -95,23 +94,8 @@ export function VideoCallRoom({ accessToken, token, roomId, participantId }: Vid
     navigate('/', { replace: true });
   }, [navigate, roomId, accessToken]);
 
-  // 창을 그냥 닫거나 다른 사이트로 이동해도 퇴장을 알린다. 이게 없으면 서버는 하트비트 만료
-  // (TTL 15초)로만 이탈을 알 수 있고, 그 15초 동안 participants 집합에 자리가 남아 있어서
-  // 정원이 찬 것으로 판정된다 — 나간 사람 자리에 아무도 못 들어오고 재입장도 ROOM_FULL이 된다.
-  //
-  // pagehide만 쓴다. visibilitychange(hidden)는 탭을 잠깐 전환하거나 화면을 끌 때도 발생해서
-  // 멀쩡히 방에 있는 사람을 내보내게 된다. beforeunload는 모바일에서 발생이 보장되지 않는데
-  // pagehide는 그 경로까지 덮는다.
-  useEffect(() => {
-    const handlePageHide = () => {
-      // 나가기 버튼으로 이미 퇴장을 보낸 경우엔 중복 요청을 보내지 않는다.
-      if (leavingRef.current) return;
-      roomApi.leaveRoomOnUnload(roomId, accessToken);
-    };
-    window.addEventListener('pagehide', handlePageHide);
-    return () => window.removeEventListener('pagehide', handlePageHide);
-  }, [roomId, accessToken]);
-
+  // 새로고침에도 발생하는 pagehide에서는 퇴장시키지 않는다. 실제 탭 종료는 하트비트 TTL이
+  // 정리하고, 사용자가 나가기 버튼을 누른 경우만 위 API로 즉시 처리한다.
   return (
     <>
       {connectionError && (
@@ -232,6 +216,19 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
   const session = activeSession ?? recoveredSession;
   // 종합 결과 payload에는 participantId만 있어서 이름을 붙이려면 방 스냅샷이 필요하다.
   const [participants, setParticipants] = useState<ParticipantResponse[]>([]);
+  // 참가자가 중간에 나가도 뒤 사람의 고유색이 앞으로 당겨지지 않도록, 이 화면에서 한 번 본
+  // 입장 순서는 방을 나갈 때까지 보존한다. 서버 스냅샷은 joinedAt 순서로 내려온다.
+  const [joinOrder, setJoinOrder] = useState<string[]>([]);
+  useEffect(() => {
+    if (participants.length === 0) return;
+    setJoinOrder((previous) => {
+      const next = [...previous];
+      for (const participant of participants) {
+        if (!next.includes(participant.participantId)) next.push(participant.participantId);
+      }
+      return next.length === previous.length ? previous : next;
+    });
+  }, [participants]);
   // 중간 결과의 "다음 세트가 무슨 게임인지"와 "SET n / 총 세트"를 그리려면 코스 구성이 필요하다.
   const [courseItems, setCourseItems] = useState<CourseItem[]>([]);
   // 인터미션의 "바로 시작"은 방장 전용 — 게임 도중 방장이 바뀔 수 있어(연쇄 위임) 스냅샷을
@@ -473,6 +470,7 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
           onLeave={onLeave}
           chatMessages={messages}
           onSendChat={sendMessage}
+          joinOrder={joinOrder}
         />
       )}
 
@@ -484,6 +482,7 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
           roomId={roomId}
           gameId={session.gameId}
           accessToken={accessToken}
+          joinOrder={joinOrder}
           onActiveChange={(active) => setBetweenGames(!active)}
           onLeave={onLeave}
         />
@@ -495,7 +494,7 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
           gameId={session.gameId}
           accessToken={accessToken}
           nicknameById={nicknameById}
-          joinOrder={participants.map((participant) => participant.participantId)}
+          joinOrder={joinOrder}
           onLeave={onLeave}
         />
       )}
@@ -510,6 +509,7 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
           roomId={roomId}
           gameId={session.gameId}
           accessToken={accessToken}
+          joinOrder={joinOrder}
           onActiveChange={(active) => setBetweenGames(!active)}
           onLeave={onLeave}
         />
@@ -523,6 +523,7 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
           setResult={finishedSet.setResult}
           courseRanking={finishedSet.courseRanking}
           nicknameById={nicknameById}
+          joinOrder={joinOrder}
           nextGameLabel={nextItem ? GAME_LABELS[nextItem.gameName] : null}
           participantId={participantId}
           isHost={hostParticipantId === participantId}
@@ -567,6 +568,7 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
           ranking={finished.ranking}
           totalSessions={finished.totalSessions}
           nicknameById={nicknameById}
+          joinOrder={joinOrder}
           participantId={participantId}
           returnedParticipantIds={returnedParticipantIds}
           onReturnToLobby={() => void returnToLobby()}

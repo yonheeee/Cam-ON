@@ -28,6 +28,7 @@ export function SetResultPreview() {
           ['p4', '서연'],
         ])
       }
+      joinOrder={['p1', 'p2', 'p3', 'p4']}
       nextGameLabel={GAME_LABELS.NINJA}
       isHost
       secondsLeft={7}
