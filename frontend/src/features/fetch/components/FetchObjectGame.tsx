@@ -17,6 +17,7 @@ import type { DetectionResult } from '../api/aiApi';
 import {
   COUNTDOWN_MS,
   ROUND_DURATION_MS,
+  SKIP_VOTE_DELAY_MS,
   type FetchGameState,
 } from '../types/fetchGame';
 import './FetchObjectGame.css';
@@ -31,6 +32,8 @@ interface FetchObjectGameProps {
     elapsedMs: number,
     result: DetectionResult,
   ) => boolean | void | Promise<boolean | void>;
+  /** 스킵 투표 (버튼/P키). 카운터 갱신은 서버 브로드캐스트가 담당한다. */
+  onVoteSkip: () => void | Promise<void>;
   /** AI 인식 후 Spring 제출 단계에서 발생한 오류. 인식 오류와 구분해 화면에 보여준다. */
   submissionError?: string | null;
   /** 로고 클릭 → 확인 팝업 → 방 나가기 (확정안: 방 안에서 로고는 항상 확인 팝업 경유) */
@@ -48,6 +51,7 @@ export function FetchObjectGame({
   joinOrder,
   participantColorIndexById,
   onReportSuccess,
+  onVoteSkip,
   submissionError,
   onLeave,
 }: FetchObjectGameProps) {
@@ -179,6 +183,39 @@ export function FetchObjectGame({
       ((index < 0 ? seats.findIndex((s) => s.identity === identity) : index) % 4) + 1
     );
   };
+
+  // ---- 스킵 투표 ----
+  // 첫 성공 전에만 의미가 있다: 성공자가 나오면 그레이스(10초)가 라운드를 곧 닫으므로
+  // 버튼을 숨긴다. 노출 지연(5초)은 제시어를 보고 주변을 훑을 최소 시간 — 반사 스킵 방지.
+  const iVotedSkip = state.skipVotes.includes(localParticipant.identity);
+  const skipVisible =
+    playing &&
+    !inCountdown &&
+    state.successes.length === 0 &&
+    nowMs >= state.startedAt + COUNTDOWN_MS + SKIP_VOTE_DELAY_MS;
+  // 분모는 투표 이벤트의 required(서버 원본)가 우선. 아직 아무도 안 눌렀으면(이벤트 없음)
+  // 현재 접속자 수로 표시만 하고, 판정은 어차피 서버가 한다.
+  const skipRequired = state.skipRequired || seats.length;
+
+  useEffect(() => {
+    if (!skipVisible || iVotedSkip) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      // e.code는 자판 배열 무관 물리 키 — 한글 IME 상태에서도 P 키를 잡는다.
+      if (event.code !== 'KeyP') return;
+      // 채팅 입력 중 타이핑을 투표로 오인하지 않는다.
+      const target = event.target as HTMLElement | null;
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target?.isContentEditable
+      ) {
+        return;
+      }
+      void onVoteSkip();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [skipVisible, iVotedSkip, onVoteSkip]);
 
   const trackByIdentity = new Map(tracks.map((t) => [t.participant.identity, t]));
   const successIndexOf = (seat: (typeof seats)[number]) =>
@@ -340,12 +377,30 @@ export function FetchObjectGame({
                   <span className="fetch-slot__no pap-pixel-title">{index + 1}</span>
                   <span className="fetch-slot__who">{success ? success.nickname : ''}</span>
                   <span className="fetch-slot__time pap-pixel-title">
-                    {success ? `+${success.score}점` : '--'}
+                    {success ? `+${success.score}p` : '--'}
                   </span>
                 </li>
               );
             })}
           </ol>
+
+          {/* 스킵 투표 — 첫 성공 전 + 노출 지연 뒤에만. 전원이 누르면 서버가 라운드를 닫는다. */}
+          {skipVisible && (
+            <button
+              type="button"
+              className={`fetch-game__skip pap-pixel-btn${
+                iVotedSkip ? ' fetch-game__skip--voted' : ''
+              }`}
+              disabled={iVotedSkip}
+              onClick={() => void onVoteSkip()}
+            >
+              {iVotedSkip ? '스킵 대기 중' : '못 찾겠어요'}{' '}
+              <b className="pap-pixel-title">
+                {state.skipVotes.length}/{skipRequired}
+              </b>
+              {!iVotedSkip && <small> (P)</small>}
+            </button>
+          )}
         </section>
 
         <section className="fetch-game__side">{rightSeats.map(renderSeat)}</section>
@@ -356,14 +411,24 @@ export function FetchObjectGame({
         <div className="pap-modal-backdrop">
           <div className="pap-modal">
             <div className="fetch-game__result pap-pixel-card">
-              <h2 className="pap-pixel-title">라운드 {state.round} 종료!</h2>
+              <h2 className="pap-pixel-title">
+                {state.roundSkipped
+                  ? `라운드 ${state.round} 스킵!`
+                  : `라운드 ${state.round} 종료!`}
+              </h2>
               <ol>
                 {state.successes.map((s, i) => (
                   <li key={s.nickname}>
                     {i + 1}위 — {s.nickname} ({(s.elapsedMs / 1000).toFixed(1)}s)
                   </li>
                 ))}
-                {state.successes.length === 0 && <li>성공자 없음 😢</li>}
+                {state.successes.length === 0 && (
+                  <li>
+                    {state.roundSkipped
+                      ? '모두가 스킵에 동의했어요 🏳️'
+                      : '성공자 없음 😢'}
+                  </li>
+                )}
               </ol>
               <p className="fetch-game__wait">잠시 후 다음 라운드가 시작돼요...</p>
             </div>

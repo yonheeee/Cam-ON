@@ -78,6 +78,7 @@ export function SetResultPreview() {
         setIndex={isFinalSet ? 3 : 1}
         totalSets={3}
         participantId="p2"
+        gameName="FETCH_OBJECT"
         setResult={setResult}
         courseRanking={courseRanking}
         nicknameById={new Map(PARTICIPANTS.map((entry) => [entry.participantId, entry.nickname]))}

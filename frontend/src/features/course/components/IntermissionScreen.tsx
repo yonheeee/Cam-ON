@@ -30,6 +30,14 @@ function secondsUntil(iso: string): number {
   return Number.isNaN(diff) ? 0 : Math.max(0, Math.ceil(diff / 1000));
 }
 
+// 게임 이름 → 로딩 배경 테마 클래스 접미사. 실제 이미지는 CSS가 물린다(에셋 경로를 컴포넌트가
+// 몰라도 되도록). 다음 게임이 없는 인터미션(코스 종료 직전)은 테마 없이 기본 배경을 쓴다.
+const LOADING_THEME: Record<GameName, string> = {
+  NINJA: 'ninja',
+  FETCH_OBJECT: 'fetch',
+  CHARADES: 'charades',
+};
+
 // 게임이 열리기 전 대기 화면. 코스 첫 게임 앞과 게임 사이 모두 이 화면을 쓴다 — 예전엔 첫
 // 게임만 설명 없이 바로 시작했다.
 //
@@ -50,9 +58,16 @@ export function IntermissionScreen({
   // 코스 첫 게임 앞 인터미션은 아직 끝난 게임이 없어 finishedSessionSeq가 0이다 —
   // "다음 게임"이 아니라 "첫 게임"이라고 불러야 말이 된다.
   const beforeFirstGame = intermission.finishedSessionSeq === 0;
+  // 다음 게임이 정해져 있으면 그 게임의 로딩 배경을 깐다 — 무슨 게임이 오는지가 문구보다 먼저
+  // 읽히고, 이어서 열리는 게임 화면과 그림 톤이 이어진다.
+  const theme =
+    intermission.nextGameName && intermission.nextGameName in LOADING_THEME
+      ? LOADING_THEME[intermission.nextGameName as GameName]
+      : null;
 
   return (
-    <div className="intermission">
+    <div className={`intermission${theme ? ` intermission--themed intermission--${theme}` : ''}`}>
+      {theme && <div className="intermission__bg" aria-hidden="true" />}
       <div className="intermission__card pap-pixel-card">
         <p className="intermission__title pap-pixel-title">
           {intermission.nextSessionSeq === null

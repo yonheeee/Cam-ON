@@ -41,6 +41,14 @@ export interface FetchObjectStateResponse {
   status: 'PLAYING' | 'ENDED';
   successes: FetchSuccessEntry[];
   totals: FetchScoreEntry[];
+  /** 현재 라운드 스킵 투표자 — 새로고침 복구용 (서버가 접속자 교집합으로 걸러서 준다) */
+  skipVotes: string[];
+}
+
+export interface FetchSkipVoteResponse {
+  round: number;
+  votes: number;
+  required: number;
 }
 
 export const fetchGameApi = {
@@ -58,6 +66,24 @@ export const fetchGameApi = {
       );
     }
     return body.data as FetchObjectStateResponse;
+  },
+
+  /** 스킵 투표. 첫 성공 전에만 유효 — 성공자가 있으면 409(FETCH_OBJECT_SKIP_UNAVAILABLE),
+   *  호출부에서 조용히 무시한다(버튼이 숨겨지기 직전의 경합). 중복 투표는 멱등. */
+  async voteSkip(gameId: number, accessToken: string): Promise<FetchSkipVoteResponse> {
+    const response = await fetch(`${BASE_URL}/api/games/${gameId}/fetch-object/skip-votes`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    const body = await response.json().catch(() => null);
+    if (!response.ok) {
+      if (isSessionDead(response.status)) handleExpiredSession();
+      throw new FetchGameApiError(
+        body?.message ?? `스킵 투표 실패 (HTTP ${response.status})`,
+        body?.code,
+      );
+    }
+    return body.data as FetchSkipVoteResponse;
   },
 
   /** 인식 성공 보고. 서버가 도착 순서로 순번/점수를 원자적으로 확정한다.

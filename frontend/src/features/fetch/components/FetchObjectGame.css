@@ -443,6 +443,31 @@
   gap: 9px;
 }
 
+/* 스킵 투표 — 순위표 아래. 포기 액션이라 주장이 세면 안 되지만(제시어가 주인공),
+   전원 모여야 하는 투표라 카운터는 눈에 띄어야 한다 — 숫자만 픽셀 타이틀로 강조. */
+.fetch-game__skip {
+  margin-top: 12px;
+  padding: 9px 14px;
+  font-size: 13px;
+  align-self: center;
+}
+
+.fetch-game__skip b {
+  font-size: 14px;
+  margin-left: 2px;
+}
+
+.fetch-game__skip small {
+  opacity: 0.55;
+  font-size: 11px;
+}
+
+/* 내 표를 던진 뒤 — 남은 사람을 기다리는 상태라는 게 보이면 충분하다 */
+.fetch-game__skip--voted {
+  opacity: 0.65;
+  cursor: default;
+}
+
 .fetch-game__board-head {
   display: flex;
   align-items: center;

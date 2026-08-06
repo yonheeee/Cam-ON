@@ -1,6 +1,7 @@
 package com.camon.domain.game.fetch.service;
 
 import com.camon.domain.game.fetch.dto.FetchObjectStateResponse;
+import com.camon.domain.game.fetch.dto.FetchSkipVoteResponse;
 import com.camon.domain.game.fetch.dto.FetchSubmissionRequest;
 import com.camon.domain.game.fetch.dto.FetchSubmissionResponse;
 import com.camon.domain.game.fetch.repository.FetchObjectRedisRepository;
@@ -49,6 +50,15 @@ public class FetchObjectGameFacade {
         Room room = resolveRoom(participantId);
         requireCurrentGame(room, gameId);
         return fetchObjectGameService.getState(room);
+    }
+
+    public FetchSkipVoteResponse voteSkip(
+        Long gameId,
+        UUID participantId
+    ) {
+        Room room = resolveRoom(participantId);
+        requireCurrentGame(room, gameId);
+        return fetchObjectGameService.voteSkip(room, participantId);
     }
 
     private void requireCurrentGame(Room room, Long gameId) {

@@ -462,7 +462,7 @@ function CharadesResultBanner({
         )}
         <div className="charades-correct-card__divider" />
         <p className="charades-correct-card__names">
-          {isTimeout ? '이번 턴은 점수 없이 넘어갑니다' : `${answererName ?? '???'}님 정답!`}
+          {isTimeout ? '이번 턴은 포인트 없이 넘어갑니다' : `${answererName ?? '???'}님 정답!`}
         </p>
         <p className="charades-correct-card__footer">
           {countdown}초 후 {isFinalTurn ? '결과가' : '다음 제시어가'} 공개됩니다

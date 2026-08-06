@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import type { GameName } from '../api/courseApi';
 import './SetResultScreen.css';
 
 // 코스의 게임 한 세트가 끝날 때마다 뜨는 중간 결과.
@@ -26,6 +27,8 @@ interface SetResultScreenProps {
   totalSets: number;
   setResult: SetResultRow[];
   courseRanking: CourseRankRow[];
+  /** 방금 끝난 게임. 닌자는 게임 포인트가 없어 코스 누적 점수만 표시한다. */
+  gameName: GameName | null;
   /** participantId → 닉네임. 이벤트 payload에는 id만 있고, 이름은 그릴 때 조회한다 —
    *  이벤트 수신 시점에 문자열로 박아두면 그때 아직 모르던 사람(늦게 입장 등)이 영영 "알 수 없음"이 된다 */
   nicknameById: Map<string, string>;
@@ -57,6 +60,7 @@ const BAR_CELLS = 18;
 const CELL_FILL_DURATION_MS = 160;
 const CELL_STAGGER_MS = 45;
 const ROW_STAGGER_MS = 70;
+const COURSE_POINTS_BY_RANK = [5, 3, 2, 1] as const;
 
 const DELTA_MARK: Record<CourseRankRow['delta'], string> = {
   up: '▲',
@@ -77,6 +81,7 @@ export function SetResultScreen({
   totalSets,
   setResult,
   courseRanking,
+  gameName,
   nicknameById,
   nextGameLabel,
   participantId,
@@ -144,6 +149,8 @@ export function SetResultScreen({
               const displayedScore = isRevealSettled
                 ? row.score
                 : Math.floor(row.score * revealProgress);
+              const coursePoints = COURSE_POINTS_BY_RANK[row.rank - 1] ?? 0;
+              const showsGamePoints = gameName === 'FETCH_OBJECT' || gameName === 'CHARADES';
               return (
                 <li
                   key={row.participantId}
@@ -178,7 +185,8 @@ export function SetResultScreen({
                       isRevealSettled ? ' set-result__score--settled' : ''
                     }`}
                   >
-                    +{displayedScore}점
+                    {showsGamePoints && <span>{displayedScore}p</span>}
+                    <span className="set-result__course-points">+{coursePoints}점</span>
                   </span>
                 </li>
               );

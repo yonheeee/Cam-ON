@@ -48,7 +48,7 @@ export function FetchCoursePanel({
       liveNicknameById.get(participantId) ?? nicknameById.get(participantId) ?? '참가자',
     [liveNicknameById, nicknameById],
   );
-  const { state, submit, submissionError, syncError } = useFetchRound(
+  const { state, submit, voteSkip, submissionError, syncError } = useFetchRound(
     roomId,
     gameId,
     accessToken,
@@ -74,6 +74,7 @@ export function FetchCoursePanel({
       onReportSuccess={(_, result) =>
         submit(result.confidence, result.targetScore ?? undefined)
       }
+      onVoteSkip={voteSkip}
       submissionError={submissionError}
       onLeave={onLeave}
     />

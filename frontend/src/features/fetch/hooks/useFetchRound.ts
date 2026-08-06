@@ -42,6 +42,15 @@ interface RoundEndData {
   totalRounds: number;
   endedAt: number;
   scores: ScoreEntryData[];
+  /** 스킵 투표 가결로 끝난 라운드 — 결과 화면에서 "시간 초과"와 구분 */
+  skipped: boolean;
+}
+
+interface SkipVoteData {
+  round: number;
+  participantId: string;
+  votes: number;
+  required: number;
 }
 
 interface GameEndData {
@@ -56,6 +65,9 @@ const initialState: FetchGameState = {
   startedAt: 0,
   successes: [],
   totals: {},
+  skipVotes: [],
+  skipRequired: 0,
+  roundSkipped: false,
 };
 
 export function useFetchRound(
@@ -110,6 +122,10 @@ export function useFetchRound(
       deadlineAt: snapshot.deadlineAt,
       successes,
       totals,
+      skipVotes: snapshot.skipVotes ?? [],
+      // 스냅샷엔 분모가 없다(투표 이벤트가 실어 줌) — 0이면 화면이 "n/전체 인원"으로 폴백.
+      skipRequired: 0,
+      roundSkipped: false,
     });
     setSyncError(null);
   }, []);
@@ -161,7 +177,25 @@ export function useFetchRound(
                 deadlineAt: null,
                 successes: [],
                 totals: data.round === 1 ? {} : prev.totals,
+                skipVotes: [],
+                skipRequired: 0,
+                roundSkipped: false,
               }));
+              break;
+            }
+            case 'round:skip-voted': {
+              const data = event.data as SkipVoteData;
+              if (activeRoundRef.current !== data.round) break;
+              setState((prev) => {
+                if (prev.phase !== 'playing' || prev.round !== data.round) return prev;
+                return {
+                  ...prev,
+                  skipVotes: prev.skipVotes.includes(data.participantId)
+                    ? prev.skipVotes
+                    : [...prev.skipVotes, data.participantId],
+                  skipRequired: data.required,
+                };
+              });
               break;
             }
             case 'round:success': {
@@ -225,7 +259,7 @@ export function useFetchRound(
                     (totals[nickname] ?? 0) + entry.score - provisionalScore;
                 }
                 provisionalScoresRef.current = new Map();
-                return { ...prev, phase: 'roundResult', totals };
+                return { ...prev, phase: 'roundResult', totals, roundSkipped: data.skipped };
               });
               break;
             }
@@ -298,5 +332,26 @@ export function useFetchRound(
     }
   }, [gameId, accessToken]);
 
-  return { state, submit, submissionError, syncError };
+  // 스킵 투표. 카운터 반영은 서버 브로드캐스트(round:skip-voted)가 담당하므로 여기선 호출만.
+  // 실패는 두 부류로 나눈다: 성공자 등장 직후의 경합(SKIP_UNAVAILABLE)·이미 닫힌 라운드는
+  // 곧 도착할 이벤트가 화면을 정리하므로 조용히 무시하고, 그 외(네트워크 등)만 에러로 알린다.
+  const voteSkip = useCallback(async () => {
+    if (stateRef.current.phase !== 'playing') return;
+    try {
+      await fetchGameApi.voteSkip(gameId, accessToken);
+    } catch (err) {
+      if (
+        err instanceof FetchGameApiError &&
+        (err.code === 'FETCH_OBJECT_SKIP_UNAVAILABLE' ||
+          err.code === 'FETCH_OBJECT_ROUND_CLOSED')
+      ) {
+        return;
+      }
+      setSubmissionError(
+        err instanceof Error ? err.message : '스킵 투표에 실패했습니다.',
+      );
+    }
+  }, [gameId, accessToken]);
+
+  return { state, submit, voteSkip, submissionError, syncError };
 }

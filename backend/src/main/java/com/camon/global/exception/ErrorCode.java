@@ -8,13 +8,16 @@ public enum ErrorCode {
     ROOM_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않는 방입니다."),
     ROOM_FULL(HttpStatus.CONFLICT, "방 정원이 가득 찼습니다."),
     ROOM_ALREADY_STARTED(HttpStatus.CONFLICT, "이미 시작한 방입니다."),
-    ROOM_ACCESS_DENIED(HttpStatus.FORBIDDEN, "방 참가자만 조회할 수 있습니다."),
+    ROOM_ACCESS_DENIED(HttpStatus.FORBIDDEN, "방 연결이 만료되었습니다. 대기방에 다시 입장해 주세요."),
     // 게임 시작 외에 강퇴 등 방장 전용 작업이 늘어나서 메시지를 작업 중립적으로 일반화했다.
     ROOM_NOT_HOST(HttpStatus.FORBIDDEN, "방장만 할 수 있는 작업입니다."),
     ROOM_PARTICIPANT_NOT_FOUND(HttpStatus.NOT_FOUND, "방에 없는 참가자입니다."),
     ROOM_KICK_SELF(HttpStatus.BAD_REQUEST, "자기 자신은 강퇴할 수 없습니다."),
     ROOM_BANNED(HttpStatus.FORBIDDEN, "강퇴된 방에는 다시 입장할 수 없습니다."),
-    ROOM_NOT_ALL_READY(HttpStatus.CONFLICT, "모든 참가자가 준비되어야 게임을 시작할 수 있습니다."),
+    ROOM_NOT_ALL_READY(
+        HttpStatus.CONFLICT,
+        "아직 준비하지 않은 참가자가 있거나 준비 상태가 동기화되지 않았습니다. 잠시 후 다시 시도해 주세요."
+    ),
     ROOM_NOT_ALL_RETURNED(
         HttpStatus.CONFLICT,
         "아직 게임 결과 화면에 있는 참가자가 있습니다."
@@ -93,6 +96,10 @@ public enum ErrorCode {
     FETCH_OBJECT_MISSION_NOT_FOUND(
         HttpStatus.NOT_FOUND,
         "현재 물건 가져오기 라운드의 제시어를 찾을 수 없습니다."
+    ),
+    FETCH_OBJECT_SKIP_UNAVAILABLE(
+        HttpStatus.CONFLICT,
+        "이미 성공한 사람이 있어 스킵할 수 없습니다."
     ),
     CHARADES_SESSION_NOT_FOUND(HttpStatus.NOT_FOUND, "진행 중인 몸으로 말해요 게임 세션이 없습니다."),
     CHARADES_NOT_ENOUGH_PLAYERS(HttpStatus.BAD_REQUEST, "몸으로 말해요는 최소 3명 이상이어야 시작할 수 있습니다."),

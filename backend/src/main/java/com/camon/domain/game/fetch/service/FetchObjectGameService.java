@@ -9,6 +9,7 @@ import com.camon.domain.game.common.ws.GameEventPublisher;
 import com.camon.domain.game.fetch.domain.FetchObjectMissionCatalog;
 import com.camon.domain.game.fetch.dto.FetchObjectStateResponse;
 import com.camon.domain.game.fetch.dto.FetchObjectSuccessEntry;
+import com.camon.domain.game.fetch.dto.FetchSkipVoteResponse;
 import com.camon.domain.game.fetch.dto.FetchSubmissionRequest;
 import com.camon.domain.game.fetch.dto.FetchSubmissionResponse;
 import com.camon.domain.game.fetch.repository.FetchObjectRoundState;
@@ -22,6 +23,7 @@ import com.camon.domain.game.fetch.ws.payload.FetchRoundEndedPayload;
 import com.camon.domain.game.fetch.ws.payload.FetchRoundStartedPayload;
 import com.camon.domain.game.fetch.ws.payload.FetchRoundSuccessPayload;
 import com.camon.domain.game.fetch.ws.payload.FetchScoreEntry;
+import com.camon.domain.game.fetch.ws.payload.FetchSkipVotePayload;
 import com.camon.domain.room.domain.ConnectionStatus;
 import com.camon.domain.room.domain.Participant;
 import com.camon.domain.room.domain.Room;
@@ -204,7 +206,8 @@ public class FetchObjectGameService {
                 sessionSeq,
                 request.round(),
                 totalRounds,
-                Instant.ofEpochMilli(result.deadlineAt())
+                Instant.ofEpochMilli(result.deadlineAt()),
+                false
             );
         }
         return new FetchSubmissionResponse(
@@ -260,6 +263,19 @@ public class FetchObjectGameService {
             }
         }
 
+        Set<UUID> connectedParticipants = fetchRedis.getParticipants(
+            room.roomCode(),
+            sessionSeq
+        );
+        List<UUID> skipVotes = fetchRedis.getSkipVotes(
+                room.roomCode(),
+                sessionSeq,
+                state.round()
+            ).stream()
+            .filter(connectedParticipants::contains)
+            .sorted()
+            .toList();
+
         return new FetchObjectStateResponse(
             state.round(),
             state.totalRounds(),
@@ -268,7 +284,8 @@ public class FetchObjectGameService {
             state.deadlineAt().toEpochMilli(),
             state.status(),
             successes,
-            buildScoreEntries(currentTotals)
+            buildScoreEntries(currentTotals),
+            skipVotes
         );
     }
 
@@ -393,8 +410,90 @@ public class FetchObjectGameService {
             sessionSeq,
             round,
             totalRounds,
-            expectedDeadlineAt
+            expectedDeadlineAt,
+            false
         );
+    }
+
+    /**
+     * "주변에 물건이 없으면 타임아웃을 기다릴 수밖에 없다"는 피드백의 해결.
+     * 첫 성공 전에만 유효하다 — 성공자가 나오면 그레이스(10초)가 라운드를 곧 닫으므로
+     * 스킵의 역할이 없고, 남은 사람은 순위 경쟁 중이라 투표할 이유도 없다.
+     * 가결 = 접속 참가자 전원 투표. 판정은 투표 set ∩ 참가자 set으로 계산해
+     * 투표 후 떠난 사람의 표가 남아 있어도 무시된다.
+     */
+    public FetchSkipVoteResponse voteSkip(Room room, UUID participantId) {
+        int sessionSeq = room.currentSessionSeq();
+        FetchObjectRoundState state = fetchRedis.findCurrentRoundState(
+            room.roomCode(),
+            sessionSeq
+        ).orElseThrow(() ->
+            new BusinessException(ErrorCode.FETCH_OBJECT_SESSION_NOT_FOUND)
+        );
+        if (!"PLAYING".equals(state.status())) {
+            throw new BusinessException(ErrorCode.FETCH_OBJECT_ROUND_CLOSED);
+        }
+        if (!state.submissions().isEmpty()) {
+            throw new BusinessException(ErrorCode.FETCH_OBJECT_SKIP_UNAVAILABLE);
+        }
+        Set<UUID> participants = fetchRedis.getParticipants(
+            room.roomCode(),
+            sessionSeq
+        );
+        if (!participants.contains(participantId)) {
+            throw new BusinessException(
+                ErrorCode.FETCH_OBJECT_PARTICIPANT_NOT_FOUND
+            );
+        }
+
+        fetchRedis.addSkipVote(
+            room.roomCode(),
+            sessionSeq,
+            state.round(),
+            participantId
+        );
+        int votes = countValidSkipVotes(
+            room.roomCode(),
+            sessionSeq,
+            state.round(),
+            participants
+        );
+        int required = participants.size();
+        fetchEventPublisher.publish(
+            room.roomId(),
+            "round:skip-voted",
+            new FetchSkipVotePayload(
+                state.round(),
+                participantId,
+                votes,
+                required
+            )
+        );
+        // 마지막 두 명이 동시에 투표해 둘 다 여기 들어와도 completeRound의
+        // closeRoundIfPlaying CAS가 한 번만 통과시킨다.
+        if (votes >= required) {
+            completeRound(
+                room,
+                sessionSeq,
+                state.round(),
+                state.totalRounds(),
+                state.deadlineAt(),
+                true
+            );
+        }
+        return new FetchSkipVoteResponse(state.round(), votes, required);
+    }
+
+    private int countValidSkipVotes(
+        String roomCode,
+        int sessionSeq,
+        int round,
+        Set<UUID> participants
+    ) {
+        return (int) fetchRedis.getSkipVotes(roomCode, sessionSeq, round)
+            .stream()
+            .filter(participants::contains)
+            .count();
     }
 
     private void completeRound(
@@ -402,7 +501,8 @@ public class FetchObjectGameService {
         int sessionSeq,
         int round,
         int totalRounds,
-        Instant expectedDeadlineAt
+        Instant expectedDeadlineAt,
+        boolean skipped
     ) {
         Instant endedAt = clock.instant();
         if (!fetchRedis.closeRoundIfPlaying(
@@ -440,7 +540,8 @@ public class FetchObjectGameService {
                 round,
                 totalRounds,
                 endedAt.toEpochMilli(),
-                buildScoreEntries(roundScores)
+                buildScoreEntries(roundScores),
+                skipped
             )
         );
         if (round >= totalRounds) {
@@ -499,6 +600,46 @@ public class FetchObjectGameService {
         // 혼자 남으면 더 겨룰 상대가 없다 — 남은 라운드를 다 돌리지 않고 여기서 끝낸다.
         if (connectedCount <= 1) {
             finishGame(room, sessionSeq);
+            return;
+        }
+        completeRoundIfSkipVotePassed(room, sessionSeq);
+    }
+
+    // 스킵에 아직 안 누른 마지막 한 명이 떠나면, 남은 전원의 표가 이미 모여 있는데
+    // 아무 이벤트도 안 일어나 라운드가 제한시간을 다 태운다 — 퇴장은 사실상 기권이므로
+    // 남은 인원 기준으로 가결을 재판정한다.
+    private void completeRoundIfSkipVotePassed(Room room, int sessionSeq) {
+        FetchObjectRoundState state = fetchRedis.findCurrentRoundState(
+            room.roomCode(),
+            sessionSeq
+        ).orElse(null);
+        if (state == null
+            || !"PLAYING".equals(state.status())
+            || !state.submissions().isEmpty()) {
+            return;
+        }
+        Set<UUID> participants = fetchRedis.getParticipants(
+            room.roomCode(),
+            sessionSeq
+        );
+        if (participants.isEmpty()) {
+            return;
+        }
+        int votes = countValidSkipVotes(
+            room.roomCode(),
+            sessionSeq,
+            state.round(),
+            participants
+        );
+        if (votes >= participants.size()) {
+            completeRound(
+                room,
+                sessionSeq,
+                state.round(),
+                state.totalRounds(),
+                state.deadlineAt(),
+                true
+            );
         }
     }
 

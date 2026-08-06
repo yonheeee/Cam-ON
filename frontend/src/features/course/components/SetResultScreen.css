@@ -89,7 +89,7 @@
 
 .set-result__row {
   display: grid;
-  grid-template-columns: calc(var(--u) * 4) calc(var(--u) * 7) 1fr calc(var(--u) * 6);
+  grid-template-columns: calc(var(--u) * 4) calc(var(--u) * 7) 1fr calc(var(--u) * 9);
   align-items: center;
   gap: calc(var(--u) * 0.8);
 }
@@ -149,10 +149,17 @@
 }
 
 .set-result__score {
+  display: flex;
+  justify-content: flex-end;
+  gap: calc(var(--u) * 0.6);
   font-family: var(--pap-font-pixel);
   font-size: calc(var(--u) * 1.2);
   text-align: right;
   color: var(--c);
+}
+
+.set-result__course-points {
+  color: var(--pap-white);
 }
 
 .set-result__score--settled {
