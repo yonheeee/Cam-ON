@@ -13,6 +13,10 @@ export interface FetchSuccessEntry {
 
 export type FetchPhase = 'idle' | 'playing' | 'roundResult' | 'ended';
 
+// 스킵 버튼 노출 지연 — 제시어를 보고 주변을 훑을 시간. 반사적 스킵 러시만 막으면 되므로
+// 짧게 둔다 (가결이 전원 만장일치라 성급한 1표는 어차피 무해). 플레이테스트로 조정.
+export const SKIP_VOTE_DELAY_MS = 5_000;
+
 export interface FetchGameState {
   phase: FetchPhase;
   round: number;
@@ -22,4 +26,10 @@ export interface FetchGameState {
   deadlineAt?: number | null;
   successes: FetchSuccessEntry[];
   totals: Record<string, number>;
+  /** 현재 라운드 스킵 투표자 participantId 목록 (서버 브로드캐스트/스냅샷 원본) */
+  skipVotes: string[];
+  /** 스킵 가결 분모 — 접속 참가자 수. 서버가 이벤트마다 실어 준다 */
+  skipRequired: number;
+  /** 직전 라운드가 스킵 가결로 끝났는지 — roundResult 화면의 배너 구분용 */
+  roundSkipped: boolean;
 }

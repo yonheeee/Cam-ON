@@ -28,4 +28,12 @@ final class FetchObjectRedisKeys {
     ) {
         return round(roomCode, sessionSeq, round) + ":submissions";
     }
+
+    static String skipVotes(
+        String roomCode,
+        int sessionSeq,
+        int round
+    ) {
+        return round(roomCode, sessionSeq, round) + ":skip_votes";
+    }
 }

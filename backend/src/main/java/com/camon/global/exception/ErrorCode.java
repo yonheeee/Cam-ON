@@ -97,6 +97,10 @@ public enum ErrorCode {
         HttpStatus.NOT_FOUND,
         "현재 물건 가져오기 라운드의 제시어를 찾을 수 없습니다."
     ),
+    FETCH_OBJECT_SKIP_UNAVAILABLE(
+        HttpStatus.CONFLICT,
+        "이미 성공한 사람이 있어 스킵할 수 없습니다."
+    ),
     CHARADES_SESSION_NOT_FOUND(HttpStatus.NOT_FOUND, "진행 중인 몸으로 말해요 게임 세션이 없습니다."),
     CHARADES_NOT_ENOUGH_PLAYERS(HttpStatus.BAD_REQUEST, "몸으로 말해요는 최소 3명 이상이어야 시작할 수 있습니다."),
     CHARADES_TOO_MANY_PLAYERS(HttpStatus.BAD_REQUEST, "몸으로 말해요는 최대 4명까지만 참가할 수 있습니다."),
