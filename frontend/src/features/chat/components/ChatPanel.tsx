@@ -60,6 +60,13 @@ export function ChatPanel({ messages, onSend, variant = 'floating', nicknameColo
     setDraft('');
   };
 
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return;
+
+    event.preventDefault();
+    event.currentTarget.form?.requestSubmit();
+  };
+
   return (
     <div className={`chat-panel chat-panel--${variant}`}>
       <div className="chat-panel__messages" ref={listRef}>
@@ -75,11 +82,13 @@ export function ChatPanel({ messages, onSend, variant = 'floating', nicknameColo
         ))}
       </div>
       <form className="chat-panel__form" onSubmit={handleSubmit}>
-        <input
+        <textarea
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
+          onKeyDown={handleKeyDown}
           placeholder={variant === 'docked' ? '메시지를 입력하세요' : '메시지 입력'}
           maxLength={200}
+          rows={2}
         />
         <button
           type="submit"
