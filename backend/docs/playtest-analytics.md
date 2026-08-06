@@ -5,17 +5,37 @@
 `room_key` 아래 `attempt_number`가 1씩 증가한다. 닉네임, 토큰, 영상, 랜드마크, 채팅 원문은
 저장하지 않는다.
 
+## 회차별 테이블
+
+수집 테이블은 유저테스트 회차마다 갈라 둔다.
+
+| 회차 | 테이블 | 뷰 | 상태 |
+| --- | --- | --- | --- |
+| 1차 | `playtest_sessions` / `playtest_events` | `playtest_metric_*` | 동결(읽기 전용) |
+| 2차 | `playtest2_sessions` / `playtest2_events` | `playtest2_metric_*` | 수집 중 |
+
+같은 테이블에 `experiment_version`만 다르게 쌓지 않은 이유는 1차 데이터에 개발 중 자체 플레이와
+`analytics_user_key`가 끊긴 구간이 섞여 있어서다. 그 조건을 집계마다 걸지 않아도 되도록 2차는
+테이블 전체가 곧 모집단이 되게 했다. 1차 테이블과 뷰는 지우지 않으므로 두 회차를 나란히 비교할
+수 있다.
+
+새 회차를 시작할 때는 `V20260806_03`/`V20260806_04`를 본떠 테이블·뷰를 만들고, 엔티티
+(`PlaytestSession`, `PlaytestEvent`)의 `@Table` 이름과 제약·인덱스 이름을 함께 바꾼다.
+
 ## 배포 DB 준비
 
-Flyway가 아직 없으므로 다음 SQL을 배포 DB에 한 번 적용한다.
+Flyway가 아직 없으므로 다음 SQL을 배포 DB에 한 번 적용한다. 순서대로 적용하면 되고, 몇 번
+돌려도 안전하다(`deploy/analytics/apply-metric-views.sh`가 이 순서 그대로 실행한다).
+
+```text
+src/main/resources/db/manual/V20260806_03__create_playtest2_tables.sql
+src/main/resources/db/manual/V20260806_04__create_playtest2_metric_views.sql
+```
+
+1차 테이블이 아직 없는 DB라면 아래도 함께 적용한다(비교용으로 스키마는 유지한다).
 
 ```text
 src/main/resources/db/manual/V20260730_01__create_playtest_analytics_tables.sql
-```
-
-`V20260730_01`을 이미 적용한 DB는 다음 보정 SQL도 한 번 적용한다.
-
-```text
 src/main/resources/db/manual/V20260730_02__add_playtest_attempt_number.sql
 ```
 
