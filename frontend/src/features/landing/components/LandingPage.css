@@ -2,13 +2,224 @@
   position: fixed;
   inset: 0;
   overflow: hidden;
-  background: #fff8e8 url('/assets/pixel-arcade-plaza-bg.png') center center / cover no-repeat;
+  background: #fff8e8;
   color: var(--camon-color-ink);
   image-rendering: pixelated;
 }
 
+.landing__scene {
+  position: absolute;
+  z-index: 0;
+  top: 50%;
+  left: 50%;
+  width: max(100vw, calc(100vh * 1.776833));
+  height: max(100vh, calc(100vw / 1.776833));
+  overflow: hidden;
+  background: url('/assets/pixel-arcade-plaza-bg-animated-clean.png') center / 100% 100% no-repeat;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  user-select: none;
+}
+
+.landing__sprite {
+  position: absolute;
+  display: block;
+  height: auto;
+  transform-origin: 50% 100%;
+  image-rendering: pixelated;
+  user-select: none;
+  will-change: transform;
+}
+
+.landing__sprite--balloon-red {
+  top: 20.6%;
+  left: 64.9%;
+  width: 2.65%;
+  transform-origin: 50% 100%;
+  animation: landing-balloon-sway 3.4s ease-in-out infinite;
+}
+
+.landing__sprite--balloon-blue {
+  top: 25.7%;
+  left: 67.35%;
+  width: 2.4%;
+  transform-origin: 50% 100%;
+  animation: landing-balloon-sway 2.9s ease-in-out -1.1s infinite reverse;
+}
+
+.landing__sprite--visitor-girl {
+  left: 5.55%;
+  bottom: 8.55%;
+  width: 5.45%;
+  animation: landing-visitor-girl 1.75s steps(4, end) infinite;
+}
+
+.landing__sprite--visitor-boy {
+  left: 10.35%;
+  bottom: 8.45%;
+  width: 4.4%;
+  animation: landing-visitor-boy 1.55s steps(4, end) -0.45s infinite;
+}
+
+.landing__sprite--dancer-left {
+  left: 77.25%;
+  bottom: 24.5%;
+  width: 5.35%;
+  animation: landing-dance-left 1.05s steps(3, end) infinite;
+}
+
+.landing__sprite--dancer-center {
+  left: 82.65%;
+  bottom: 24.55%;
+  width: 4.5%;
+  animation: landing-dance-center 0.88s steps(3, end) -0.18s infinite;
+}
+
+.landing__sprite--dancer-right {
+  left: 88.1%;
+  bottom: 24.45%;
+  width: 5.55%;
+  animation: landing-dance-right 0.76s steps(3, end) -0.32s infinite;
+}
+
+.landing__sprite--spectator-left {
+  left: 80.15%;
+  bottom: 13.65%;
+  width: 3.35%;
+  animation: landing-spectator-sway 1.8s steps(3, end) infinite;
+}
+
+.landing__sprite--spectator-right {
+  left: 85.05%;
+  bottom: 13.2%;
+  width: 3.55%;
+  animation: landing-spectator-sway 2.05s steps(3, end) -0.8s infinite reverse;
+}
+
+.landing__sprite--heart-left {
+  left: 23.55%;
+  bottom: 16.4%;
+  width: 3.45%;
+  animation: landing-friend-bob 1.65s steps(3, end) infinite;
+}
+
+.landing__sprite--heart-right {
+  left: 27.45%;
+  bottom: 16.25%;
+  width: 3.25%;
+  animation: landing-friend-bob 1.65s steps(3, end) -0.55s infinite;
+}
+
+.landing__sprite--heart-bubble {
+  left: 25.55%;
+  bottom: 27.25%;
+  width: 3.75%;
+  transform-origin: 50% 80%;
+  animation: landing-heart-float 1.4s steps(4, end) infinite;
+}
+
+@keyframes landing-balloon-sway {
+  0%,
+  100% {
+    transform: translate(0, 0) rotate(-3deg);
+  }
+
+  50% {
+    transform: translate(14%, -3%) rotate(3deg);
+  }
+}
+
+@keyframes landing-visitor-girl {
+  0%,
+  100% {
+    transform: translate(0, 0) rotate(-1deg);
+  }
+
+  50% {
+    transform: translate(1.5%, -3%) rotate(1.5deg);
+  }
+}
+
+@keyframes landing-visitor-boy {
+  0%,
+  100% {
+    transform: translate(0, 0) rotate(1deg);
+  }
+
+  50% {
+    transform: translate(-2%, -3.5%) rotate(-1.5deg);
+  }
+}
+
+@keyframes landing-dance-left {
+  0%,
+  100% {
+    transform: translate(0, 0) rotate(-2deg);
+  }
+
+  45% {
+    transform: translate(-2.5%, -8%) rotate(2.5deg);
+  }
+}
+
+@keyframes landing-dance-center {
+  0%,
+  100% {
+    transform: translate(0, 0) scaleY(1);
+  }
+
+  45% {
+    transform: translate(1.5%, -10%) scaleY(1.035);
+  }
+}
+
+@keyframes landing-dance-right {
+  0%,
+  100% {
+    transform: translate(0, 0) rotate(2deg);
+  }
+
+  45% {
+    transform: translate(3%, -13%) rotate(-3deg);
+  }
+}
+
+@keyframes landing-spectator-sway {
+  0%,
+  100% {
+    transform: translateX(-2%) rotate(-2.5deg);
+  }
+
+  50% {
+    transform: translate(2%, -3.5%) rotate(2.5deg);
+  }
+}
+
+@keyframes landing-friend-bob {
+  0%,
+  100% {
+    transform: translate(0, 0) rotate(-1.5deg);
+  }
+
+  50% {
+    transform: translate(2.5%, -5.5%) rotate(1.5deg);
+  }
+}
+
+@keyframes landing-heart-float {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+
+  50% {
+    transform: translateY(-15%) scale(1.1);
+  }
+}
+
 .landing__hero {
   position: absolute;
+  z-index: 2;
   top: 34.9609375%;
   left: 50%;
   width: min(1080px, 75vw);
@@ -173,5 +384,9 @@
 @media (prefers-reduced-motion: reduce) {
   .landing__button {
     transition: none;
+  }
+
+  .landing__sprite {
+    animation: none;
   }
 }
