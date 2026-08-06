@@ -1,5 +1,6 @@
 package com.camon.domain.game.ninja.service;
 
+import com.camon.domain.game.common.demo.DemoScenario;
 import com.camon.domain.game.common.event.GameSessionFinishedEvent;
 import com.camon.domain.game.common.repository.SaveRoundResult;
 import com.camon.domain.game.common.service.GameScoreService;
@@ -34,6 +35,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -146,8 +148,7 @@ public class NinjaGameService {
         ninjaRedis.setTotalRounds(roomCode, seq, totalRounds);
         ninjaRedis.setGameId(roomCode, seq, gameId);
         ninjaRedis.saveParticipants(roomCode, seq, participantTokens);
-        List<Long> skillIds = new ArrayList<>(skillRepository.findAllIds());
-        Collections.shuffle(skillIds);
+        List<Long> skillIds = resolveSkillOrder(room);
         ninjaRedis.saveSkillOrder(roomCode, seq, skillIds);
         log.info("[Service] startSession : 참가자 {}명 저장, 스킬 {}개 셔플 완료", participantTokens.size(), skillIds.size());
 
@@ -401,7 +402,9 @@ public class NinjaGameService {
     ) {
         String roomCode = room.roomCode();
         Skill skill = findExchangeSkill(roomCode, seq, round, exchange);
-        int damage = skill.getDamage();
+        // 시연 모드에서는 술법 종류와 관계없이 한 방(=초기 HP) — 교환마다 한 명씩 확실히
+        // 탈락해서 발표 시간 안에 판이 끝난다.
+        int damage = room.demoMode() ? DemoScenario.NINJA_SKILL_DAMAGE : skill.getDamage();
         long hpAfter = ninjaRedis.decrementHp(roomCode, seq, round, targetToken, damage);
         boolean eliminated = hpAfter <= 0;
         if (eliminated) {
@@ -814,6 +817,31 @@ public class NinjaGameService {
             throw new BusinessException(ErrorCode.NINJA_STALE_ROUND);
         }
         return exchange;
+    }
+
+    // 교환마다 뽑아 쓸 술법 순서(drawNextSkill이 이 리스트를 순환한다). 평소엔 전체 셔플이지만
+    // 시연 모드에서는 DemoScenario에 적힌 순서 그대로 — 발표에서 어떤 손동작이 언제 나올지
+    // 미리 알고 있어야 시연이 성립한다.
+    private List<Long> resolveSkillOrder(Room room) {
+        if (room.demoMode()) {
+            List<Long> demoOrder = DemoScenario.NINJA_SKILL_NAMES.stream()
+                .map(name -> skillRepository.findByName(name).orElse(null))
+                .filter(Objects::nonNull)
+                .map(Skill::getId)
+                .toList();
+            if (!demoOrder.isEmpty()) {
+                log.info("[Service] 시연 모드 : 술법 순서를 {}로 고정 (데미지 {} 일괄 적용)",
+                    DemoScenario.NINJA_SKILL_NAMES, DemoScenario.NINJA_SKILL_DAMAGE);
+                return demoOrder;
+            }
+            // 이름이 하나도 안 맞으면(스킬 이름이 바뀌었거나 시드가 안 돌았다) 시연을 통째로
+            // 못 하게 만드는 대신 평소 진행으로 돌아간다 — 데미지 고정은 그대로 걸린다.
+            log.warn("[Service] 시연 모드 : {} 중 DB에 있는 술법이 없어 셔플로 진행한다",
+                DemoScenario.NINJA_SKILL_NAMES);
+        }
+        List<Long> skillIds = new ArrayList<>(skillRepository.findAllIds());
+        Collections.shuffle(skillIds);
+        return skillIds;
     }
 
     private Skill findExchangeSkill(String roomCode, int seq, int round, int exchange) {

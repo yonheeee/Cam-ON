@@ -19,6 +19,7 @@ import com.camon.domain.game.charades.ws.payload.CharadesScoreEntry;
 import com.camon.domain.game.charades.ws.payload.CharadesTurnStartedPayload;
 import com.camon.domain.game.charades.ws.payload.ChatMessageReceivedPayload;
 import com.camon.domain.game.common.Mission;
+import com.camon.domain.game.common.demo.DemoScenario;
 import com.camon.domain.game.common.event.GameSessionFinishedEvent;
 import com.camon.domain.game.common.repository.MissionRepository;
 import com.camon.domain.game.common.repository.MissionTopicRepository;
@@ -39,17 +40,21 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.stream.Collectors;
 import org.springframework.context.ApplicationEventPublisher;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.TaskScheduler;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+@Slf4j
 @Service
 public class CharadesGameService {
 
@@ -121,9 +126,13 @@ public class CharadesGameService {
         List<Participant> participants = connectedParticipants(roomId);
         validatePlayerCount(participants.size());
         validateRoundCount(totalRounds);
-        validateTopic(gameId, topicId);
+        // 시연 모드: 제시어를 DemoScenario 순서로 고정하려면 그 제시어들이 들어 있는 주제로
+        // 세션을 열어야 한다(제시어 조회가 세션의 topicId로 걸린다). 방장이 대기방에서 무슨
+        // 주제를 골랐든 시연 주제로 갈아끼운다.
+        Long sessionTopicId = resolveTopicId(room, gameId, topicId);
+        validateTopic(gameId, sessionTopicId);
 
-        List<Mission> missions = findTopicMissions(gameId, topicId);
+        List<Mission> missions = findTopicMissions(gameId, sessionTopicId);
         // 제시어는 한 턴에 하나씩 소진되고 재사용되지 않으므로, 이 게임이 쓸 총 턴 수
         // (인원 x 라운드)만큼 주제에 제시어가 있어야 중간에 끊기지 않는다.
         int requiredMissionCount = participants.size() * totalRounds;
@@ -140,7 +149,7 @@ public class CharadesGameService {
             room.roomCode(),
             sessionSeq,
             totalRounds,
-            topicId,
+            sessionTopicId,
             presenterOrder
         );
 
@@ -364,10 +373,13 @@ public class CharadesGameService {
         ).orElseThrow(() ->
             new BusinessException(ErrorCode.CHARADES_SESSION_NOT_FOUND)
         );
-        Mission mission = selectUnusedMission(
-            state.topicId(),
-            charadesRedis.getUsedMissionIds(room.roomCode(), sessionSeq)
-        );
+        Set<Long> usedMissionIds =
+            charadesRedis.getUsedMissionIds(room.roomCode(), sessionSeq);
+        // 시연 모드에서는 제시어가 턴 순서대로 고정된다. 시연 목록이 동나면(턴이 목록보다 많은
+        // 경우) 평소처럼 남은 제시어에서 랜덤으로 뽑는다.
+        Mission mission = room.demoMode()
+            ? selectDemoMission(state.topicId(), usedMissionIds)
+            : selectUnusedMission(state.topicId(), usedMissionIds);
         Instant expiresAt = Instant.ofEpochMilli(
             Instant.now().plus(TURN_DURATION).toEpochMilli()
         );
@@ -759,6 +771,45 @@ public class CharadesGameService {
 
     private static String timerKey(String roomCode, int sessionSeq) {
         return roomCode + ":" + sessionSeq;
+    }
+
+    // 시연 모드에서 쓸 주제. 시연 제시어(악어/알파카/...)가 들어 있는 주제로 갈아끼운다 —
+    // 못 찾으면(주제 이름이 바뀌었다) 방장이 고른 주제를 그대로 쓰고 제시어는 랜덤이 된다.
+    private Long resolveTopicId(Room room, Long gameId, Long topicId) {
+        if (!room.demoMode()) {
+            return topicId;
+        }
+        return missionTopicRepository
+            .findByGameGameIdAndName(gameId, DemoScenario.CHARADES_TOPIC_NAME)
+            .map(topic -> {
+                log.info("[Charades] 시연 모드 : 주제를 '{}'로 고정하고 제시어는 {} 순서로 낸다",
+                    DemoScenario.CHARADES_TOPIC_NAME, DemoScenario.CHARADES_KEYWORDS);
+                return topic.getTopicId();
+            })
+            .orElseGet(() -> {
+                log.warn("[Charades] 시연 모드 : '{}' 주제를 못 찾아 원래 주제로 진행한다",
+                    DemoScenario.CHARADES_TOPIC_NAME);
+                return topicId;
+            });
+    }
+
+    // 시연용 제시어를 정해진 순서대로 하나 꺼낸다. 이미 나온 것과 목록에 없는 것은 건너뛴다.
+    private Mission selectDemoMission(Long topicId, Set<Long> usedMissionIds) {
+        Map<String, Mission> missionByKeyword = missionRepository
+            .findAllByTopicTopicIdAndMissionTypeAndIsActiveTrue(topicId, MISSION_TYPE)
+            .stream()
+            .filter(mission -> !usedMissionIds.contains(mission.getMissionId()))
+            .collect(Collectors.toMap(
+                Mission::getKeyword,
+                mission -> mission,
+                (first, ignored) -> first
+            ));
+        return DemoScenario.CHARADES_KEYWORDS.stream()
+            .map(missionByKeyword::get)
+            .filter(Objects::nonNull)
+            .findFirst()
+            // 시연 목록을 다 쓴 뒤의 턴은 평소 규칙(남은 제시어 중 랜덤)으로 이어간다.
+            .orElseGet(() -> selectUnusedMission(topicId, usedMissionIds));
     }
 
     private Mission selectUnusedMission(Long topicId, Set<Long> usedMissionIds) {

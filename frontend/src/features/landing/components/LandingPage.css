@@ -1,4 +1,9 @@
 .landing {
+  /* 배경 스테이지 크기. landing__scene(그림)과 landing__hotspots(클릭 영역)가 같은 좌표계를
+     써야 스프라이트 위에 겹쳐 둔 버튼이 어긋나지 않으므로, 값을 한 곳에서만 정의한다. */
+  --landing-stage-w: max(100vw, calc(100vh * 1.776833));
+  --landing-stage-h: max(100vh, calc(100vw / 1.776833));
+
   position: fixed;
   inset: 0;
   overflow: hidden;
@@ -12,13 +17,28 @@
   z-index: 0;
   top: 50%;
   left: 50%;
-  width: max(100vw, calc(100vh * 1.776833));
-  height: max(100vh, calc(100vw / 1.776833));
+  width: var(--landing-stage-w);
+  height: var(--landing-stage-h);
   overflow: hidden;
   background: url('/assets/pixel-arcade-plaza-bg-animated-clean.png') center / 100% 100% no-repeat;
   transform: translate(-50%, -50%);
   pointer-events: none;
   user-select: none;
+}
+
+/* 배경 위 클릭 지점을 얹는 레이어. 스프라이트와 같은 좌표계를 쓰되 그림은 없고, 기본은
+   클릭을 통과시켜서(pointer-events: none) 히어로 영역 조작을 방해하지 않는다.
+   z-index는 히어로(2)보다 위 — 겹치는 자리에서도 히어로 뒤로 숨지 않게 한다. */
+.landing__hotspots {
+  position: absolute;
+  z-index: 3;
+  top: 50%;
+  left: 50%;
+  width: var(--landing-stage-w);
+  height: var(--landing-stage-h);
+  overflow: hidden;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
 }
 
 .landing__sprite {
@@ -279,6 +299,65 @@
   font-size: 13px;
   line-height: 1.35;
   text-align: center;
+}
+
+/* 시연 모드 토글 — 배경의 하트 말풍선 위에 겹쳐 둔 투명 버튼.
+   좌표는 .landing__sprite--heart-bubble과 같은 값이어야 한다(둘 중 하나만 옮기면 어긋난다).
+   높이는 말풍선 원본 비율(227x202)로 잡아 그림 밖으로 삐져나오지 않게 한다.
+   부모가 pointer-events: none이라 여기서 auto로 되살려야 클릭이 먹는다. */
+.landing__demo-toggle {
+  position: absolute;
+  left: 25.55%;
+  bottom: 27.25%;
+  width: 3.75%;
+  aspect-ratio: 227 / 202;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 12%;
+  background: transparent;
+  cursor: pointer;
+  pointer-events: auto;
+  -webkit-tap-highlight-color: transparent;
+  transition: box-shadow 140ms ease-out;
+
+  /* 말풍선이 둥둥 떠다니므로 같은 애니메이션을 걸어 붙어 다니게 한다. 안 걸면 클릭 영역이
+     그림에서 어긋나고, ON 상태 링이 말풍선을 벗어나 혼자 떠 있는 것처럼 보인다. */
+  transform-origin: 50% 80%;
+  animation: landing-heart-float 1.4s steps(4, end) infinite;
+}
+
+/* 투명해도 켜졌는지는 알아야 한다 — 켜 둔 걸 잊고 실제 플레이용 방을 만드는 사고를 막을 수
+   있는 지점이 이 화면뿐이라서, ON일 때만 말풍선 둘레에 은은한 노란 링이 돈다.
+   완전히 안 보이길 원하면 이 규칙만 지우면 된다. */
+.landing__demo-toggle--on {
+  box-shadow:
+    0 0 0 2px rgb(255 215 106 / 0.9),
+    0 0 10px 3px rgb(255 215 106 / 0.55);
+}
+
+/* 키보드 사용자는 이 버튼이 어디 있는지 볼 수 없으면 조작 자체가 불가능하다. */
+.landing__demo-toggle:focus-visible {
+  outline: var(--camon-stroke-2) solid var(--camon-color-ink);
+  outline-offset: 2px;
+}
+
+/* 화면에서만 감추고 스크린리더에는 남긴다 — display: none으로 지우면 버튼의 이름이 사라진다. */
+.landing__demo-toggle-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing__demo-toggle {
+    /* 스프라이트 애니메이션이 꺼지면 말풍선이 제자리에 서므로 버튼도 같이 세운다. */
+    transition: none;
+    animation: none;
+  }
 }
 
 .landing__actions {
