@@ -26,6 +26,7 @@ interface FetchObjectGameProps {
   myNickname: string;
   /** 입장 순서대로의 participantId — 자리 배치와 색을 대기방과 똑같이 맞추는 기준 */
   joinOrder: string[];
+  participantColorIndexById: ReadonlyMap<string, number>;
   onReportSuccess: (
     elapsedMs: number,
     result: DetectionResult,
@@ -45,6 +46,7 @@ export function FetchObjectGame({
   state,
   myNickname,
   joinOrder,
+  participantColorIndexById,
   onReportSuccess,
   submissionError,
   onLeave,
@@ -172,7 +174,10 @@ export function FetchObjectGame({
   const rightSeats = seats.filter((_, i) => i % 2 === 1);
   const colorOf = (identity: string) => {
     const index = joinOrder.indexOf(identity);
-    return ((index < 0 ? seats.findIndex((s) => s.identity === identity) : index) % 4) + 1;
+    return (
+      participantColorIndexById.get(identity) ??
+      ((index < 0 ? seats.findIndex((s) => s.identity === identity) : index) % 4) + 1
+    );
   };
 
   const trackByIdentity = new Map(tracks.map((t) => [t.participant.identity, t]));

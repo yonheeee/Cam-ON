@@ -12,6 +12,7 @@ interface FetchCoursePanelProps {
   nicknameById: Map<string, string>;
   /** 입장 순서대로의 participantId. 대기방에서 배정된 색·자리를 그대로 이어받는다. */
   joinOrder: string[];
+  participantColorIndexById: ReadonlyMap<string, number>;
   onLeave: () => void;
 }
 
@@ -22,6 +23,7 @@ export function FetchCoursePanel({
   accessToken,
   nicknameById,
   joinOrder,
+  participantColorIndexById,
   onLeave,
 }: FetchCoursePanelProps) {
   const { localParticipant } = useLocalParticipant();
@@ -68,6 +70,7 @@ export function FetchCoursePanel({
       state={state}
       myNickname={myNickname}
       joinOrder={joinOrder}
+      participantColorIndexById={participantColorIndexById}
       onReportSuccess={(_, result) =>
         submit(result.confidence, result.targetScore ?? undefined)
       }

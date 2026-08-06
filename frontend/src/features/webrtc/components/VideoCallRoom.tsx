@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { LiveKitRoom, useParticipants } from '@livekit/components-react';
 import { VoiceVolumeProvider } from '../../sound/context/VoiceVolumeProvider';
@@ -232,6 +232,23 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
   const session = activeSession ?? recoveredSession;
   // 종합 결과 payload에는 participantId만 있어서 이름을 붙이려면 방 스냅샷이 필요하다.
   const [participants, setParticipants] = useState<ParticipantResponse[]>([]);
+  const participantColorCacheRef = useRef<Map<string, number>>(new Map());
+  const participantColorIndexById = useMemo(
+    () => {
+      const next = new Map(participantColorCacheRef.current);
+      const used = new Set(next.values());
+      for (const [index, participant] of participants.entries()) {
+        if (next.has(participant.participantId)) continue;
+        const available = [1, 2, 3, 4].find((colorIndex) => !used.has(colorIndex));
+        const colorIndex = available ?? (index % 4) + 1;
+        next.set(participant.participantId, colorIndex);
+        used.add(colorIndex);
+      }
+      participantColorCacheRef.current = next;
+      return next;
+    },
+    [participants],
+  );
   // 중간 결과의 "다음 세트가 무슨 게임인지"와 "SET n / 총 세트"를 그리려면 코스 구성이 필요하다.
   const [courseItems, setCourseItems] = useState<CourseItem[]>([]);
   // 인터미션의 "바로 시작"은 방장 전용 — 게임 도중 방장이 바뀔 수 있어(연쇄 위임) 스냅샷을
@@ -473,6 +490,7 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
           onLeave={onLeave}
           chatMessages={messages}
           onSendChat={sendMessage}
+          participantColorIndexById={participantColorIndexById}
         />
       )}
 
@@ -486,6 +504,7 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
           accessToken={accessToken}
           onActiveChange={(active) => setBetweenGames(!active)}
           onLeave={onLeave}
+          participantColorIndexById={participantColorIndexById}
         />
       )}
       {/* 코스가 연 물건 가져오기 — 서버 주도 진행(round:start/end를 STOMP로 수신). */}
@@ -496,6 +515,7 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
           accessToken={accessToken}
           nicknameById={nicknameById}
           joinOrder={participants.map((participant) => participant.participantId)}
+          participantColorIndexById={participantColorIndexById}
           onLeave={onLeave}
         />
       )}
@@ -512,6 +532,7 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
           accessToken={accessToken}
           onActiveChange={(active) => setBetweenGames(!active)}
           onLeave={onLeave}
+          participantColorIndexById={participantColorIndexById}
         />
       )}
 
@@ -529,6 +550,7 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
           secondsLeft={secondsLeft}
           onNext={() => void startNextSet()}
           starting={advancing}
+          participantColorIndexById={participantColorIndexById}
         />
       )}
 
@@ -573,6 +595,7 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
           returning={returning}
           returnError={returnError}
           onLeave={onLeave}
+          participantColorIndexById={participantColorIndexById}
         />
       )}
     </>
