@@ -8,7 +8,6 @@ import { useSpeakingIdentities } from '../../webrtc/hooks/useSpeakingIdentities'
 import { ParticipantAudioControl } from '../../webrtc/components/ParticipantAudioControl';
 import { PixelConfirmModal } from '../../system/components/PixelConfirmModal';
 import { roomApi, RoomApiError } from '../api/roomApi';
-import { playerColorIndex, playerTextColor } from '../lib/playerColor';
 import { SettingsModal } from './SettingsModal';
 import { StartPreflightModal } from './StartPreflightModal';
 import { useRoomLobby } from '../hooks/useRoomLobby';
@@ -48,8 +47,6 @@ interface LobbyScreenProps {
   onLeave: () => void;
   chatMessages: ChatMessage[];
   onSendChat: (text: string) => void;
-  /** 방 입장 때 정해진 참가자 고유색 순서. 중간 이탈 뒤에도 기존 색을 유지한다. */
-  joinOrder: string[];
 }
 
 // 카메라를 끈 채로 게임에 들어가면 되돌릴 방법이 없다 — 게임 화면에는 카메라 토글이 없고
@@ -79,7 +76,6 @@ export function LobbyScreen({
   onLeave,
   chatMessages,
   onSendChat,
-  joinOrder,
 }: LobbyScreenProps) {
   const { room, error, toggleReady, kicked } = useRoomLobby(roomId, accessToken, participantId);
   // 토스트는 Figma `Shared / Toast`의 Type에 대응한다 (code/link 복사 = 체크, 방장 위임 = 왕관)
@@ -133,10 +129,8 @@ export function LobbyScreen({
   // 타일 map 안에서 isHost가 "이 타일 주인이 방장인가"로 섀도잉되므로, "내가 방장인가"는 별칭으로 들고 간다.
   const amHost = isHost;
   // 타일 테두리·표시에 쓸 참가자 정보 (LiveKit identity == participantId)
-  const currentParticipantIds = (room?.participants ?? []).map((p) => p.participantId);
-  const effectiveJoinOrder = joinOrder.length > 0 ? joinOrder : currentParticipantIds;
   const infoByIdentity = new Map(
-    (room?.participants ?? []).map((p) => [
+    (room?.participants ?? []).map((p, index) => [
       p.participantId,
       {
         nickname: p.nickname,
@@ -144,7 +138,7 @@ export function LobbyScreen({
         isHost: p.participantId === room?.hostParticipantId,
         offline: p.connectionStatus === 'DISCONNECTED',
         inResult: p.inLobby === false,
-        colorIndex: playerColorIndex(p.participantId, effectiveJoinOrder, currentParticipantIds),
+        colorIndex: (index % 4) + 1,
       },
     ]),
   );
@@ -154,7 +148,7 @@ export function LobbyScreen({
   // 맞춰 재정렬해 전원이 같은 자리 배치를 보게 한다. 타일 색(colorIndex)도 같은 순서를 쓰므로
   // 자리와 색이 함께 고정된다. 스냅샷에 아직 반영 안 된 트랙은 뒤로 보낸다.
   const joinOrderByIdentity = new Map(
-    effectiveJoinOrder.map((id, index) => [id, index]),
+    (room?.participants ?? []).map((p, index) => [p.participantId, index]),
   );
   const maxPlayers = room?.maxPlayers ?? 0;
   // 타일은 방 정원(maxPlayers)을 절대 넘지 않아야 한다. LiveKit 트랙(미디어 실제)과 서버
@@ -183,9 +177,9 @@ export function LobbyScreen({
   // 채팅 닉네임에 입힐 플레이어 대표색 (데이터 채널 payload에는 닉네임만 있어서 닉네임 기준 매핑).
   // 크림 배경 위 글자라서 원색이 아니라 --pap-player-N-text(읽히도록 보정한 값)를 쓴다.
   const colorByNickname = new Map(
-    (room?.participants ?? []).map((p) => [
+    (room?.participants ?? []).map((p, index) => [
       p.nickname,
-      playerTextColor(p.participantId, effectiveJoinOrder, currentParticipantIds),
+      `var(--pap-player-${(index % 4) + 1}-text)`,
     ]),
   );
 

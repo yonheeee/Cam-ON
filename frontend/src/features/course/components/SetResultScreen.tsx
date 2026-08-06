@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { playerColor } from '../../room/lib/playerColor';
+import type { GameName } from '../api/courseApi';
 import './SetResultScreen.css';
 
 // 코스의 게임 한 세트가 끝날 때마다 뜨는 중간 결과.
@@ -27,10 +27,11 @@ interface SetResultScreenProps {
   totalSets: number;
   setResult: SetResultRow[];
   courseRanking: CourseRankRow[];
+  /** 방금 끝난 게임. 닌자는 게임 포인트가 없어 코스 누적 점수만 표시한다. */
+  gameName: GameName | null;
   /** participantId → 닉네임. 이벤트 payload에는 id만 있고, 이름은 그릴 때 조회한다 —
    *  이벤트 수신 시점에 문자열로 박아두면 그때 아직 모르던 사람(늦게 입장 등)이 영영 "알 수 없음"이 된다 */
   nicknameById: Map<string, string>;
-  joinOrder: string[];
   /** 다음 세트 게임의 표시용 제목. null이면 다음 세트가 없다 */
   nextGameLabel: string | null;
   /** 내 participantId — 내 줄을 강조하려고 */
@@ -49,11 +50,20 @@ interface SetResultScreenProps {
   starting?: boolean;
 }
 
+// 순위 순서대로 도는 플레이어 대표색. 등수 = 색이라 표(막대·점수·누적 카드)가 한눈에 이어진다.
+const RANK_COLORS = [
+  'var(--pap-festival-coral)',
+  'var(--pap-play-yellow)',
+  'var(--pap-arcade-teal)',
+  'var(--pap-lavender)',
+];
+
 // 점수 막대 칸 수. 1등이 꽉 차고 나머지는 1등 대비 비율로 채운다(절대 점수는 오른쪽 숫자가 말해준다).
 const BAR_CELLS = 18;
 const CELL_FILL_DURATION_MS = 160;
 const CELL_STAGGER_MS = 45;
 const ROW_STAGGER_MS = 70;
+const COURSE_POINTS_BY_RANK = [5, 3, 2, 1] as const;
 
 const DELTA_MARK: Record<CourseRankRow['delta'], string> = {
   up: '▲',
@@ -66,8 +76,8 @@ export function SetResultScreen({
   totalSets,
   setResult,
   courseRanking,
+  gameName,
   nicknameById,
-  joinOrder,
   nextGameLabel,
   participantId,
   isHost,
@@ -115,10 +125,6 @@ export function SetResultScreen({
   };
   // 끝내 이름을 모르는 경우는 내가 들어오기 전에 나간 사람뿐이다.
   const nicknameOf = (id: string) => nicknameById.get(id) ?? '나간 참가자';
-  const fallbackOrder = [
-    ...new Set([...setResult, ...courseRanking].map((row) => row.participantId)),
-  ].sort();
-  const colorOf = (id: string) => playerColor(id, joinOrder, fallbackOrder);
 
   return (
     <div className="set-result">
@@ -131,6 +137,8 @@ export function SetResultScreen({
               const filled = filledCellsFor(row.score);
               const revealProgress = revealProgressFor(index, filled);
               const displayedScore = Math.round(row.score * revealProgress);
+              const coursePoints = COURSE_POINTS_BY_RANK[row.rank - 1] ?? 0;
+              const showsGamePoints = gameName === 'FETCH_OBJECT' || gameName === 'CHARADES';
               return (
                 <li
                   key={row.participantId}
@@ -139,7 +147,7 @@ export function SetResultScreen({
                   }`}
                   style={
                     {
-                      '--c': colorOf(row.participantId),
+                      '--c': RANK_COLORS[index % RANK_COLORS.length],
                       '--row-index': index,
                     } as React.CSSProperties
                   }
@@ -162,7 +170,8 @@ export function SetResultScreen({
                       revealProgress === 1 ? ' set-result__score--settled' : ''
                     }`}
                   >
-                    +{displayedScore}점
+                    {showsGamePoints && <span>{displayedScore}p</span>}
+                    <span className="set-result__course-points">+{coursePoints}점</span>
                   </span>
                 </li>
               );
@@ -176,7 +185,7 @@ export function SetResultScreen({
             <h2 className="set-result__deck-title">누적 순위</h2>
             <p className="set-result__deck-sub">순위 점수(5·3·2·1)를 누적한 현재 순위예요.</p>
             <ol className="set-result__cards">
-              {courseRanking.map((row) => {
+              {courseRanking.map((row, index) => {
                 const setRowIndex = setResult.findIndex(
                   (setRow) => setRow.participantId === row.participantId,
                 );
@@ -194,7 +203,7 @@ export function SetResultScreen({
                       row.participantId === participantId ? ' set-result__card--me' : ''
                     }`}
                     style={
-                      { '--c': colorOf(row.participantId) } as React.CSSProperties
+                      { '--c': RANK_COLORS[index % RANK_COLORS.length] } as React.CSSProperties
                     }
                   >
                     <span className="set-result__card-head">

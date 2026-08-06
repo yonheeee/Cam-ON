@@ -9,7 +9,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { GesturePanel } from '../../gesture/components/GesturePanel';
 import { useGestureBoardStore } from '../../gesture/store/gestureBoardStore';
 import { RoomTopBar } from '../../room/components/RoomTopBar';
-import { playerColorIndex } from '../../room/lib/playerColor';
 import { useSpeakingIdentities } from '../../webrtc/hooks/useSpeakingIdentities';
 import { ParticipantAudioControl } from '../../webrtc/components/ParticipantAudioControl';
 import { useAnnouncementSound } from '../../sound/hooks/useAnnouncementSound';
@@ -76,7 +75,6 @@ interface NinjaBattleScreenProps {
   roomId: string;
   gameId: number;
   accessToken: string;
-  joinOrder: string[];
   onActiveChange: (active: boolean) => void;
   /** 로고 클릭 → 확인 팝업 → 방 나가기 (확정안: 방 안에서 로고는 항상 확인 팝업 경유) */
   onLeave: () => void;
@@ -86,7 +84,6 @@ export function NinjaBattleScreen({
   roomId,
   gameId,
   accessToken,
-  joinOrder,
   onActiveChange,
   onLeave,
 }: NinjaBattleScreenProps) {
@@ -164,21 +161,13 @@ export function NinjaBattleScreen({
   const tileRefs = useRef(new Map<string, HTMLDivElement>());
   const [cinematicFocus, setCinematicFocus] = useState<{ x: number; y: number } | null>(null);
 
-  // 자리와 플레이어 색 모두 대기방의 입장 순서를 그대로 사용한다. 아직 스냅샷을 못 받은 짧은
-  // 구간에만 identity 정렬로 폴백해 모든 클라이언트가 같은 결과를 보게 한다.
-  const fallbackOrder = useMemo(
-    () => participants.map((participant) => participant.identity).sort(),
+  // 타일 순서와 플레이어 색은 모든 참가자 화면에서 같아야 한다(내 화면에선 2P인 사람이 남의 화면에선
+  // 3P면 색으로 소통이 안 된다). LiveKit participants 배열 순서는 클라이언트마다 다를 수 있어서
+  // identity 문자열로 정렬해 결정적으로 만든다.
+  const seats = useMemo(
+    () => [...participants].sort((a, b) => a.identity.localeCompare(b.identity)),
     [participants],
   );
-  const seats = useMemo(() => {
-    const orderOf = (identity: string) => {
-      const joinedIndex = joinOrder.indexOf(identity);
-      return joinedIndex >= 0 ? joinedIndex : fallbackOrder.indexOf(identity);
-    };
-    return [...participants].sort(
-      (a, b) => orderOf(a.identity) - orderOf(b.identity) || a.identity.localeCompare(b.identity),
-    );
-  }, [participants, joinOrder, fallbackOrder]);
 
   useEffect(() => {
     for (const participant of participants) {
@@ -320,7 +309,7 @@ export function NinjaBattleScreen({
   // 이펙트는 맞은 사람 타일에서 재생한다 — 데미지가 "누구에게" 들어갔는지가 화면에서 바로 읽힌다.
   // 진동은 스킬마다 다르다(단발 타격은 1회, 연발/굽이침은 이펙트가 끝날 때까지 반복).
 
-  const renderTile = (id: string) => {
+  const renderTile = (id: string, seat: number) => {
     const trackRef = trackByIdentity.get(id);
     // HP는 데미지가 남은 체력보다 크면 음수로 내려온다 — 화면엔 0 미만을 보여주지 않는다.
     const value = Math.max(0, Math.min(MAX_HP, hp[id] ?? MAX_HP));
@@ -340,7 +329,7 @@ export function NinjaBattleScreen({
           if (node) tileRefs.current.set(id, node);
           else tileRefs.current.delete(id);
         }}
-        className={`ninja-tile ninja-tile--p${playerColorIndex(id, joinOrder, fallbackOrder)}${dead ? ' ninja-tile--dead' : ''}${
+        className={`ninja-tile ninja-tile--p${(seat % 4) + 1}${dead ? ' ninja-tile--dead' : ''}${
           cinematicPhase === 'focus' && effectTargetId === id ? ' ninja-tile--cinematic-target' : ''
         }${!dead && speakingIds.has(id) ? ' ninja-tile--speaking' : ''}`}
       >
@@ -453,7 +442,7 @@ export function NinjaBattleScreen({
         )}
       <div className="ninja-screen__body">
         <section className="ninja-screen__col ninja-screen__col--left">
-          {leftSeats.map((p) => renderTile(p.identity))}
+          {leftSeats.map((p) => renderTile(p.identity, seats.indexOf(p)))}
         </section>
 
         {/* 중앙 — 타이머 + 따라할 인술. 게임 중 시선이 머무는 곳이라 여기만 보면 된다. */}
@@ -479,13 +468,12 @@ export function NinjaBattleScreen({
               <div className="ninja-board__body ninja-board__body--intermission">
                 {roundResult && roundResult.length > 0 && (
                   <>
-                    <p className="ninja-board__label">ROUND {round} 결과</p>
+                    <p className="ninja-board__label">대전 종료</p>
                     <ol className="ninja-result">
                       {roundResult.map((entry) => (
                         <li key={entry.token} className={entry.token === myId ? 'ninja-result--me' : ''}>
                           <span className="ninja-result__rank pap-pixel-title">{entry.rank}</span>
                           <span className="ninja-result__name">{nicknameOf(entry.token)}</span>
-                          <span className="ninja-result__pt pap-pixel-title">+{entry.points}</span>
                         </li>
                       ))}
                     </ol>
@@ -602,7 +590,7 @@ export function NinjaBattleScreen({
         </section>
 
         <section className="ninja-screen__col ninja-screen__col--right">
-          {rightSeats.map((p) => renderTile(p.identity))}
+          {rightSeats.map((p) => renderTile(p.identity, seats.indexOf(p)))}
         </section>
       </div>
 

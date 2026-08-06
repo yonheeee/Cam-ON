@@ -335,7 +335,7 @@ export function FetchObjectGame({
                   <span className="fetch-slot__no pap-pixel-title">{index + 1}</span>
                   <span className="fetch-slot__who">{success ? success.nickname : ''}</span>
                   <span className="fetch-slot__time pap-pixel-title">
-                    {success ? `+${success.score}점` : '--'}
+                    {success ? `+${success.score}p` : '--'}
                   </span>
                 </li>
               );

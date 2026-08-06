@@ -7,7 +7,7 @@
   z-index: 4;
   /* 강퇴/공격 버튼 같은 타일 안 클릭 대상을 가리지 않는다 */
   pointer-events: none;
-  border: var(--pap-stroke-panel, 3px) solid var(--speaking-color, var(--pap-success-lime));
+  border: var(--pap-stroke-panel, 3px) solid var(--pap-success-lime);
   border-radius: inherit;
   animation: speaking-indicator-frame 620ms steps(1, end) infinite alternate;
 }
@@ -23,14 +23,14 @@
   height: 12px;
   padding: 3px 5px;
   background: var(--pap-ink);
-  border: 2px solid var(--speaking-color, var(--pap-success-lime));
+  border: 2px solid var(--pap-success-lime);
   border-radius: 3px;
 }
 
 .speaking-indicator__bar {
   width: 3px;
   height: 35%;
-  background: var(--speaking-color, var(--pap-success-lime));
+  background: var(--pap-success-lime);
   /* 픽셀 UI라 부드러운 보간 대신 계단식으로 튀게 한다 */
   animation: speaking-indicator-bar 540ms steps(2, end) infinite alternate;
 }
@@ -55,10 +55,10 @@
 
 @keyframes speaking-indicator-frame {
   from {
-    border-color: var(--speaking-color, var(--pap-success-lime));
+    border-color: var(--pap-success-lime);
   }
   to {
-    border-color: color-mix(in srgb, var(--speaking-color, var(--pap-success-lime)) 70%, white);
+    border-color: var(--pap-success-teal);
   }
 }
 

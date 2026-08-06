@@ -216,19 +216,6 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
   const session = activeSession ?? recoveredSession;
   // 종합 결과 payload에는 participantId만 있어서 이름을 붙이려면 방 스냅샷이 필요하다.
   const [participants, setParticipants] = useState<ParticipantResponse[]>([]);
-  // 참가자가 중간에 나가도 뒤 사람의 고유색이 앞으로 당겨지지 않도록, 이 화면에서 한 번 본
-  // 입장 순서는 방을 나갈 때까지 보존한다. 서버 스냅샷은 joinedAt 순서로 내려온다.
-  const [joinOrder, setJoinOrder] = useState<string[]>([]);
-  useEffect(() => {
-    if (participants.length === 0) return;
-    setJoinOrder((previous) => {
-      const next = [...previous];
-      for (const participant of participants) {
-        if (!next.includes(participant.participantId)) next.push(participant.participantId);
-      }
-      return next.length === previous.length ? previous : next;
-    });
-  }, [participants]);
   // 중간 결과의 "다음 세트가 무슨 게임인지"와 "SET n / 총 세트"를 그리려면 코스 구성이 필요하다.
   const [courseItems, setCourseItems] = useState<CourseItem[]>([]);
   // 인터미션의 "바로 시작"은 방장 전용 — 게임 도중 방장이 바뀔 수 있어(연쇄 위임) 스냅샷을
@@ -440,6 +427,9 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
   const nextItem = finishedSet
     ? courseItems.find((item) => item.idx === finishedSet.sessionSeq + 1)
     : undefined;
+  const finishedGameName = finishedSet
+    ? (courseItems.find((item) => item.idx === finishedSet.sessionSeq)?.gameName ?? null)
+    : null;
   // 게임이 열리기 전 대기(코스 첫 게임 앞) 또는 게임 사이 대기. 이 동안엔 대기방을 그리지 않고
   // 룰 설명 화면이 자리를 차지한다 — 첫 게임 앞에는 아직 열린 세션이 없어(inGame=false) 이
   // 조건이 없으면 대기방이 그대로 보인다.
@@ -470,7 +460,6 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
           onLeave={onLeave}
           chatMessages={messages}
           onSendChat={sendMessage}
-          joinOrder={joinOrder}
         />
       )}
 
@@ -482,7 +471,6 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
           roomId={roomId}
           gameId={session.gameId}
           accessToken={accessToken}
-          joinOrder={joinOrder}
           onActiveChange={(active) => setBetweenGames(!active)}
           onLeave={onLeave}
         />
@@ -494,7 +482,7 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
           gameId={session.gameId}
           accessToken={accessToken}
           nicknameById={nicknameById}
-          joinOrder={joinOrder}
+          joinOrder={participants.map((participant) => participant.participantId)}
           onLeave={onLeave}
         />
       )}
@@ -509,7 +497,6 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
           roomId={roomId}
           gameId={session.gameId}
           accessToken={accessToken}
-          joinOrder={joinOrder}
           onActiveChange={(active) => setBetweenGames(!active)}
           onLeave={onLeave}
         />
@@ -522,8 +509,8 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
           totalSets={courseItems.length || finishedSet.sessionSeq}
           setResult={finishedSet.setResult}
           courseRanking={finishedSet.courseRanking}
+          gameName={finishedGameName}
           nicknameById={nicknameById}
-          joinOrder={joinOrder}
           nextGameLabel={nextItem ? GAME_LABELS[nextItem.gameName] : null}
           participantId={participantId}
           isHost={hostParticipantId === participantId}
@@ -568,7 +555,6 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
           ranking={finished.ranking}
           totalSessions={finished.totalSessions}
           nicknameById={nicknameById}
-          joinOrder={joinOrder}
           participantId={participantId}
           returnedParticipantIds={returnedParticipantIds}
           onReturnToLobby={() => void returnToLobby()}

@@ -8,6 +8,7 @@ export function SetResultPreview() {
       setIndex={1}
       totalSets={3}
       participantId="p2"
+      gameName="FETCH_OBJECT"
       setResult={[
         { participantId: 'p1', score: 100, rank: 1 },
         { participantId: 'p2', score: 70, rank: 2 },
@@ -28,7 +29,6 @@ export function SetResultPreview() {
           ['p4', '서연'],
         ])
       }
-      joinOrder={['p1', 'p2', 'p3', 'p4']}
       nextGameLabel={GAME_LABELS.NINJA}
       isHost
       secondsLeft={7}

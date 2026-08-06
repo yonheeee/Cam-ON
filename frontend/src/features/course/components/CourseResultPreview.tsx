@@ -25,7 +25,6 @@ export function CourseResultPreview() {
         ranking={RANKING}
         totalSessions={3}
         nicknameById={NICKNAMES}
-        joinOrder={['p1', 'p2', 'p3', 'p4']}
         participantId="p2"
         // 먼저 대기방으로 간 사람의 "대기방으로 갔어요" 표시까지 미리보기에 담는다
         returnedParticipantIds={new Set(['p4'])}
