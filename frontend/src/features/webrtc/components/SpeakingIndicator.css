@@ -2,12 +2,14 @@
  * 색은 플레이어 대표색(1~4P)과 겹치지 않는 라임 하나로 고정한다 — 좌석색과 같은 계열을 쓰면
  * "누가 말하는가"가 "몇 번 플레이어인가"와 섞여 읽힌다. */
 .speaking-indicator {
+  --speaking-color: var(--pap-success-lime);
+
   position: absolute;
   inset: 0;
   z-index: 4;
   /* 강퇴/공격 버튼 같은 타일 안 클릭 대상을 가리지 않는다 */
   pointer-events: none;
-  border: var(--pap-stroke-panel, 3px) solid var(--pap-success-lime);
+  border: var(--pap-stroke-panel, 3px) solid var(--speaking-color);
   border-radius: inherit;
   animation: speaking-indicator-frame 620ms steps(1, end) infinite alternate;
 }
@@ -23,14 +25,14 @@
   height: 12px;
   padding: 3px 5px;
   background: var(--pap-ink);
-  border: 2px solid var(--pap-success-lime);
+  border: 2px solid var(--speaking-color);
   border-radius: 3px;
 }
 
 .speaking-indicator__bar {
   width: 3px;
   height: 35%;
-  background: var(--pap-success-lime);
+  background: var(--speaking-color);
   /* 픽셀 UI라 부드러운 보간 대신 계단식으로 튀게 한다 */
   animation: speaking-indicator-bar 540ms steps(2, end) infinite alternate;
 }
@@ -55,10 +57,10 @@
 
 @keyframes speaking-indicator-frame {
   from {
-    border-color: var(--pap-success-lime);
+    border-color: color-mix(in srgb, var(--speaking-color) 82%, white);
   }
   to {
-    border-color: var(--pap-success-teal);
+    border-color: var(--speaking-color);
   }
 }
 

@@ -119,29 +119,33 @@
   flex: 1;
   height: calc(var(--u) * 1.1);
   background: rgb(255 255 255 / 0.08);
+  opacity: 0;
+  transform: scaleX(0.15);
   transform-origin: left center;
+  transition:
+    opacity 90ms steps(2, end),
+    transform 90ms steps(2, end);
+}
+
+.set-result__cell--revealed {
+  opacity: 1;
+  transform: scaleX(1);
 }
 
 .set-result__cell--on {
   background: var(--c);
-  animation: set-result-cell-fill 160ms steps(2, end) both;
-  animation-delay: calc(var(--row-index) * 70ms + var(--cell-index) * 45ms);
 }
 
-@keyframes set-result-cell-fill {
-  from {
-    background: rgb(255 255 255 / 0.08);
-    filter: brightness(1.8);
-    opacity: 0.35;
-    transform: scaleX(0.15);
-  }
+.set-result__cell--off {
+  background: rgb(255 255 255 / 0.08);
+}
 
-  to {
-    background: var(--c);
-    filter: brightness(1);
-    opacity: 1;
-    transform: scaleX(1);
-  }
+/* 칸 공개와 숫자 카운트가 동일한 JS 시간축을 사용한다. CSS 지연 애니메이션을 별도로
+   실행하지 않아 아래 행이나 동점 행에서도 중간 상태가 남거나 한꺼번에 튀지 않는다. */
+.set-result__row--settled .set-result__cell--on {
+  background: var(--c);
+  opacity: 1;
+  transform: scaleX(1);
 }
 
 .set-result__score {
@@ -176,9 +180,11 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .set-result__cell--on,
+  .set-result__cell,
+  .set-result__racer,
   .set-result__score--settled {
     animation: none;
+    transition: none;
   }
 }
 
@@ -211,61 +217,139 @@
   color: var(--pap-white);
 }
 
-.set-result__cards {
-  display: grid;
+.set-result__deck-sub {
+  margin: calc(var(--u) * 0.2) 0 0;
+  font-size: calc(var(--u) * 0.72);
+  line-height: 1.3;
+  color: rgb(255 253 245 / 0.7);
+}
+
+.set-result__race {
+  position: relative;
   flex: none;
   min-height: 0;
-  height: calc(var(--u) * 6.4);
-  grid-auto-columns: 1fr;
-  grid-auto-flow: column;
-  gap: calc(var(--u) * 0.8);
+  height: calc(var(--u) * 7.1);
   margin: calc(var(--u) * 0.7) 0 0;
   padding: 0;
+  border-top: 1px solid rgb(255 253 245 / 0.18);
+  border-bottom: 1px solid rgb(255 253 245 / 0.18);
+  background:
+    repeating-linear-gradient(
+      90deg,
+      transparent 0,
+      transparent calc(var(--u) * 2.6),
+      rgb(255 253 245 / 0.055) calc(var(--u) * 2.6),
+      rgb(255 253 245 / 0.055) calc(var(--u) * 2.7)
+    ),
+    rgb(255 255 255 / 0.025);
   list-style: none;
-}
-
-.set-result__card {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: calc(var(--u) * 0.2);
-  padding: calc(var(--u) * 0.25) calc(var(--u) * 0.6);
-  border: 2px solid var(--c);
-  border-radius: var(--pap-radius);
-  background: rgb(255 255 255 / 0.04);
-}
-
-.set-result__card--me {
-  background: rgb(255 255 255 / 0.12);
-}
-
-.set-result__card-head {
-  display: flex;
-  align-items: baseline;
-  gap: calc(var(--u) * 0.5);
-}
-
-.set-result__card-rank {
-  font-family: var(--pap-font-pixel);
-  font-size: calc(var(--u) * 0.8);
-  color: var(--c);
-}
-
-.set-result__card-name {
-  font-size: calc(var(--u) * 0.85);
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--pap-white);
 }
 
-.set-result__card-score {
+.set-result__racer {
+  position: absolute;
+  z-index: 2;
+  top: 50%;
+  left: var(--race-position);
+  display: grid;
+  width: calc(var(--u) * 7.7);
+  justify-items: center;
+  color: var(--c);
+  transform: translate(-50%, -50%);
+  animation: set-result-racer-enter 680ms cubic-bezier(0.2, 0.82, 0.25, 1) both;
+  animation-delay: var(--race-delay);
+}
+
+.set-result__place {
+  position: relative;
+  margin-bottom: calc(var(--u) * 0.34);
+  padding: calc(var(--u) * 0.24) calc(var(--u) * 0.55);
+  border: 1px solid currentcolor;
+  background: #11162d;
+  font-family: var(--pap-font-pixel);
+  font-size: calc(var(--u) * 0.76);
+  line-height: 1;
+}
+
+.set-result__place::after {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  width: calc(var(--u) * 0.35);
+  height: calc(var(--u) * 0.35);
+  border-right: 1px solid currentcolor;
+  border-bottom: 1px solid currentcolor;
+  background: #11162d;
+  content: '';
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+
+.set-result__flag {
+  position: relative;
+  width: calc(var(--u) * 2.7);
+  height: calc(var(--u) * 2.75);
+}
+
+.set-result__flag img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+
+.set-result__racer-info {
+  position: relative;
+  display: flex;
+  width: 100%;
+  align-items: baseline;
+  justify-content: center;
+  gap: calc(var(--u) * 0.35);
+  font-size: calc(var(--u) * 0.76);
+  text-align: center;
+  white-space: nowrap;
+}
+
+.set-result__racer-info strong {
+  max-width: calc(var(--u) * 3.6);
+  overflow: hidden;
+  color: var(--pap-white);
+  font-weight: 400;
+  text-overflow: ellipsis;
+}
+
+.set-result__racer-info > span {
   display: flex;
   align-items: center;
-  gap: calc(var(--u) * 0.4);
-  font-family: var(--pap-font-pixel);
-  font-size: calc(var(--u) * 0.95);
+  gap: calc(var(--u) * 0.18);
   color: var(--c);
+  font-family: var(--pap-font-pixel);
+}
+
+.set-result__finish {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  right: calc(var(--u) * 0.55);
+  bottom: 0;
+  width: calc(var(--u) * 1.45);
+  background-color: rgb(255 253 245 / 0.1);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' shape-rendering='crispEdges'%3E%3Cpath fill='%23fffdf5' d='M0 0h6v6H0zM6 6h6v6H6z'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: calc(var(--u) * 0.72) calc(var(--u) * 0.72);
+  opacity: 0.65;
+}
+
+@keyframes set-result-racer-enter {
+  from {
+    opacity: 0;
+    transform: translate(calc(-50% - var(--u) * 4), -50%);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%);
+  }
 }
 
 .set-result__delta {
@@ -329,6 +413,40 @@
   margin: calc(var(--u) * 0.8) 0 0;
   font-size: calc(var(--u) * 0.78);
   opacity: 0.7;
+}
+
+.set-result__next--final .set-result__next-game {
+  margin-bottom: calc(var(--u) * 0.55);
+}
+
+.set-result__final-status {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 0.8);
+  min-height: calc(var(--u) * 3.35);
+  padding: calc(var(--u) * 0.65) calc(var(--u) * 0.9);
+  border: 1px solid rgb(235 168 70 / 0.58);
+  background: rgb(235 168 70 / 0.08);
+  margin-bottom: auto;
+}
+
+.set-result__final-copy {
+  display: grid;
+  gap: calc(var(--u) * 0.25);
+  min-width: 0;
+}
+
+.set-result__final-copy strong {
+  color: var(--pap-white);
+  font-family: var(--pap-font-pixel);
+  font-size: calc(var(--u) * 0.78);
+  font-weight: 400;
+}
+
+.set-result__final-copy small {
+  color: rgb(255 253 245 / 0.62);
+  font-size: calc(var(--u) * 0.58);
+  line-height: 1.35;
 }
 
 .set-result__next-timer {

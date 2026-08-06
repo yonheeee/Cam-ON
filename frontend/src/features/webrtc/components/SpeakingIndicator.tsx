@@ -1,7 +1,9 @@
 import './SpeakingIndicator.css';
+import type { CSSProperties } from 'react';
 
 interface SpeakingIndicatorProps {
   active: boolean;
+  color?: string;
 }
 
 // 말하는 사람 표시 — 캠 테두리를 라임색으로 켜고 상단 가운데에 파형 배지를 얹는다.
@@ -13,16 +15,15 @@ interface SpeakingIndicatorProps {
 //
 // 위치가 상단 가운데인 이유: 좌상단(READY 배지·닉네임 스티커)과 우상단(왕관)은 이미 쓰이고
 // 하단은 이름 바가 차지한다 — 여섯 화면 모두에서 비어 있는 자리가 여기뿐이다.
-export function SpeakingIndicator({ active }: SpeakingIndicatorProps) {
+export function SpeakingIndicator({ active, color }: SpeakingIndicatorProps) {
   if (!active) return null;
 
   return (
-    <span className="speaking-indicator" title="말하는 중" aria-hidden="true">
-      <span className="speaking-indicator__wave">
-        <i className="speaking-indicator__bar" />
-        <i className="speaking-indicator__bar" />
-        <i className="speaking-indicator__bar" />
-      </span>
-    </span>
+    <span
+      className="speaking-indicator"
+      title="말하는 중"
+      aria-hidden="true"
+      style={color ? ({ '--speaking-color': color } as CSSProperties) : undefined}
+    />
   );
 }

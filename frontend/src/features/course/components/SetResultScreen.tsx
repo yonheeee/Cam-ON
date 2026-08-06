@@ -48,15 +48,12 @@ interface SetResultScreenProps {
   onNext: () => void;
   /** 요청을 보내고 다음 세트가 열리기를 기다리는 중 */
   starting?: boolean;
+  participantColorIndexById: ReadonlyMap<string, number>;
 }
 
 // 순위 순서대로 도는 플레이어 대표색. 등수 = 색이라 표(막대·점수·누적 카드)가 한눈에 이어진다.
-const RANK_COLORS = [
-  'var(--pap-festival-coral)',
-  'var(--pap-play-yellow)',
-  'var(--pap-arcade-teal)',
-  'var(--pap-lavender)',
-];
+const participantColor = (participantId: string, colors: ReadonlyMap<string, number>) =>
+  `var(--pap-player-${colors.get(participantId) ?? 1})`;
 
 // 점수 막대 칸 수. 1등이 꽉 차고 나머지는 1등 대비 비율로 채운다(절대 점수는 오른쪽 숫자가 말해준다).
 const BAR_CELLS = 18;
@@ -71,6 +68,14 @@ const DELTA_MARK: Record<CourseRankRow['delta'], string> = {
   same: '—',
 };
 
+const ORDINAL_LABEL = ['1st', '2nd', '3rd', '4th'];
+const RACE_FLAG_ASSET = [
+  '/assets/result/race-flag-teal.png',
+  '/assets/result/race-flag-coral.png',
+  '/assets/result/race-flag-yellow.png',
+  '/assets/result/race-flag-purple.png',
+];
+
 export function SetResultScreen({
   setIndex,
   totalSets,
@@ -84,6 +89,7 @@ export function SetResultScreen({
   secondsLeft,
   onNext,
   starting = false,
+  participantColorIndexById,
 }: SetResultScreenProps) {
   const topScore = Math.max(1, ...setResult.map((row) => row.score));
   const resultSignature = setResult
@@ -136,7 +142,13 @@ export function SetResultScreen({
             {setResult.map((row, index) => {
               const filled = filledCellsFor(row.score);
               const revealProgress = revealProgressFor(index, filled);
-              const displayedScore = Math.round(row.score * revealProgress);
+              const isRevealSettled = revealProgress >= 1;
+              // 막대와 숫자는 서로 다른 애니메이션 경로(CSS / requestAnimationFrame)를 쓴다.
+              // 반올림하면 마지막 칸이 아직 채워지는 중인데 숫자가 먼저 최종 점수에 도달할 수
+              // 있으므로, 진행 중에는 내림하고 완전히 끝난 순간에만 실제 점수를 표시한다.
+              const displayedScore = isRevealSettled
+                ? row.score
+                : Math.floor(row.score * revealProgress);
               const coursePoints = COURSE_POINTS_BY_RANK[row.rank - 1] ?? 0;
               const showsGamePoints = gameName === 'FETCH_OBJECT' || gameName === 'CHARADES';
               return (
@@ -144,30 +156,33 @@ export function SetResultScreen({
                   key={row.participantId}
                   className={`set-result__row${
                     row.participantId === participantId ? ' set-result__row--me' : ''
-                  }`}
+                  }${isRevealSettled ? ' set-result__row--settled' : ''}`}
                   style={
                     {
-                      '--c': RANK_COLORS[index % RANK_COLORS.length],
+                      '--c': participantColor(row.participantId, participantColorIndexById),
                       '--row-index': index,
                     } as React.CSSProperties
                   }
                 >
-                  <span className="set-result__rank">{String(row.rank).padStart(2, '0')}</span>
+                  <span className="set-result__rank">{row.rank}등</span>
                   <span className="set-result__name">{nicknameOf(row.participantId)}</span>
                   <span className="set-result__bar" aria-hidden>
                     {Array.from({ length: BAR_CELLS }, (_, cell) => (
                       <i
                         key={cell}
                         className={`set-result__cell${
-                          cell < filled ? ' set-result__cell--on' : ''
+                          cell < filled ? ' set-result__cell--on' : ' set-result__cell--off'
+                        }${
+                          revealElapsed >= index * ROW_STAGGER_MS + cell * CELL_STAGGER_MS
+                            ? ' set-result__cell--revealed'
+                            : ''
                         }`}
-                        style={{ '--cell-index': cell } as React.CSSProperties}
                       />
                     ))}
                   </span>
                   <span
                     className={`set-result__score${
-                      revealProgress === 1 ? ' set-result__score--settled' : ''
+                      isRevealSettled ? ' set-result__score--settled' : ''
                     }`}
                   >
                     {showsGamePoints && <span>{displayedScore}p</span>}
@@ -184,8 +199,10 @@ export function SetResultScreen({
           <div className="set-result__totals">
             <h2 className="set-result__deck-title">누적 순위</h2>
             <p className="set-result__deck-sub">순위 점수(5·3·2·1)를 누적한 현재 순위예요.</p>
-            <ol className="set-result__cards">
+            <ol className="set-result__race" aria-label="누적 순위 레이스">
               {courseRanking.map((row, index) => {
+                const participantColorIndex =
+                  participantColorIndexById.get(row.participantId) ?? 1;
                 const setRowIndex = setResult.findIndex(
                   (setRow) => setRow.participantId === row.participantId,
                 );
@@ -199,30 +216,45 @@ export function SetResultScreen({
                 return (
                   <li
                     key={row.participantId}
-                    className={`set-result__card${
-                      row.participantId === participantId ? ' set-result__card--me' : ''
-                    }`}
+                    className="set-result__racer"
                     style={
-                      { '--c': RANK_COLORS[index % RANK_COLORS.length] } as React.CSSProperties
+                      {
+                        '--c': participantColor(row.participantId, participantColorIndexById),
+                        '--race-position': `${
+                          13 + Math.max(0, courseRanking.length - 1 - index) * 23
+                        }%`,
+                        '--race-delay': `${120 + index * 90}ms`,
+                      } as React.CSSProperties
                     }
                   >
-                    <span className="set-result__card-head">
-                      <span className="set-result__card-rank">{row.rank}</span>
-                      <span className="set-result__card-name">{nicknameOf(row.participantId)}</span>
+                    <span className="set-result__place">{ORDINAL_LABEL[row.rank - 1] ?? `${row.rank}th`}</span>
+                    <span className="set-result__flag" aria-hidden>
+                      <img
+                        src={RACE_FLAG_ASSET[(participantColorIndex - 1) % RACE_FLAG_ASSET.length]}
+                        alt=""
+                      />
                     </span>
-                    <span className="set-result__card-score">
-                      {displayedTotal}점
-                      <i className={`set-result__delta set-result__delta--${row.delta}`}>
-                        {DELTA_MARK[row.delta]}
-                      </i>
+                    <span className="set-result__racer-info">
+                      <strong>{nicknameOf(row.participantId)}</strong>
+                      <span>
+                        {displayedTotal}점
+                        <i className={`set-result__delta set-result__delta--${row.delta}`}>
+                          {DELTA_MARK[row.delta]}
+                        </i>
+                      </span>
                     </span>
                   </li>
                 );
               })}
+              <li className="set-result__finish" aria-hidden />
             </ol>
           </div>
 
-          <div className="set-result__next">
+          <div
+            className={`set-result__next${
+              nextGameLabel === null ? ' set-result__next--final' : ''
+            }`}
+          >
             <div className="set-result__next-head">
               <span className="set-result__next-label">다음 세트</span>
               <span className="set-result__set-count">
@@ -234,7 +266,12 @@ export function SetResultScreen({
                 누른 뒤엔 다음 세트가 열릴 때까지(game:started) 준비 중 표시로 바뀐다.
                 마지막 세트였다면 넘길 곳이 없다 — 곧 종합 결과가 이 화면을 대신한다. */}
             {nextGameLabel === null ? (
-              <p className="set-result__next-wait">잠시 후 최종 결과가 나와요</p>
+              <div className="set-result__final-status" role="status">
+                <span className="set-result__final-copy">
+                  <strong>최종 결과를 집계하고 있어요</strong>
+                  <small>모든 세트의 점수를 합산하고 잠시 후 결과를 보여드려요.</small>
+                </span>
+              </div>
             ) : isHost ? (
               <button
                 type="button"

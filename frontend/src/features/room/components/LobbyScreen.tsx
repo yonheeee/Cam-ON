@@ -47,6 +47,7 @@ interface LobbyScreenProps {
   onLeave: () => void;
   chatMessages: ChatMessage[];
   onSendChat: (text: string) => void;
+  participantColorIndexById: ReadonlyMap<string, number>;
 }
 
 // 카메라를 끈 채로 게임에 들어가면 되돌릴 방법이 없다 — 게임 화면에는 카메라 토글이 없고
@@ -76,6 +77,7 @@ export function LobbyScreen({
   onLeave,
   chatMessages,
   onSendChat,
+  participantColorIndexById,
 }: LobbyScreenProps) {
   const { room, error, toggleReady, kicked } = useRoomLobby(roomId, accessToken, participantId);
   // 토스트는 Figma `Shared / Toast`의 Type에 대응한다 (code/link 복사 = 체크, 방장 위임 = 왕관)
@@ -138,7 +140,7 @@ export function LobbyScreen({
         isHost: p.participantId === room?.hostParticipantId,
         offline: p.connectionStatus === 'DISCONNECTED',
         inResult: p.inLobby === false,
-        colorIndex: (index % 4) + 1,
+        colorIndex: participantColorIndexById.get(p.participantId) ?? (index % 4) + 1,
       },
     ]),
   );
@@ -179,7 +181,7 @@ export function LobbyScreen({
   const colorByNickname = new Map(
     (room?.participants ?? []).map((p, index) => [
       p.nickname,
-      `var(--pap-player-${(index % 4) + 1}-text)`,
+      `var(--pap-player-${participantColorIndexById.get(p.participantId) ?? (index % 4) + 1}-text)`,
     ]),
   );
 
