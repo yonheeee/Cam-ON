@@ -4,6 +4,7 @@ import { LiveKitRoom, useParticipants } from '@livekit/components-react';
 import { VoiceVolumeProvider } from '../../sound/context/VoiceVolumeProvider';
 import { VoiceAudioRenderer } from '../../sound/components/VoiceAudioRenderer';
 import { VideoPresets, type RoomOptions } from 'livekit-client';
+import { CameraRecoveryBanner } from './CameraRecoveryBanner';
 import { CharadesMicrophoneController } from '../../charades/components/CharadesMicrophoneController';
 import { CharadesGamePanel } from '../../charades/components/CharadesGamePanel';
 import { NinjaBattleScreen } from '../../ninja/components/NinjaBattleScreen';
@@ -458,6 +459,9 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
 
   return (
     <>
+      {/* 카메라가 끊긴 사건은 어느 화면에서 났는지와 무관하므로 화면 분기 밖에 둔다. 게임 화면엔
+          카메라 토글이 없어서(대기방에만 있다) 이 배너가 게임 중 유일한 복구 입구다. */}
+      <CameraRecoveryBanner />
       <CharadesMicrophoneController
         roomId={roomId}
         accessToken={accessToken}
