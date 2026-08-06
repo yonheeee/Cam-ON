@@ -17,7 +17,9 @@ class CharadesMissionCatalogTest {
                 "악기",
                 "직업",
                 "음식",
-                "영화"
+                "영화",
+                "사자성어",
+                "속담"
             );
         assertThat(CharadesMissionCatalog.TOPICS)
             .allSatisfy(topic -> {

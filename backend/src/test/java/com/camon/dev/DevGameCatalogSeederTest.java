@@ -101,8 +101,8 @@ class DevGameCatalogSeederTest {
         seeder.run(null);
 
         ArgumentCaptor<Mission> captor = ArgumentCaptor.forClass(Mission.class);
-        // 개수 canary — 카탈로그를 바꾸면 여기서 걸린다 (v3: 휴대폰 제거 + 3종 추가 = 14)
-        verify(missionRepository, times(14)).save(captor.capture());
+        // 개수 canary — 카탈로그를 바꾸면 여기서 걸린다 (v4: '책' 제거 = 13)
+        verify(missionRepository, times(13)).save(captor.capture());
         List<Mission> saved = captor.getAllValues();
 
         assertThat(saved)
