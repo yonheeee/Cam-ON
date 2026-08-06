@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
 import {
   ParticipantTile,
   useLocalParticipant,
@@ -96,10 +96,28 @@ export function FetchObjectGame({
   });
   const localTrack = tracks.find((t) => t.participant.isLocal)?.publication?.track;
   const speakingIds = useSpeakingIdentities();
+  // attach를 effect가 아니라 callback ref에서 한다. 참가자가 나가면 좌석 배치가 재계산되며
+  // 내 타일이 다른 열(<section>)로 이사할 수 있는데, React는 이를 새 <video> 생성으로 처리한다.
+  // effect는 [localTrack]이 그대로라 재실행되지 않아 새 엘리먼트가 검게 남았다 — callback ref는
+  // 엘리먼트가 바뀔 때마다 React가 직접 불러주므로 의존성 추측이 필요 없다.
+  // (환경설정 미리보기 · 검은 타일과 같은 계열의 세 번째 사례 — attach는 callback ref가 정답)
+  const localTrackRef = useRef(localTrack);
+  const attachLocalVideo = useCallback(
+    (video: HTMLVideoElement | null) => {
+      const prev = videoRef.current;
+      if (prev && localTrackRef.current) localTrackRef.current.detach(prev);
+      videoRef.current = video;
+      if (video && localTrack) localTrack.attach(video);
+      localTrackRef.current = localTrack;
+    },
+    [localTrack],
+  );
+  // 엘리먼트는 그대로인데 트랙이 나중에 도착한 경우(카메라 늦게 켜짐)를 잇는다.
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !localTrack) return;
     localTrack.attach(video);
+    localTrackRef.current = localTrack;
     return () => {
       localTrack.detach(video);
     };
@@ -251,7 +269,7 @@ export function FetchObjectGame({
       >
         <div className="fetch-seat__cam participant-audio-host">
           {isMe ? (
-            <video ref={videoRef} autoPlay playsInline muted className="fetch-seat__video" />
+            <video ref={attachLocalVideo} autoPlay playsInline muted className="fetch-seat__video" />
           ) : trackRef ? (
             <ParticipantTile trackRef={trackRef} disableSpeakingIndicator />
           ) : null}
