@@ -135,11 +135,15 @@ class DevGameCatalogSeederTest {
         seeder.run(null);
 
         ArgumentCaptor<Mission> captor = ArgumentCaptor.forClass(Mission.class);
-        verify(missionRepository, times(12)).save(captor.capture());
+        verify(missionRepository, times(FetchObjectMissionCatalog.KEYWORDS.size() - 2))
+            .save(captor.capture());
         assertThat(captor.getAllValues())
             .extracting(Mission::getKeyword)
             .containsExactlyElementsOf(
-                FetchObjectMissionCatalog.KEYWORDS.subList(2, 14)
+                FetchObjectMissionCatalog.KEYWORDS.subList(
+                    2,
+                    FetchObjectMissionCatalog.KEYWORDS.size()
+                )
             );
     }
 
