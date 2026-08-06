@@ -25,6 +25,8 @@ API로 옮긴 것이다. 배포 서버는 브라우저를 띄울 수 없고, 손
 선택:
   MB_URL             기본 http://localhost:3001
   CAMON_ENV_FILE     MySQL 접속값을 읽을 env 파일. 기본 /opt/camon/.env
+  MB_COLLECTION_NAME 카드/대시보드를 담을 컬렉션 이름. 기본은 루트(`우리의 분석`)
+  MB_DASHBOARD_NAME  대시보드 이름
   MB_ADMIN_FIRST_NAME / MB_ADMIN_LAST_NAME
 """
 
@@ -37,8 +39,11 @@ import urllib.request
 
 MB_URL = os.environ.get("MB_URL", "http://localhost:3001").rstrip("/")
 ENV_FILE = os.environ.get("CAMON_ENV_FILE", "/opt/camon/.env")
-COLLECTION_NAME = "우리의 분석"
-DASHBOARD_NAME = "플레이테스트 핵심 지표 (2차)"
+# 회차를 컬렉션으로 갈라 두려면 MB_COLLECTION_NAME으로 넘긴다(예: "2차 유저 테스트").
+# 반드시 이 변수로 지정할 것 — Metabase UI에서 카드를 드래그해 옮기면 아래 upsert가 그 카드를
+# 못 찾아(이름 검색 범위가 이 컬렉션이다) 다음 실행 때 루트에 6개를 새로 만든다.
+COLLECTION_NAME = os.environ.get("MB_COLLECTION_NAME", "우리의 분석")
+DASHBOARD_NAME = os.environ.get("MB_DASHBOARD_NAME", "플레이테스트 핵심 지표 (2차)")
 DATABASE_NAME = "Cam-ON"
 
 session_token = None
@@ -448,10 +453,10 @@ ORDER BY `이탈 인원` DESC;""",
         FROM (
             SELECT
                 analytics_user_key,
-                visit_date,
+                visit_date_kst,
                 COUNT(DISTINCT room_key) AS visit_count
             FROM playtest2_metric_user_visits
-            GROUP BY analytics_user_key, visit_date
+            GROUP BY analytics_user_key, visit_date_kst
         ) browser_days
     ) AS `같은 날 재방문율 (%)`,
     (
@@ -461,7 +466,7 @@ ORDER BY `이탈 인원` DESC;""",
                 FROM playtest2_metric_user_visits returned
                 WHERE returned.analytics_user_key =
                     first_visits.analytics_user_key
-                  AND returned.visit_date = DATE_ADD(
+                  AND returned.visit_date_kst = DATE_ADD(
                       first_visits.first_visit_date,
                       INTERVAL 1 DAY
                   )
@@ -471,7 +476,7 @@ ORDER BY `이탈 인원` DESC;""",
         FROM (
             SELECT
                 analytics_user_key,
-                MIN(visit_date) AS first_visit_date
+                MIN(visit_date_kst) AS first_visit_date
             FROM playtest2_metric_user_visits
             GROUP BY analytics_user_key
         ) first_visits
@@ -481,15 +486,17 @@ ORDER BY `이탈 인원` DESC;""",
         "key": "visit_detail",
         "name": "익명 방문 상세 (2차)",
         "display": "table",
+        # 시각은 KST로 내보낸다. 뷰가 이미 변환해 두므로 여기서 CONVERT_TZ를 또 걸지 않는다
+        # (두 번 걸면 +18시간이 된다).
         "sql": """SELECT
     LEFT(analytics_user_key, 8) AS `익명 브라우저`,
     LEFT(room_key, 8) AS `방`,
-    entered_at AS `방문 시각`,
-    visit_date AS `방문 날짜`,
+    entered_at_kst AS `방문 시각 (KST)`,
+    visit_date_kst AS `방문 날짜 (KST)`,
     app_version AS `앱 버전`,
     experiment_version AS `실험 버전`
 FROM playtest2_metric_user_visits
-ORDER BY entered_at DESC;""",
+ORDER BY entered_at_kst DESC;""",
     },
 ]
 
