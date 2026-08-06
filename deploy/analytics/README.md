@@ -112,7 +112,7 @@ umask 077
 printf 'MB_ADMIN_EMAIL=<이메일>\nMB_ADMIN_PASSWORD=Camon-%s-A1!\n' "$(openssl rand -hex 8)" \
     > .mb-admin.env
 
-# 초기 설정 + DB 연결 + 대시보드 + 카드 6개 생성 (몇 번 돌려도 안전)
+# 초기 설정 + DB 연결 + 대시보드 + 카드 생성 (몇 번 돌려도 안전)
 set -a; . ./.mb-admin.env; set +a
 
 # 회차를 컬렉션으로 갈라 두려면 이름을 넘긴다(생략하면 루트 `우리의 분석`에 만든다).
@@ -125,7 +125,7 @@ python3 verify_dashboard.py
 ### 컬렉션을 Metabase UI에서 옮기지 말 것
 
 `provision_metabase.py`의 upsert는 **`MB_COLLECTION_NAME` 컬렉션 안에서만** 이름으로 카드와
-대시보드를 찾는다. UI에서 드래그해 다른 컬렉션으로 옮기면 다음 실행 때 못 찾아서 카드 6개와
+대시보드를 찾는다. UI에서 드래그해 다른 컬렉션으로 옮기면 다음 실행 때 못 찾아서 카드와
 대시보드를 **루트에 새로 만든다**(같은 이름 두 벌이 생기고, 어느 쪽을 보고 있는지 알 수 없게
 된다). 위치를 바꿀 땐 이 환경변수 값을 바꿔서 재실행한다.
 

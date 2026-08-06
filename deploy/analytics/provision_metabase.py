@@ -353,6 +353,43 @@ FROM playtest2_metric_course_attempts;""",
     ) AS `같은 방 재플레이율 (%)`;""",
     },
     {
+        "key": "game_selection",
+        "name": "게임별 선택/플레이 세트 수 (2차)",
+        "display": "table",
+        # 왜 "플레이된 세트"만으로는 인기를 볼 수 없나:
+        # 코스에 어떤 게임을 담았는지는 이벤트에 남지 않는다(COURSE_STARTED는 courseSize와
+        # playerCount만 기록한다). 그래서 시작된 세트만 세면 코스 뒤쪽에 놓인 게임이 과소 집계된다 —
+        # 앞 세트에서 사람이 빠지면 뒤 세트는 시작조차 못 하기 때문이다.
+        #
+        # GAME_SESSION_SKIPPED가 그 간극을 일부 메운다. "담겼는데 인원이 모자라 건너뛴 세트"라서,
+        # 시작된 세트와 합치면 "담긴 세트"의 하한이 된다. 하한인 이유: 방이 통째로 깨져서 코스가
+        # 중단되면 남은 세트는 SKIPPED도 남기지 않는다.
+        #
+        # `평균 코스 위치`와 `첫 세트로 배치`를 같이 보여주는 것도 그래서다. 첫 세트는 이탈이
+        # 생기기 전이라 거의 100% 시작되므로, 이 값이 낮은 게임은 세트 수가 부풀려져 있다고 봐야 한다.
+        "sql": """SELECT
+    game_type AS `게임`,
+    SUM(started) + SUM(skipped) AS `코스에 담긴 세트(최소)`,
+    SUM(started) AS `플레이된 세트`,
+    SUM(skipped) AS `스킵된 세트`,
+    SUM(players) AS `참가 인원(누적)`,
+    SUM(session_seq = 1) AS `첫 세트로 배치`,
+    ROUND(AVG(session_seq), 2) AS `평균 코스 위치`
+FROM (
+    SELECT game_type, 1 AS started, 0 AS skipped,
+           player_count AS players, session_seq
+    FROM playtest2_metric_game_sessions
+    UNION ALL
+    -- game_type/session_seq는 properties_json이 아니라 컬럼에 들어 있다.
+    SELECT game_type, 0 AS started, 1 AS skipped,
+           0 AS players, session_seq
+    FROM playtest2_events
+    WHERE event_name = 'GAME_SESSION_SKIPPED'
+) sets
+GROUP BY game_type
+ORDER BY `코스에 담긴 세트(최소)` DESC;""",
+    },
+    {
         "key": "game_dropout",
         "name": "게임별 이탈률 (2차)",
         "display": "bar",
@@ -506,8 +543,9 @@ LAYOUT = {
     "summary": (3, 0, 24, 4),
     "game_dropout": (7, 0, 12, 6),
     "exit_points": (7, 12, 12, 6),
-    "user_summary": (13, 0, 24, 4),
-    "visit_detail": (17, 0, 24, 7),
+    "game_selection": (13, 0, 24, 4),
+    "user_summary": (17, 0, 24, 4),
+    "visit_detail": (21, 0, 24, 7),
 }
 
 
