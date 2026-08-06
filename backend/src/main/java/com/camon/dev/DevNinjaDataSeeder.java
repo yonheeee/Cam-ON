@@ -89,7 +89,13 @@ public class DevNinjaDataSeeder implements ApplicationRunner {
     // 손동작은 name이 곧 분류기 라벨과의 문자열 계약이라 그 값으로 존재 여부를 본다.
     //
     // 9종 전부 손모양 이미지(frontend/public/assets/손모양)와 gestureImages.FILE_BY_GESTURE 항목이
-    // 있어서 인술 카드에 그림으로 뜬다 — 예전엔 girl_V(현 beam)만 이미지가 없어서 콤보에서 뺐다.
+    // 있어서 인술 카드에 그림으로 뜬다 — 예전엔 girl_V만 이미지가 없어서 콤보에서 뺐고, 그 자리를
+    // beam이 대신한다(분류기 클래스 id도 같은 1번).
+    //
+    // girl_V를 지우거나 이름을 바꾸지는 않는다. 이 시더는 name 기준으로 없는 것만 넣는 게 전부라
+    // 리네임을 재현할 수 없고, DB마다 다르게 손대면 gesture id가 갈린다. 그래서 girl_V가 이미
+    // 있는 DB에는 유령 행으로 남는다 — 참조하는 skill_gesture가 없고 gesture 테이블을 통째로
+    // 훑는 코드도 없어서(제스처는 skill_gesture 조인으로만 나간다) 어디에도 노출되지 않는다.
     private Map<String, Gesture> seedGestures() {
         Map<String, Gesture> existing = gestureRepository.findAll().stream()
             .collect(Collectors.toMap(Gesture::getName, g -> g));
