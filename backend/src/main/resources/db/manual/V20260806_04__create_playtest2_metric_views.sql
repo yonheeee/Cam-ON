@@ -129,8 +129,24 @@ SELECT
     ps.room_key,
     pe.test_session_id,
     ps.attempt_number,
-    MIN(pe.occurred_at) AS entered_at,
-    DATE(MIN(pe.occurred_at)) AS visit_date,
+    -- 저장은 UTC다 -- 배포 백엔드 컨테이너에 TZ가 없어 JVM 기본(UTC)으로 DATETIME에 쓰고,
+    -- MySQL도 time_zone=SYSTEM(UTC)이다. DATETIME은 시간대 정보가 없는 타입이라 Metabase의
+    -- 리포트 시간대 설정으로는 변환되지 않는다(그 설정이 먹는 건 TIMESTAMP 컬럼이다).
+    -- 그래서 KST 변환은 여기서 한 번만 한다.
+    --
+    -- visit_date를 UTC로 두면 안 되는 이유: UTC 15:00이 KST 익일 00:00이라, 한국 시간
+    -- 자정~오전 9시 플레이가 전날로 집계된다. 그러면 이 뷰를 쓰는 `같은 날 재방문율` /
+    -- `다음 날 재방문율`이 조용히 틀어진다(밤 테스트에서만 드러나는 종류의 오차다).
+    --
+    -- 오프셋('+09:00')을 쓰는 이유: 시간대 테이블(mysql.time_zone_name)이 로드되지 않은
+    -- MySQL에서 'Asia/Seoul' 이름 변환은 에러가 아니라 조용히 NULL을 돌려준다. 한국은 DST가
+    -- 없어 고정 오프셋이 항상 정확하다.
+    --
+    -- 이름에 _kst/_utc를 붙인 이유: 같은 이름을 두고 값의 의미만 KST로 바꾸면, 다음에 카드를
+    -- 쓰는 사람이 UTC라고 믿고 playtest2_events.occurred_at(UTC)과 비교한다.
+    MIN(pe.occurred_at) AS entered_at_utc,
+    CONVERT_TZ(MIN(pe.occurred_at), '+00:00', '+09:00') AS entered_at_kst,
+    DATE(CONVERT_TZ(MIN(pe.occurred_at), '+00:00', '+09:00')) AS visit_date_kst,
     ps.app_version,
     ps.experiment_version
 FROM playtest2_events pe
