@@ -88,8 +88,14 @@ scp -i <pem> deploy/analytics/{docker-compose.analytics.yml,apply-metric-views.s
 scp -i <pem> backend/src/main/resources/db/manual/V20260730_01__*.sql \
              backend/src/main/resources/db/manual/V20260730_03__*.sql \
              backend/src/main/resources/db/manual/V20260731_01__*.sql \
+             backend/src/main/resources/db/manual/V20260806_03__*.sql \
+             backend/src/main/resources/db/manual/V20260806_04__*.sql \
     ubuntu@i15b110.p.ssafy.io:/opt/camon/analytics/db-manual/
 ```
+
+`V20260806_03`/`_04`는 2차 유저테스트용이다. 백엔드는 이제 `playtest2_*` 에만 기록하므로,
+이 둘을 빼먹으면 2차 카드가 전부 "Table doesn't exist"로 죽는다(1차와 같은 함정 — 아래
+"왜 뷰를 따로 만들어야 하나" 참고).
 
 EC2에서:
 
@@ -141,6 +147,24 @@ grep -q '^ANALYTICS_HMAC_SECRET=' /opt/camon/.env \
   || printf 'ANALYTICS_HMAC_SECRET=%s\n' "$(openssl rand -hex 32)" \
      | sudo tee -a /opt/camon/.env >/dev/null
 ```
+
+## 회차 (1차 / 2차)
+
+수집 테이블은 유저테스트 회차마다 갈라 둔다. 자세한 이유는
+`backend/docs/playtest-analytics.md`에 있다.
+
+| 회차 | 테이블 | 뷰 | 대시보드 | 상태 |
+| --- | --- | --- | --- | --- |
+| 1차 | `playtest_sessions` / `playtest_events` | `playtest_metric_*` | 플레이테스트 핵심 지표 | 동결 |
+| 2차 | `playtest2_sessions` / `playtest2_events` | `playtest2_metric_*` | 플레이테스트 핵심 지표 (2차) | 수집 중 |
+
+`provision_metabase.py`는 **2차 대시보드만** 만든다. 1차 대시보드는 이름이 달라 upsert
+대상에서 빠지므로 그대로 남고, 1차 뷰도 살아 있어 두 회차를 나란히 볼 수 있다. 1차 테이블에는
+더 이상 새 데이터가 쌓이지 않는다.
+
+새 회차를 시작할 때 바꿀 곳은 세 군데다 — 마이그레이션 SQL(테이블+뷰), 엔티티
+(`PlaytestSession`/`PlaytestEvent`)의 `@Table`, 그리고 이 스크립트의 `DASHBOARD_NAME`과
+카드 이름·SQL.
 
 ## 재실행 / 갱신
 
