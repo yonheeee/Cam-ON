@@ -1,4 +1,5 @@
 import { createSession } from '../../session/api/sessionApi';
+import { isDemoArmed } from '../../demo/lib/demoMode';
 import { clearSession, saveSession } from '../../session/lib/sessionStorage';
 import { roomApi } from '../api/roomApi';
 import { saveRoom } from '../lib/roomStorage';
@@ -29,7 +30,8 @@ export async function enterRoom({ mode, nickname, roomCode, maxPlayers = 4 }: En
   let result;
   try {
     result = mode === 'create'
-      ? await roomApi.createRoom(maxPlayers, session.accessToken)
+      // 시연 모드는 방 단위 설정이라 방을 만드는 사람의 상태만 반영된다(참가자는 따라온다).
+      ? await roomApi.createRoom(maxPlayers, session.accessToken, isDemoArmed())
       // 방 코드는 대문자로만 생성되는데 백엔드 매칭이 대소문자를 구분한다 — 대문자로 정규화해서 보낸다.
       : await roomApi.joinRoom((roomCode ?? '').trim().toUpperCase(), session.accessToken);
   } catch (error) {

@@ -111,6 +111,30 @@
   }
 }
 
+/* 시연 모드 배지 — 로고(52 + 172 = 224px) 오른쪽에 붙인다. */
+.lobby-screen__demo-badge {
+  position: absolute;
+  top: 58px;
+  left: 236px;
+  z-index: 9;
+  margin: 0;
+  padding: 4px 10px;
+  border: var(--camon-stroke-2) solid var(--camon-color-ink);
+  border-radius: var(--camon-radius-6);
+  background: #ffd76a;
+  color: var(--camon-color-ink);
+  font-family: var(--camon-font);
+  font-size: 12px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+@media (max-height: 780px) {
+  .lobby-screen__demo-badge {
+    top: 37px;
+  }
+}
+
 .lobby-screen__header-actions {
   position: absolute;
   top: 48px;

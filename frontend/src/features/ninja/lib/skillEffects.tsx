@@ -1,4 +1,5 @@
 import { PixelAmaterasuEffect, DURATION_MS as AMATERASU_MS } from '../components/PixelAmaterasuEffect';
+import { PixelBaldEffect, DURATION_MS as BALD_MS } from '../components/PixelBaldEffect';
 import { PixelCatPunchEffect, DURATION_MS as CAT_PUNCH_MS } from '../components/PixelCatPunchEffect';
 import {
   PixelCherryBlossomSlashEffect,
@@ -7,14 +8,14 @@ import {
 import { PixelLightningEffect, DURATION_MS as LIGHTNING_MS } from '../components/PixelLightningEffect';
 import { PixelPhoenixFlowerEffect, DURATION_MS as PHOENIX_MS } from '../components/PixelPhoenixFlowerEffect';
 import { PixelRasenganEffect, DURATION_MS as RASENGAN_MS } from '../components/PixelRasenganEffect';
+import { PixelSlapEffect, DURATION_MS as SLAP_MS } from '../components/PixelSlapEffect';
 import { PixelWaterDragonEffect, DURATION_MS as WATER_DRAGON_MS } from '../components/PixelWaterDragonEffect';
 import { PixelWindScarEffect, DURATION_MS as WIND_SCAR_MS } from '../components/PixelWindScarEffect';
 // Pixel*Effect 들이 공유하는 .ninja-effect-overlay 컨테이너 스타일. 게임 경로에서 이펙트를
 // 고르는 곳이 여기라, 스타일도 여기서 한 번 가져오면 컴포넌트 8개에 흩어놓지 않아도 된다.
 import '../components/pixelEffectOverlay.css';
 
-// DB skill.id → 픽셀 이펙트 컴포넌트. 이 매핑이 없던 시절엔 이펙트 8종이 /effects-preview에만
-// 쓰였고, 실제 게임에는 effect 테이블의 색/파티클 수로 그리는 원형 버스트만 나왔다.
+// DB skill.id → 픽셀 이펙트 컴포넌트.
 // 이펙트는 "맞은 사람 캠 타일" 안에서 재생되므로(호스트 div에 resizeTo) variant는 항상 hit이다.
 //
 // 시드의 모든 스킬이 여기 있어야 한다 — 매핑이 빠진 스킬은 이펙트 없이 진동만 남는다(파티클
@@ -23,8 +24,7 @@ import '../components/pixelEffectOverlay.css';
 // id는 DevNinjaDataSeeder의 seedSkill 호출 순서(auto_increment)에 묶여 있다 — 시더의 호출
 // 순서를 바꾸면 새 DB에서 이 표가 어긋난다. 순서를 바꾸지 말고 뒤에만 추가할 것.
 //
-// 이펙트가 8종뿐이라 9/10은 성격이 가까운 것을 재사용한다(탈모빔=뇌절과, slap=냥냥펀치와 같은
-// 연출로 보인다). 전용 Pixel*Effect가 생기면 여기만 바꾸면 된다.
+// 신규 스킬 3종도 각각의 전용 Pixel*Effect를 사용한다.
 const BY_SKILL_ID: Record<number, () => React.ReactElement> = {
   1: () => <PixelLightningEffect />, // 뇌절
   2: () => <PixelPhoenixFlowerEffect variant="hit" />, // 봉선화의 술
@@ -34,8 +34,8 @@ const BY_SKILL_ID: Record<number, () => React.ReactElement> = {
   6: () => <PixelAmaterasuEffect />, // 아마테라스
   7: () => <PixelRasenganEffect />, // 나선환
   8: () => <PixelCherryBlossomSlashEffect />, // 벚꽃 참격
-  9: () => <PixelLightningEffect />, // 탈모빔 — 빔이라 번개 재사용
-  10: () => <PixelCatPunchEffect />, // slap — 손바닥 타격이라 냥냥펀치 재사용
+  9: () => <PixelBaldEffect />, // 탈모빔
+  10: () => <PixelSlapEffect />, // slap
 };
 
 // 각 이펙트가 실제로 재생되는 길이(컴포넌트의 DURATION_MS 그대로). 서버 이펙트 창(5초)이 아니라
@@ -49,8 +49,8 @@ const MS_BY_SKILL_ID: Record<number, number> = {
   6: AMATERASU_MS,
   7: RASENGAN_MS,
   8: CHERRY_BLOSSOM_MS,
-  9: LIGHTNING_MS,
-  10: CAT_PUNCH_MS,
+  9: BALD_MS,
+  10: SLAP_MS,
 };
 
 /** 매핑이 없는 스킬(파티클 폴백)의 재생 길이 — 픽셀 이펙트들의 평균 근처. */

@@ -19,9 +19,12 @@ export interface HandCoachDepth {
   farHandCount: number;
 }
 
+// 줄바꿈은 CSS(word-break: keep-all)가 띄어쓰기에서만 끊게 해두었으므로, 띄어쓰기 자리가 곧
+// 줄이 갈릴 수 있는 자리다. 보조용언 "와 주세요"/"해 주세요"를 붙여 쓴 건 그래서다 — 띄우면
+// "…가까이 와" / "주세요"로 갈려서 문장이 토막 난다(붙여쓰기도 맞춤법에 맞는 표기다).
 export const HAND_COACH_MESSAGE: Record<HandCoachIssue, string> = {
-  'too-far': '카메라에 조금만 더 가까이 와 주세요',
-  'hands-missing': '두 손이 모두 화면에 보이게 해 주세요',
+  'too-far': '카메라에 조금만 더 가까이 와주세요',
+  'hands-missing': '두 손이 모두 화면에 보이게 해주세요',
 };
 
 /**
