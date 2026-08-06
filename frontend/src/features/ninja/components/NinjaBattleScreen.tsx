@@ -468,13 +468,12 @@ export function NinjaBattleScreen({
               <div className="ninja-board__body ninja-board__body--intermission">
                 {roundResult && roundResult.length > 0 && (
                   <>
-                    <p className="ninja-board__label">ROUND {round} 결과</p>
+                    <p className="ninja-board__label">대전 종료</p>
                     <ol className="ninja-result">
                       {roundResult.map((entry) => (
                         <li key={entry.token} className={entry.token === myId ? 'ninja-result--me' : ''}>
                           <span className="ninja-result__rank pap-pixel-title">{entry.rank}</span>
                           <span className="ninja-result__name">{nicknameOf(entry.token)}</span>
-                          <span className="ninja-result__pt pap-pixel-title">+{entry.points}</span>
                         </li>
                       ))}
                     </ol>
