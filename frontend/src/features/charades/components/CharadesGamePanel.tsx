@@ -18,6 +18,7 @@ interface CharadesGamePanelProps {
   onActiveChange: (active: boolean) => void;
   /** 로고 클릭 → 확인 팝업 → 방 나가기 (확정안: 방 안에서 로고는 항상 확인 팝업 경유) */
   onLeave: () => void;
+  participantColorIndexById: ReadonlyMap<string, number>;
 }
 
 type TrackRef = ReturnType<typeof useTracks>[number];
@@ -36,6 +37,7 @@ export function CharadesGamePanel({
   accessToken,
   onActiveChange,
   onLeave,
+  participantColorIndexById,
 }: CharadesGamePanelProps) {
   const [confirmLeave, setConfirmLeave] = useState(false);
   const { localParticipant } = useLocalParticipant();
@@ -79,7 +81,7 @@ export function CharadesGamePanel({
 
   // 플레이어 색은 "방 입장 순서" 고정 — DOM 순서(nth-child)로 칠하면 표현자가 빠진 자리에 따라
   // 클라이언트마다 같은 사람이 다른 색으로 보인다. 대기방(LobbyScreen)과 같은 소스를 써서 색도 이어진다.
-  const [joinOrder, setJoinOrder] = useState<string[]>([]);
+  const [, setJoinOrder] = useState<string[]>([]);
   useEffect(() => {
     let cancelled = false;
     roomApi
@@ -97,8 +99,7 @@ export function CharadesGamePanel({
   }, [roomId, accessToken]);
 
   const seatColor = (token: string) => {
-    const index = joinOrder.indexOf(token);
-    return `var(--pap-player-${index < 0 ? 1 : (index % 4) + 1})`;
+    return `var(--pap-player-${participantColorIndexById.get(token) ?? 1})`;
   };
 
   const displayName = (token: string | null) => {
@@ -461,7 +462,7 @@ function CharadesResultBanner({
         )}
         <div className="charades-correct-card__divider" />
         <p className="charades-correct-card__names">
-          {isTimeout ? '이번 턴은 점수 없이 넘어갑니다' : `${answererName ?? '???'}님 정답!`}
+          {isTimeout ? '이번 턴은 포인트 없이 넘어갑니다' : `${answererName ?? '???'}님 정답!`}
         </p>
         <p className="charades-correct-card__footer">
           {countdown}초 후 {isFinalTurn ? '결과가' : '다음 제시어가'} 공개됩니다

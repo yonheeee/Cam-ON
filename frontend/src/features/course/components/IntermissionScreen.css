@@ -11,13 +11,94 @@
   background: color-mix(in srgb, var(--pap-bg, #f4e9d8) 92%, transparent);
 }
 
+/* ---- 게임별 로딩 배경 ----
+   다음 게임이 정해진 인터미션에서는 그 게임의 로딩 아트를 깐다. 그림이 깔리면 반투명 크림
+   배경은 그림을 뿌옇게만 만들므로 걷어낸다(letterbox 색은 배경 레이어가 따로 갖는다). */
+.intermission--themed {
+  background: none;
+}
+
+.intermission__bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-position: center center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  image-rendering: pixelated; /* 픽셀 아트라 확대 시 블러 방지 */
+  animation: intermission-bg-in 320ms ease-out;
+}
+
+/* 가장자리를 눌러 가운데 카드를 띄운다 — 게임 화면들(닌자/몸말/물건찾기)과 같은 비네트 방식.
+   가운데는 옅게(0.18) 둔다: 카드가 평소 반투명이라 여기가 그림을 보여주는 자리이고, 글자
+   가독성은 호버 시 불투명해지는 것으로 해결하므로 베일을 세게 깔 이유가 없다. */
+.intermission__bg::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 70% 62% at 50% 50%, rgb(12 6 20 / 0.18) 40%, rgb(12 6 20 / 0.7) 100%);
+}
+
+@keyframes intermission-bg-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .intermission__bg {
+    animation: none;
+  }
+}
+
+/* 배경색은 이미지가 뜨기 전/비율이 안 맞아 남는 여백을 메우는 letterbox 색이다 —
+   각 그림의 가장 어두운 톤에서 땄다. */
+.intermission--ninja .intermission__bg {
+  background-color: #1b1230;
+  background-image: url('/assets/ninja-loading-bg.png');
+}
+
+.intermission--fetch .intermission__bg {
+  background-color: #4f7a3a;
+  background-image: url('/assets/umma_loading_bg.png');
+}
+
+.intermission--charades .intermission__bg {
+  background-color: #4a3350;
+  background-image: url('/assets/mommal_loading_bg.png');
+}
+
 .intermission__card {
+  position: relative; /* 배경 레이어 위로 */
+  z-index: 1;
   display: flex;
   flex-direction: column;
   gap: 14px;
   width: min(460px, 94vw);
   padding: 24px;
   text-align: center;
+}
+
+/* 로딩 아트가 깔린 인터미션에서는 카드를 반투명하게 두어 배경 그림이 비쳐 보이게 하고,
+   마우스를 올리면 불투명해져 설명을 읽기 쉽게 한다. 마우스가 없는 기기(터치)는 호버로
+   되돌릴 방법이 없으므로 항상 불투명하게 둔다 — hover: hover 미디어 쿼리 안에만 넣는 이유. */
+@media (hover: hover) {
+  .intermission--themed .intermission__card {
+    opacity: 0.5;
+    transition: opacity 180ms ease-out;
+  }
+
+  /* focus-within도 같이 — 키보드로 "바로 시작" 버튼에 탭해 온 사람에게도 카드가 열려야 한다 */
+  .intermission--themed .intermission__card:hover,
+  .intermission--themed .intermission__card:focus-within {
+    opacity: 1;
+  }
+}
+
+@media (hover: hover) and (prefers-reduced-motion: reduce) {
+  .intermission--themed .intermission__card {
+    transition: none;
+  }
 }
 
 .intermission__title {

@@ -78,6 +78,7 @@ interface NinjaBattleScreenProps {
   onActiveChange: (active: boolean) => void;
   /** 로고 클릭 → 확인 팝업 → 방 나가기 (확정안: 방 안에서 로고는 항상 확인 팝업 경유) */
   onLeave: () => void;
+  participantColorIndexById: ReadonlyMap<string, number>;
 }
 
 export function NinjaBattleScreen({
@@ -86,6 +87,7 @@ export function NinjaBattleScreen({
   accessToken,
   onActiveChange,
   onLeave,
+  participantColorIndexById,
 }: NinjaBattleScreenProps) {
   const [confirmLeave, setConfirmLeave] = useState(false);
   const { localParticipant } = useLocalParticipant();
@@ -165,8 +167,14 @@ export function NinjaBattleScreen({
   // 3P면 색으로 소통이 안 된다). LiveKit participants 배열 순서는 클라이언트마다 다를 수 있어서
   // identity 문자열로 정렬해 결정적으로 만든다.
   const seats = useMemo(
-    () => [...participants].sort((a, b) => a.identity.localeCompare(b.identity)),
-    [participants],
+    () =>
+      [...participants].sort(
+        (a, b) =>
+          (participantColorIndexById.get(a.identity) ?? 99) -
+            (participantColorIndexById.get(b.identity) ?? 99) ||
+          a.identity.localeCompare(b.identity),
+      ),
+    [participants, participantColorIndexById],
   );
 
   useEffect(() => {
@@ -329,7 +337,7 @@ export function NinjaBattleScreen({
           if (node) tileRefs.current.set(id, node);
           else tileRefs.current.delete(id);
         }}
-        className={`ninja-tile ninja-tile--p${(seat % 4) + 1}${dead ? ' ninja-tile--dead' : ''}${
+        className={`ninja-tile ninja-tile--p${participantColorIndexById.get(id) ?? (seat % 4) + 1}${dead ? ' ninja-tile--dead' : ''}${
           cinematicPhase === 'focus' && effectTargetId === id ? ' ninja-tile--cinematic-target' : ''
         }${!dead && speakingIds.has(id) ? ' ninja-tile--speaking' : ''}`}
       >
@@ -468,13 +476,12 @@ export function NinjaBattleScreen({
               <div className="ninja-board__body ninja-board__body--intermission">
                 {roundResult && roundResult.length > 0 && (
                   <>
-                    <p className="ninja-board__label">ROUND {round} 결과</p>
+                    <p className="ninja-board__label">대전 종료</p>
                     <ol className="ninja-result">
                       {roundResult.map((entry) => (
                         <li key={entry.token} className={entry.token === myId ? 'ninja-result--me' : ''}>
                           <span className="ninja-result__rank pap-pixel-title">{entry.rank}</span>
                           <span className="ninja-result__name">{nicknameOf(entry.token)}</span>
-                          <span className="ninja-result__pt pap-pixel-title">+{entry.points}</span>
                         </li>
                       ))}
                     </ol>

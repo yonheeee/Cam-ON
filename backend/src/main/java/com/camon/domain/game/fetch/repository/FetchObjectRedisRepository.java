@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ZSetOperations;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
@@ -97,6 +98,13 @@ public class FetchObjectRedisRepository {
             keys.add(FetchObjectRedisKeys.round(roomCode, sessionSeq, round));
             keys.add(
                 FetchObjectRedisKeys.submissions(
+                    roomCode,
+                    sessionSeq,
+                    round
+                )
+            );
+            keys.add(
+                FetchObjectRedisKeys.skipVotes(
                     roomCode,
                     sessionSeq,
                     round
@@ -377,6 +385,37 @@ public class FetchObjectRedisRepository {
             .sorted()
             .forEach(participantIds::add);
         return Set.copyOf(participantIds);
+    }
+
+    // 스킵 투표를 기록한다. 중복 투표는 SADD 특성상 자연히 멱등. 가결 판정은 서비스가
+    // getSkipVotes ∩ 참가자 집합으로 계산한다 — 투표 후 떠난 사람의 표가 남아 있어도
+    // 교집합에서 걸러지므로 여기서는 정리하지 않는다.
+    public void addSkipVote(
+        String roomCode,
+        int sessionSeq,
+        int round,
+        UUID participantId
+    ) {
+        redis.opsForSet().add(
+            FetchObjectRedisKeys.skipVotes(roomCode, sessionSeq, round),
+            participantId.toString()
+        );
+    }
+
+    public Set<UUID> getSkipVotes(
+        String roomCode,
+        int sessionSeq,
+        int round
+    ) {
+        Set<String> values = redis.opsForSet().members(
+            FetchObjectRedisKeys.skipVotes(roomCode, sessionSeq, round)
+        );
+        if (values == null || values.isEmpty()) {
+            return Set.of();
+        }
+        return values.stream()
+            .map(UUID::fromString)
+            .collect(Collectors.toUnmodifiableSet());
     }
 
     // 진행 중에 방을 떠난 사람을 세션 참가자 집합에서 뺀다. claimSubmission Lua가 이 집합의

@@ -32,6 +32,9 @@ export function CourseResultPreview() {
         returning={false}
         returnError={null}
         onLeave={() => {}}
+        participantColorIndexById={new Map(
+          RANKING.map((entry, index) => [entry.participantId, index + 1]),
+        )}
       />
     </LiveKitRoom>
   );

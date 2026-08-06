@@ -13,6 +13,81 @@ export function LandingPage() {
 
   return (
     <main className="landing" aria-label="CAM, ON! 메인">
+      <div className="landing__scene" aria-hidden>
+        <img
+          className="landing__sprite landing__sprite--balloon-red"
+          src="/assets/landing-balloon-red.png"
+          alt=""
+          draggable={false}
+        />
+        <img
+          className="landing__sprite landing__sprite--balloon-blue"
+          src="/assets/landing-balloon-blue.png"
+          alt=""
+          draggable={false}
+        />
+        <img
+          className="landing__sprite landing__sprite--visitor-girl"
+          src="/assets/landing-visitor-girl.png"
+          alt=""
+          draggable={false}
+        />
+        <img
+          className="landing__sprite landing__sprite--visitor-boy"
+          src="/assets/landing-visitor-boy.png"
+          alt=""
+          draggable={false}
+        />
+        <img
+          className="landing__sprite landing__sprite--dancer-left"
+          src="/assets/landing-dancer-left.png"
+          alt=""
+          draggable={false}
+        />
+        <img
+          className="landing__sprite landing__sprite--dancer-center"
+          src="/assets/landing-dancer-center.png"
+          alt=""
+          draggable={false}
+        />
+        <img
+          className="landing__sprite landing__sprite--dancer-right"
+          src="/assets/landing-dancer-right.png"
+          alt=""
+          draggable={false}
+        />
+        <img
+          className="landing__sprite landing__sprite--spectator-left"
+          src="/assets/landing-spectator-left.png"
+          alt=""
+          draggable={false}
+        />
+        <img
+          className="landing__sprite landing__sprite--spectator-right"
+          src="/assets/landing-spectator-right.png"
+          alt=""
+          draggable={false}
+        />
+        <img
+          className="landing__sprite landing__sprite--heart-left"
+          src="/assets/landing-heart-left.png"
+          alt=""
+          draggable={false}
+        />
+        <img
+          className="landing__sprite landing__sprite--heart-right"
+          src="/assets/landing-heart-right.png"
+          alt=""
+          draggable={false}
+        />
+        <img
+          className="landing__sprite landing__sprite--heart-bubble"
+          src="/assets/landing-heart-bubble.png"
+          alt=""
+          draggable={false}
+        />
+      </div>
+
       <BackgroundMusic
         source="/assets/sounds/party-lobby-pixel.mp3"
         className="landing__music-toggle"

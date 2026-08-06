@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { LiveKitRoom, useParticipants } from '@livekit/components-react';
 import { VoiceVolumeProvider } from '../../sound/context/VoiceVolumeProvider';
@@ -80,8 +80,7 @@ export function VideoCallRoom({ accessToken, token, roomId, participantId }: Vid
       ? null
       : 'VITE_LIVEKIT_URL이 설정되지 않았습니다 — frontend/.env를 확인하세요.',
   );
-  // 사용자가 스스로 나간 것(확인 팝업 경유)과 예기치 못한 종료를 구분한다 —
-  // 스스로 나가면 바로 메인으로, 예기치 못한 종료면 "방 종료" 팝업(피그마 방 종료 프레임)을 띄운다.
+  // 명시적으로 나가는 중 발생한 LiveKit disconnect는 방 종료로 처리하지 않는다.
   const leavingRef = useRef(false);
   const [closed, setClosed] = useState(false);
 
@@ -95,23 +94,8 @@ export function VideoCallRoom({ accessToken, token, roomId, participantId }: Vid
     navigate('/', { replace: true });
   }, [navigate, roomId, accessToken]);
 
-  // 창을 그냥 닫거나 다른 사이트로 이동해도 퇴장을 알린다. 이게 없으면 서버는 하트비트 만료
-  // (TTL 15초)로만 이탈을 알 수 있고, 그 15초 동안 participants 집합에 자리가 남아 있어서
-  // 정원이 찬 것으로 판정된다 — 나간 사람 자리에 아무도 못 들어오고 재입장도 ROOM_FULL이 된다.
-  //
-  // pagehide만 쓴다. visibilitychange(hidden)는 탭을 잠깐 전환하거나 화면을 끌 때도 발생해서
-  // 멀쩡히 방에 있는 사람을 내보내게 된다. beforeunload는 모바일에서 발생이 보장되지 않는데
-  // pagehide는 그 경로까지 덮는다.
-  useEffect(() => {
-    const handlePageHide = () => {
-      // 나가기 버튼으로 이미 퇴장을 보낸 경우엔 중복 요청을 보내지 않는다.
-      if (leavingRef.current) return;
-      roomApi.leaveRoomOnUnload(roomId, accessToken);
-    };
-    window.addEventListener('pagehide', handlePageHide);
-    return () => window.removeEventListener('pagehide', handlePageHide);
-  }, [roomId, accessToken]);
-
+  // 새로고침에도 발생하는 pagehide에서는 퇴장시키지 않는다. 실제 탭 종료는 하트비트 TTL이
+  // 정리하고, 사용자가 나가기 버튼을 누른 경우만 위 API로 즉시 처리한다.
   return (
     <>
       {connectionError && (
@@ -232,6 +216,23 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
   const session = activeSession ?? recoveredSession;
   // 종합 결과 payload에는 participantId만 있어서 이름을 붙이려면 방 스냅샷이 필요하다.
   const [participants, setParticipants] = useState<ParticipantResponse[]>([]);
+  const participantColorCacheRef = useRef<Map<string, number>>(new Map());
+  const participantColorIndexById = useMemo(
+    () => {
+      const next = new Map(participantColorCacheRef.current);
+      const used = new Set(next.values());
+      for (const [index, participant] of participants.entries()) {
+        if (next.has(participant.participantId)) continue;
+        const available = [1, 2, 3, 4].find((colorIndex) => !used.has(colorIndex));
+        const colorIndex = available ?? (index % 4) + 1;
+        next.set(participant.participantId, colorIndex);
+        used.add(colorIndex);
+      }
+      participantColorCacheRef.current = next;
+      return next;
+    },
+    [participants],
+  );
   // 중간 결과의 "다음 세트가 무슨 게임인지"와 "SET n / 총 세트"를 그리려면 코스 구성이 필요하다.
   const [courseItems, setCourseItems] = useState<CourseItem[]>([]);
   // 인터미션의 "바로 시작"은 방장 전용 — 게임 도중 방장이 바뀔 수 있어(연쇄 위임) 스냅샷을
@@ -443,6 +444,9 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
   const nextItem = finishedSet
     ? courseItems.find((item) => item.idx === finishedSet.sessionSeq + 1)
     : undefined;
+  const finishedGameName = finishedSet
+    ? (courseItems.find((item) => item.idx === finishedSet.sessionSeq)?.gameName ?? null)
+    : null;
   // 게임이 열리기 전 대기(코스 첫 게임 앞) 또는 게임 사이 대기. 이 동안엔 대기방을 그리지 않고
   // 룰 설명 화면이 자리를 차지한다 — 첫 게임 앞에는 아직 열린 세션이 없어(inGame=false) 이
   // 조건이 없으면 대기방이 그대로 보인다.
@@ -473,6 +477,7 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
           onLeave={onLeave}
           chatMessages={messages}
           onSendChat={sendMessage}
+          participantColorIndexById={participantColorIndexById}
         />
       )}
 
@@ -486,6 +491,7 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
           accessToken={accessToken}
           onActiveChange={(active) => setBetweenGames(!active)}
           onLeave={onLeave}
+          participantColorIndexById={participantColorIndexById}
         />
       )}
       {/* 코스가 연 물건 가져오기 — 서버 주도 진행(round:start/end를 STOMP로 수신). */}
@@ -496,6 +502,7 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
           accessToken={accessToken}
           nicknameById={nicknameById}
           joinOrder={participants.map((participant) => participant.participantId)}
+          participantColorIndexById={participantColorIndexById}
           onLeave={onLeave}
         />
       )}
@@ -512,6 +519,7 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
           accessToken={accessToken}
           onActiveChange={(active) => setBetweenGames(!active)}
           onLeave={onLeave}
+          participantColorIndexById={participantColorIndexById}
         />
       )}
 
@@ -522,6 +530,7 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
           totalSets={courseItems.length || finishedSet.sessionSeq}
           setResult={finishedSet.setResult}
           courseRanking={finishedSet.courseRanking}
+          gameName={finishedGameName}
           nicknameById={nicknameById}
           nextGameLabel={nextItem ? GAME_LABELS[nextItem.gameName] : null}
           participantId={participantId}
@@ -529,6 +538,7 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
           secondsLeft={secondsLeft}
           onNext={() => void startNextSet()}
           starting={advancing}
+          participantColorIndexById={participantColorIndexById}
         />
       )}
 
@@ -573,6 +583,7 @@ function RoomContent({ roomId, accessToken, participantId, onLeave }: RoomConten
           returning={returning}
           returnError={returnError}
           onLeave={onLeave}
+          participantColorIndexById={participantColorIndexById}
         />
       )}
     </>

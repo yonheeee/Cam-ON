@@ -34,7 +34,7 @@ class CharadesMissionCatalogTest {
         // 커밋에서 알파카/E.T.가 조용히 사라진 걸 이 assert가 잡았다.
         assertThat(CharadesMissionCatalog.TOPICS)
             .flatExtracting(CharadesMissionCatalog.TopicSpec::missions)
-            .hasSize(166);
+            .hasSize(226); // 166 + 사자성어 30 + 속담 30 (2026-08-04)
     }
 
     @Test
