@@ -321,7 +321,9 @@ export function LobbyScreen({
           return;
         }
         if (!allOthersReady) {
-          showToast('모든 참가자가 준비를 완료해야 해요!');
+          showToast(
+            '아직 준비하지 않은 참가자가 있거나 준비 상태가 동기화되지 않았습니다. 잠시 후 다시 시도해 주세요.',
+          );
           return;
         }
         setPreflightOpen(true);
@@ -668,7 +670,7 @@ export function LobbyScreen({
                       ? '아직 결과 화면을 보고 있는 참가자가 있어요!'
                       : allOthersReady
                         ? undefined
-                        : '모든 참가자가 준비를 완료해야 해요!'
+                        : '아직 준비하지 않은 참가자가 있거나 준비 상태가 동기화되지 않았습니다. 잠시 후 다시 시도해 주세요.'
               }
             >
               <button

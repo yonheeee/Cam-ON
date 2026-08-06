@@ -107,22 +107,6 @@ export const roomApi = {
     }
   },
 
-  // 창/탭이 닫힐 때 쓰는 퇴장 통보. 일반 fetch는 문서가 언로드되면 취소되므로 keepalive를 켜서
-  // 요청이 살아남게 한다(sendBeacon과 달리 Authorization 헤더와 DELETE를 쓸 수 있어 위
-  // leaveRoom과 같은 엔드포인트를 그대로 재사용한다). 언로드 중엔 응답을 읽을 수도, 사용자에게
-  // 알릴 수도 없으니 결과를 보지 않고 실패는 삼킨다 — 못 닿아도 하트비트 스윕이 15초 뒤 정리한다.
-  leaveRoomOnUnload: (roomId: string, accessToken: string): void => {
-    try {
-      void fetch(`${BASE_URL}/api/rooms/${roomId}/members/me`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${accessToken}` },
-        keepalive: true,
-      }).catch(() => {});
-    } catch {
-      // 언로드 시점엔 브라우저가 새 요청을 거절할 수 있다. 여기서 막혀도 페이지 종료를 방해하지 않는다.
-    }
-  },
-
   // 방장의 참가자 강퇴. 서버가 방장 여부/대기방 상태를 검증하고, 성공 시
   // member:left(reason=KICKED)를 브로드캐스트한다(강퇴된 참가자는 재입장 불가).
   // leaveRoom과 같은 이유(204 No Content)로 request()를 쓰지 않는다.

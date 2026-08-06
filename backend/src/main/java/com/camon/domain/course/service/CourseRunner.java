@@ -21,6 +21,7 @@ import com.camon.domain.room.domain.Room;
 import com.camon.domain.room.domain.RoomStatus;
 import com.camon.domain.room.repository.ParticipantRepository;
 import com.camon.domain.room.repository.RoomRepository;
+import com.camon.domain.room.service.RoomConnectionService;
 import com.camon.global.exception.BusinessException;
 import com.camon.global.exception.ErrorCode;
 import static java.util.Objects.requireNonNullElse;
@@ -79,6 +80,7 @@ public class CourseRunner {
     private final GameCatalogService gameCatalogService;
     private final GameScoreService gameScoreService;
     private final CourseEventPublisher courseEventPublisher;
+    private final RoomConnectionService roomConnectionService;
     private final TaskScheduler taskScheduler;
     private final ApplicationEventPublisher applicationEventPublisher;
     // games.name → 그 게임의 세션을 여는 방법. 게임이 추가되면 빈이 하나 늘어날 뿐 이 클래스는
@@ -93,6 +95,7 @@ public class CourseRunner {
         GameCatalogService gameCatalogService,
         GameScoreService gameScoreService,
         CourseEventPublisher courseEventPublisher,
+        RoomConnectionService roomConnectionService,
         TaskScheduler taskScheduler,
         List<GameSessionStarter> sessionStarters,
         ApplicationEventPublisher applicationEventPublisher
@@ -104,6 +107,7 @@ public class CourseRunner {
         this.gameCatalogService = gameCatalogService;
         this.gameScoreService = gameScoreService;
         this.courseEventPublisher = courseEventPublisher;
+        this.roomConnectionService = roomConnectionService;
         this.taskScheduler = taskScheduler;
         this.applicationEventPublisher = applicationEventPublisher;
         this.startersByGameName = sessionStarters.stream().collect(
@@ -128,6 +132,12 @@ public class CourseRunner {
         if (room.status() != RoomStatus.WAITING) {
             throw new BusinessException(ErrorCode.ROOM_ALREADY_STARTED);
         }
+
+        // The start request proves that the host is currently active. Keep the host alive first,
+        // then remove participants whose Redis heartbeat expired while an in-memory timeout task
+        // was lost (for example, across a backend restart).
+        roomConnectionService.heartbeat(roomId, requesterId);
+        roomConnectionService.sweepExpired(roomId);
 
         List<Participant> participants = participantRepository.findAll(roomId);
         // 이전 코스 결과 화면에 아직 남아 있는 사람이 있으면 시작하지 않는다 — 그대로 열면

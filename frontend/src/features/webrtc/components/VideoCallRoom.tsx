@@ -80,8 +80,7 @@ export function VideoCallRoom({ accessToken, token, roomId, participantId }: Vid
       ? null
       : 'VITE_LIVEKIT_URL이 설정되지 않았습니다 — frontend/.env를 확인하세요.',
   );
-  // 사용자가 스스로 나간 것(확인 팝업 경유)과 예기치 못한 종료를 구분한다 —
-  // 스스로 나가면 바로 메인으로, 예기치 못한 종료면 "방 종료" 팝업(피그마 방 종료 프레임)을 띄운다.
+  // 명시적으로 나가는 중 발생한 LiveKit disconnect는 방 종료로 처리하지 않는다.
   const leavingRef = useRef(false);
   const [closed, setClosed] = useState(false);
 
@@ -95,23 +94,8 @@ export function VideoCallRoom({ accessToken, token, roomId, participantId }: Vid
     navigate('/', { replace: true });
   }, [navigate, roomId, accessToken]);
 
-  // 창을 그냥 닫거나 다른 사이트로 이동해도 퇴장을 알린다. 이게 없으면 서버는 하트비트 만료
-  // (TTL 15초)로만 이탈을 알 수 있고, 그 15초 동안 participants 집합에 자리가 남아 있어서
-  // 정원이 찬 것으로 판정된다 — 나간 사람 자리에 아무도 못 들어오고 재입장도 ROOM_FULL이 된다.
-  //
-  // pagehide만 쓴다. visibilitychange(hidden)는 탭을 잠깐 전환하거나 화면을 끌 때도 발생해서
-  // 멀쩡히 방에 있는 사람을 내보내게 된다. beforeunload는 모바일에서 발생이 보장되지 않는데
-  // pagehide는 그 경로까지 덮는다.
-  useEffect(() => {
-    const handlePageHide = () => {
-      // 나가기 버튼으로 이미 퇴장을 보낸 경우엔 중복 요청을 보내지 않는다.
-      if (leavingRef.current) return;
-      roomApi.leaveRoomOnUnload(roomId, accessToken);
-    };
-    window.addEventListener('pagehide', handlePageHide);
-    return () => window.removeEventListener('pagehide', handlePageHide);
-  }, [roomId, accessToken]);
-
+  // 새로고침에도 발생하는 pagehide에서는 퇴장시키지 않는다. 실제 탭 종료는 하트비트 TTL이
+  // 정리하고, 사용자가 나가기 버튼을 누른 경우만 위 API로 즉시 처리한다.
   return (
     <>
       {connectionError && (

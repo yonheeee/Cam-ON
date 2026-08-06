@@ -28,6 +28,7 @@ import com.camon.domain.room.domain.Room;
 import com.camon.domain.room.domain.RoomStatus;
 import com.camon.domain.room.repository.ParticipantRepository;
 import com.camon.domain.room.repository.RoomRepository;
+import com.camon.domain.room.service.RoomConnectionService;
 import com.camon.global.exception.BusinessException;
 import com.camon.global.exception.ErrorCode;
 import java.time.Instant;
@@ -70,6 +71,8 @@ class CourseRunnerTest {
     @Mock
     private CourseEventPublisher courseEventPublisher;
     @Mock
+    private RoomConnectionService roomConnectionService;
+    @Mock
     private TaskScheduler taskScheduler;
     @Mock
     private ApplicationEventPublisher applicationEventPublisher;
@@ -92,6 +95,7 @@ class CourseRunnerTest {
             gameCatalogService,
             gameScoreService,
             courseEventPublisher,
+            roomConnectionService,
             taskScheduler,
             List.of(ninjaStarter, charadesStarter),
             applicationEventPublisher
@@ -111,6 +115,9 @@ class CourseRunnerTest {
         givenGame(CHARADES_ID, "CHARADES", 3, 4, "말 없이 몸으로 설명합니다.");
 
         CourseRunner.StartedSession started = runner.startCourse(roomId, hostId);
+
+        verify(roomConnectionService).heartbeat(roomId, hostId);
+        verify(roomConnectionService).sweepExpired(roomId);
 
         // 응답은 "곧 열릴 게임"이다.
         assertThat(started.gameId()).isEqualTo(CHARADES_ID);
