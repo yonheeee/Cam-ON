@@ -44,6 +44,7 @@ export function SetResultPreview() {
   const [replayKey, setReplayKey] = useState(0);
   const [panelOpen, setPanelOpen] = useState(true);
   const [isFinalSet, setIsFinalSet] = useState(false);
+  const [previewGame, setPreviewGame] = useState<'FETCH_OBJECT' | 'NINJA'>('FETCH_OBJECT');
   const [deltas, setDeltas] = useState<PreviewDelta[]>(['up', 'same', 'down', 'same']);
 
   const setResult = useMemo(() => rankScores(scores), [scores]);
@@ -78,7 +79,7 @@ export function SetResultPreview() {
         setIndex={isFinalSet ? 3 : 1}
         totalSets={3}
         participantId="p2"
-        gameName="FETCH_OBJECT"
+        gameName={previewGame}
         setResult={setResult}
         courseRanking={courseRanking}
         nicknameById={new Map(PARTICIPANTS.map((entry) => [entry.participantId, entry.nickname]))}
@@ -113,6 +114,26 @@ export function SetResultPreview() {
                   {preset.label}
                 </button>
               ))}
+            </div>
+
+            <div className="set-result-preview__modes">
+              <button
+                type="button"
+                className={previewGame === 'FETCH_OBJECT' ? 'is-active' : ''}
+                onClick={() => setPreviewGame('FETCH_OBJECT')}
+              >
+                그래프 결과
+              </button>
+              <button
+                type="button"
+                className={previewGame === 'NINJA' ? 'is-active' : ''}
+                onClick={() => {
+                  setPreviewGame('NINJA');
+                  applyPreset('normal');
+                }}
+              >
+                닌자 단상
+              </button>
             </div>
 
             <div className="set-result-preview__modes">

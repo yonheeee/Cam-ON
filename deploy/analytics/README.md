@@ -112,11 +112,22 @@ umask 077
 printf 'MB_ADMIN_EMAIL=<이메일>\nMB_ADMIN_PASSWORD=Camon-%s-A1!\n' "$(openssl rand -hex 8)" \
     > .mb-admin.env
 
-# 초기 설정 + DB 연결 + 대시보드 + 카드 6개 생성 (몇 번 돌려도 안전)
+# 초기 설정 + DB 연결 + 대시보드 + 카드 생성 (몇 번 돌려도 안전)
 set -a; . ./.mb-admin.env; set +a
+
+# 회차를 컬렉션으로 갈라 두려면 이름을 넘긴다(생략하면 루트 `우리의 분석`에 만든다).
+# 이미 있는 컬렉션이면 그것을 재사용하고, 없으면 만든다.
+export MB_COLLECTION_NAME='2차 유저 테스트'
 python3 provision_metabase.py
 python3 verify_dashboard.py
 ```
+
+### 컬렉션을 Metabase UI에서 옮기지 말 것
+
+`provision_metabase.py`의 upsert는 **`MB_COLLECTION_NAME` 컬렉션 안에서만** 이름으로 카드와
+대시보드를 찾는다. UI에서 드래그해 다른 컬렉션으로 옮기면 다음 실행 때 못 찾아서 카드와
+대시보드를 **루트에 새로 만든다**(같은 이름 두 벌이 생기고, 어느 쪽을 보고 있는지 알 수 없게
+된다). 위치를 바꿀 땐 이 환경변수 값을 바꿔서 재실행한다.
 
 ## 왜 뷰를 따로 만들어야 하나
 
@@ -128,6 +139,35 @@ python3 verify_dashboard.py
 
 `ddl-auto: update`가 만든 테이블에는 `V20260730_01`이 정의한 보조 인덱스 일부가 없을 수 있다.
 현재 데이터 규모에서는 조회 성능에 영향이 없어 그대로 두었다 — Flyway를 도입하면 정리 대상이다.
+
+## 시간대 (KST 변환은 뷰에서 한 번만)
+
+수집 값은 **UTC로 저장된다** — 배포 백엔드 컨테이너에 `TZ`가 없어 JVM 기본(UTC)으로 쓰고,
+MySQL도 `time_zone=SYSTEM`(UTC)이다. 게다가 컬럼 타입이 `DATETIME`이라 시간대 정보가 아예 없다.
+
+그래서 **Metabase 관리자 → 로컬라이제이션의 "리포트 시간대"를 바꿔도 값이 변하지 않는다**(그
+설정이 먹는 건 `TIMESTAMP` 컬럼이다). compose의 `JAVA_TIMEZONE: Asia/Seoul`도 Metabase JVM의
+시계일 뿐 쿼리 결과와 무관하다. 변환은 **뷰에서** 한다:
+
+```sql
+CONVERT_TZ(occurred_at, '+00:00', '+09:00')
+```
+
+- 이름(`'Asia/Seoul'`)이 아니라 **오프셋**을 쓴다. 시간대 테이블(`mysql.time_zone_name`)이
+  로드되지 않은 MySQL에서는 이름 변환이 에러가 아니라 조용히 `NULL`을 돌려준다. 한국은 DST가
+  없어 고정 `+09:00`이 항상 정확하다.
+- 뷰가 이미 변환한 컬럼(`*_kst`)에 카드에서 `CONVERT_TZ`를 또 걸지 않는다 — +18시간이 된다.
+- 컬럼 이름에 `_kst` / `_utc`를 붙여 둔다. 같은 이름으로 값의 의미만 바꾸면, 다음에 카드를 쓰는
+  사람이 UTC라고 믿고 `playtest2_events.occurred_at`(UTC)과 비교한다.
+
+**날짜 경계가 특히 중요하다.** UTC 15:00이 KST 익일 00:00이므로 `DATE()`를 UTC 값에 그대로
+씌우면 한국 시간 자정~오전 9시 플레이가 전날로 집계된다. `같은 날 재방문율` / `다음 날
+재방문율`이 이 값을 쓰므로, `visit_date_kst`는 변환 후에 `DATE()`를 씌운다. 밤 테스트에서만
+드러나는 종류의 오차라 값이 틀려도 한동안 눈치채기 어렵다.
+
+현재 `playtest2_metric_user_visits`만 `_kst` 컬럼을 노출한다. 다른 뷰 3개의 타임스탬프
+(`started_at` / `finished_at` / `disconnected_at`)는 어느 카드에도 표시되지 않아 UTC로 두었다 —
+화면에 꺼낼 때 같은 방식으로 `_kst` 컬럼을 추가한다.
 
 ## ANALYTICS_HMAC_SECRET
 
@@ -163,14 +203,22 @@ grep -q '^ANALYTICS_HMAC_SECRET=' /opt/camon/.env \
 더 이상 새 데이터가 쌓이지 않는다.
 
 새 회차를 시작할 때 바꿀 곳은 세 군데다 — 마이그레이션 SQL(테이블+뷰), 엔티티
-(`PlaytestSession`/`PlaytestEvent`)의 `@Table`, 그리고 이 스크립트의 `DASHBOARD_NAME`과
+(`PlaytestSession`/`PlaytestEvent`)의 `@Table`, 그리고 이 스크립트의 `DASHBOARD_NAME` 기본값과
 카드 이름·SQL.
+
+컬렉션과 대시보드 이름은 환경변수로 덮어쓸 수 있다 — `MB_COLLECTION_NAME`,
+`MB_DASHBOARD_NAME`(`provision_metabase.py`와 `verify_dashboard.py`가 같은 값을 본다). 한 회차를
+검증하려고 스크립트를 고쳤다가 되돌리지 않으면, 다음 실행이 엉뚱한 대시보드를 갱신한다.
 
 ## 재실행 / 갱신
 
 - 카드 SQL이나 배치를 바꿨을 때: `provision_metabase.py`를 다시 올려서 실행하면 된다.
   컬렉션/대시보드/카드는 이름으로 찾아 갱신하고, 대시보드 배치는 전체를 교체한다.
-- 스키마(뷰)가 바뀌었을 때: `apply-metric-views.sh` 재실행 → `verify_dashboard.py`로 확인.
+- 스키마(뷰)가 바뀌었을 때: `apply-metric-views.sh` 재실행 → `provision_metabase.py`로 카드
+  갱신 → `verify_dashboard.py`로 확인. 뷰 컬럼 이름을 바꿨다면 카드 갱신을 빼먹지 말 것 —
+  뷰만 바꾸면 카드는 없어진 컬럼을 계속 읽어 "Unknown column"으로 죽는다.
+- `verify_dashboard.py`는 카드를 실제로 실행해 본다. 생성 성공과 값이 나오는 것은 다른
+  얘기라서(뷰 누락·컬럼명 변경은 열어볼 때만 드러난다) 갱신 후 항상 돌린다.
 - Metabase 버전을 올릴 때: compose의 이미지 태그를 바꾸고 `up -d`. 대시보드/계정은
   `camon-analytics_metabase-data` 볼륨의 H2 파일에 있으므로 컨테이너 교체로 사라지지 않는다.
 
