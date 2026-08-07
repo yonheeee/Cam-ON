@@ -1,6 +1,6 @@
 import { Client } from '@stomp/stompjs';
 import { handleExpiredSession } from '../../session/lib/sessionExpiry';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { roomApi, type ParticipantResponse, type RoomSnapshotResponse } from '../api/roomApi';
 
 // course/hooks/useCourseProgress.ts와 동일한 연결 패턴(brokerURL, connectHeaders, reconnectDelay) —
@@ -56,19 +56,30 @@ export function useRoomLobby(roomId: string, accessToken: string, participantId:
   // "내가 쫓겨났다"는 유일한 신호다 — 별도 개인 채널로 알려주지 않는다.
   const [kicked, setKicked] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
-    roomApi.getRoom(roomId, accessToken)
-      .then((snapshot) => {
-        if (!cancelled) setRoom(snapshot);
-      })
-      .catch((err) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : '방 정보 조회 실패');
-      });
-    return () => {
-      cancelled = true;
-    };
+  // 초기 스냅샷과 STOMP 연결 후 재조회가 겹칠 수 있다. 나중에 시작한 요청만
+  // 화면에 반영해, 느린 초기 응답이 재접속 후의 CONNECTED 상태를 다시 덮지 못하게 한다.
+  const snapshotRequestIdRef = useRef(0);
+
+  const refreshRoomSnapshot = useCallback(async () => {
+    const requestId = ++snapshotRequestIdRef.current;
+    try {
+      const snapshot = await roomApi.getRoom(roomId, accessToken);
+      if (requestId !== snapshotRequestIdRef.current) return;
+      setRoom(snapshot);
+      setError(null);
+    } catch (err) {
+      if (requestId !== snapshotRequestIdRef.current) return;
+      setError(err instanceof Error ? err.message : '방 정보 조회 실패');
+    }
   }, [roomId, accessToken]);
+
+  useEffect(() => {
+    void refreshRoomSnapshot();
+    return () => {
+      // 언마운트 후 도착한 응답은 무시한다.
+      snapshotRequestIdRef.current += 1;
+    };
+  }, [refreshRoomSnapshot]);
 
   useEffect(() => {
     const defaultProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -170,6 +181,11 @@ export function useRoomLobby(roomId: string, accessToken: string, participantId:
             }
           });
         });
+        // 백엔드는 STOMP CONNECT를 처리하며 CONNECTED 이벤트를 바로 발행한다.
+        // 프론트는 CONNECT 완료 후에야 topic을 구독하므로 새로고침 중 그 이벤트를
+        // 놓칠 수 있다. 구독을 먼저 열고 Redis 원본을 다시 읽어 DISCONNECTED 스냅샷을
+        // 최신 CONNECTED 상태로 교정한다.
+        void refreshRoomSnapshot();
       },
     });
 
@@ -177,7 +193,7 @@ export function useRoomLobby(roomId: string, accessToken: string, participantId:
     return () => {
       void client.deactivate();
     };
-  }, [roomId, accessToken, participantId]);
+  }, [roomId, accessToken, participantId, refreshRoomSnapshot]);
 
   // 준비 상태는 STOMP 브로드캐스트(member:ready-updated)로도 돌아오지만, 그것만 의존하면
   // 이벤트가 늦거나 유실될 때 버튼이 "죽은 것처럼" 보인다 — API 응답을 즉시 로컬에 반영한다.
