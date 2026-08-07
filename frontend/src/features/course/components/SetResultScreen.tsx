@@ -60,7 +60,6 @@ const BAR_CELLS = 18;
 const CELL_FILL_DURATION_MS = 160;
 const CELL_STAGGER_MS = 45;
 const ROW_STAGGER_MS = 70;
-const COURSE_POINTS_BY_RANK = [5, 3, 2, 1] as const;
 
 const DELTA_MARK: Record<CourseRankRow['delta'], string> = {
   up: '▲',
@@ -91,6 +90,7 @@ export function SetResultScreen({
   starting = false,
   participantColorIndexById,
 }: SetResultScreenProps) {
+  const isNinjaResult = gameName === 'NINJA';
   const topScore = Math.max(1, ...setResult.map((row) => row.score));
   const resultSignature = setResult
     .map((row) => `${row.participantId}:${row.score}`)
@@ -136,8 +136,36 @@ export function SetResultScreen({
     <div className="set-result">
       <div className="set-result__stage">
         {/* 위쪽 전광판 — 이번 세트 결과 */}
-        <section className="set-result__board">
+        <section
+          className={`set-result__board${isNinjaResult ? ' set-result__board--podium' : ''}`}
+        >
           <h1 className="set-result__board-title">{setIndex}세트 결과</h1>
+          {isNinjaResult ? (
+            <ol className="set-result__podium" aria-label="닌자 게임 세트 순위">
+              {setResult.map((row, index) => (
+                <li
+                  key={row.participantId}
+                  className={`set-result__podium-player set-result__podium-player--${row.rank}`}
+                  style={
+                    {
+                      '--c': participantColor(row.participantId, participantColorIndexById),
+                      '--podium-index': index,
+                    } as React.CSSProperties
+                  }
+                >
+                  <span className="set-result__podium-label">
+                    <strong className="set-result__podium-name">
+                      {nicknameOf(row.participantId)}
+                    </strong>
+                    <span className="set-result__podium-score">{row.score}p</span>
+                  </span>
+                  <span className="set-result__podium-step" aria-hidden>
+                    <b>{['1st', '2nd', '3rd', '4th'][row.rank - 1] ?? `${row.rank}th`}</b>
+                  </span>
+                </li>
+              ))}
+            </ol>
+          ) : (
           <ol className="set-result__rows">
             {setResult.map((row, index) => {
               const filled = filledCellsFor(row.score);
@@ -149,8 +177,6 @@ export function SetResultScreen({
               const displayedScore = isRevealSettled
                 ? row.score
                 : Math.floor(row.score * revealProgress);
-              const coursePoints = COURSE_POINTS_BY_RANK[row.rank - 1] ?? 0;
-              const showsGamePoints = gameName === 'FETCH_OBJECT' || gameName === 'CHARADES';
               return (
                 <li
                   key={row.participantId}
@@ -185,13 +211,13 @@ export function SetResultScreen({
                       isRevealSettled ? ' set-result__score--settled' : ''
                     }`}
                   >
-                    {showsGamePoints && <span>{displayedScore}p</span>}
-                    <span className="set-result__course-points">+{coursePoints}점</span>
+                    <span>{displayedScore}p</span>
                   </span>
                 </li>
               );
             })}
           </ol>
+          )}
         </section>
 
         {/* 아래 컨트롤 덱 — 좌: 코스 누적 순위 / 우: 다음 세트 */}

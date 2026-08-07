@@ -34,6 +34,8 @@ interface NinjaEndedData {
   courseTotals: Record<string, number>;
 }
 
+const NINJA_COURSE_POINTS_BY_RANK = [5, 3, 2, 1] as const;
+
 interface CharadesEndedData {
   ranking: { participantId: string; totalScore: number; rank: number }[];
   courseTotals: Record<string, number>;
@@ -159,7 +161,7 @@ export function useSetResult(roomId: string, accessToken: string): FinishedSet |
               publish(
                 data.ranking.map((entry) => ({
                   participantId: entry.token,
-                  score: data.sessionTotals[entry.token] ?? 0,
+                  score: NINJA_COURSE_POINTS_BY_RANK[entry.rank - 1] ?? 0,
                   rank: entry.rank,
                 })),
                 data.courseTotals,
