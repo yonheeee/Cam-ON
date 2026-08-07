@@ -11,6 +11,7 @@ import com.camon.domain.course.ws.payload.CourseScoreEntry;
 import com.camon.domain.course.ws.payload.CourseSessionSkippedPayload;
 import com.camon.domain.course.ws.payload.MemberReturnedPayload;
 import com.camon.domain.game.common.Game;
+import com.camon.domain.game.common.demo.DemoScenario;
 import com.camon.domain.game.common.service.GameCatalogService;
 import com.camon.domain.game.common.service.GameScoreService;
 import com.camon.domain.game.common.service.GameSessionSpec;
@@ -305,7 +306,7 @@ public class CourseRunner {
                 // 룰 설명의 원본은 MySQL games.description이다 — 프론트에 문구를 두지 않아
                 // 배포 없이 DB만 고쳐도 화면이 바뀐다.
                 next.getDescription(),
-                item.roundCount(),
+                roundCount(room, next.getName(), item),
                 resumesAt,
                 true
             );
@@ -411,21 +412,24 @@ public class CourseRunner {
             // 코스 저장 시 막아두므로 정상적으론 도달하지 않는다(게임이 저장 후 비활성화된 경우 등).
             throw new BusinessException(ErrorCode.COURSE_GAME_NOT_SUPPORTED);
         }
+        // 시연 모드에서는 게임에 따라 라운드 수가 시연용으로 줄어든다. 룰 설명·세션 메타데이터·
+        // 실제 진행이 같은 값을 보도록 여기서 한 번에 정한다.
+        int roundCount = roundCount(room, game.getName(), item);
         log.info("[Course] openSession : roomCode={} seq={} game={} rounds={} topicId={}",
-            room.roomCode(), seq, game.getName(), item.roundCount(), item.topicId());
+            room.roomCode(), seq, game.getName(), roundCount, item.topicId());
         // 게임을 시작시키기 전에 세션 키를 먼저 만든다 — 공통 점수 저장이 이 키의 존재로
         // "세션이 열렸는지"를 검증하므로, 게임이 첫 라운드 점수를 저장하는 시점엔 이미 있어야 한다.
         courseRepository.openSession(
             room.roomCode(),
             seq,
             item.gameId(),
-            item.roundCount()
+            roundCount
         );
         // game:started 브로드캐스트는 각 게임이 세션을 열면서 발행한다 — 프론트의 화면 전환은
         // 그 이벤트 하나로 통일돼 있어서, 코스가 별도 "다음 게임" 이벤트를 만들지 않는다.
         starter.start(
             room.roomId(),
-            new GameSessionSpec(item.gameId(), item.roundCount(), item.topicId()),
+            new GameSessionSpec(item.gameId(), roundCount, item.topicId()),
             participants
         );
         applicationEventPublisher.publishEvent(new AnalyticsDomainEvent(
@@ -442,7 +446,7 @@ public class CourseRunner {
             null,
             Map.of(
                 "playerCount", participants.size(),
-                "roundCount", item.roundCount()
+                "roundCount", roundCount
             )
         ));
     }
@@ -494,6 +498,13 @@ public class CourseRunner {
             roomId,
             new MemberReturnedPayload(requesterId, isHost, reopenRoom)
         );
+    }
+
+    // 코스 항목이 적어 둔 라운드 수. 시연 모드에서만 게임별 시연 값으로 바뀐다.
+    private static int roundCount(Room room, String gameName, CourseItem item) {
+        return room.demoMode()
+            ? DemoScenario.roundCount(gameName, item.roundCount())
+            : item.roundCount();
     }
 
     // 건너뛸 이유가 있으면 사람이 읽을 수 있는 문자열로, 없으면 empty.

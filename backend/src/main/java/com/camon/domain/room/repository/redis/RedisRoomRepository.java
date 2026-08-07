@@ -24,6 +24,8 @@ public class RedisRoomRepository implements RoomRepository {
     private static final String CREATED_AT = "created_at";
     // 코스에서 진행 중인 위치(1부터). 게임 도메인이 이 값으로 room:{code}:session:{seq} 키를 조립한다.
     private static final String CURRENT_SESSION_SEQ = "current_session_seq";
+    // 발표 시연용 방 표시. 방 해시에 같이 담기므로 방이 지워질 때 함께 사라진다.
+    private static final String DEMO_MODE = "demo_mode";
 
     private static final DefaultRedisScript<Long> SAVE_IF_ABSENT_SCRIPT =
         new DefaultRedisScript<>("""
@@ -38,7 +40,8 @@ public class RedisRoomRepository implements RoomRepository {
                 'host_participant_id', ARGV[3],
                 'max_players', ARGV[4],
                 'status', ARGV[5],
-                'created_at', ARGV[6])
+                'created_at', ARGV[6],
+                'demo_mode', ARGV[7])
             redis.call('SET', KEYS[2], ARGV[1])
             return 1
             """, Long.class);
@@ -56,7 +59,8 @@ public class RedisRoomRepository implements RoomRepository {
                 'host_participant_id', ARGV[3],
                 'max_players', ARGV[4],
                 'status', ARGV[5],
-                'created_at', ARGV[6])
+                'created_at', ARGV[6],
+                'demo_mode', ARGV[12])
             redis.call('SET', KEYS[2], ARGV[1])
             redis.call('SADD', KEYS[3], ARGV[3])
             redis.call('HSET', KEYS[4],
@@ -142,7 +146,8 @@ public class RedisRoomRepository implements RoomRepository {
             room.hostParticipantId().toString(),
             Integer.toString(room.maxPlayers()),
             room.status().name(),
-            room.createdAt().toString()
+            room.createdAt().toString(),
+            Boolean.toString(room.demoMode())
         );
         return Long.valueOf(1L).equals(result);
     }
@@ -169,7 +174,8 @@ public class RedisRoomRepository implements RoomRepository {
             Boolean.toString(host.ready()),
             host.connectionStatus().name(),
             Long.toString(host.joinedAt().toEpochMilli()),
-            Boolean.toString(host.inLobby())
+            Boolean.toString(host.inLobby()),
+            Boolean.toString(room.demoMode())
         );
         return Long.valueOf(1L).equals(result);
     }
@@ -192,6 +198,8 @@ public class RedisRoomRepository implements RoomRepository {
             // 방 생성 시엔 이 필드를 쓰지 않는다(코스가 아직 없음) — 첫 세션이 열릴 때 1로 기록된다.
             // 없으면 1로 읽어 "아직 첫 게임" 취급.
             optionalInt(values, CURRENT_SESSION_SEQ, 1),
+            // 시연 모드 이전에 만들어진 방(필드 없음)은 평범한 방으로 읽는다.
+            optionalBoolean(values, DEMO_MODE),
             Instant.parse(required(values, CREATED_AT))
         ));
     }
@@ -278,6 +286,14 @@ public class RedisRoomRepository implements RoomRepository {
     ) {
         Object value = values.get(field);
         return value == null ? defaultValue : Integer.parseInt(value.toString());
+    }
+
+    private static boolean optionalBoolean(
+        Map<Object, Object> values,
+        String field
+    ) {
+        Object value = values.get(field);
+        return value != null && Boolean.parseBoolean(value.toString());
     }
 
     private static String required(Map<Object, Object> values, String field) {

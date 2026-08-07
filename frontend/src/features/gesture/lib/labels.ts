@@ -3,7 +3,7 @@
 // 데이터가 없어서 라벨 자체가 삭제됨 (hand-gesture-recognition-mediapipe/README.md 참고).
 export const KEYPOINT_LABELS = [
   'snake',
-  'girl_V',
+  'beam',
   'mouse',
   'Horse',
   'cow',

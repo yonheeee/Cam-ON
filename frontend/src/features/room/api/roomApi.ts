@@ -23,6 +23,12 @@ export interface RoomSnapshotResponse {
   maxPlayers: number;
   status: string;
   hostParticipantId: string;
+  /**
+   * 발표 시연용 방인가. 방 생성 시 정해지고 바뀌지 않는다 — 켜져 있으면 서버가 게임 콘텐츠를
+   * 고정 시나리오(닌자 술법/데미지, 물건 제시어, 몸으로말해요 제시어)로 낸다.
+   * 구버전 백엔드는 이 필드를 안 내려주므로 optional.
+   */
+  demoMode?: boolean;
   participants: ParticipantResponse[];
 }
 
@@ -77,10 +83,12 @@ async function request<T>(path: string, accessToken: string, init?: RequestInit)
 }
 
 export const roomApi = {
-  createRoom: (maxPlayers: number, accessToken: string) =>
+  // demoMode는 발표 시연용 옵션(랜딩 페이지의 시연 모드 토글). 무엇이 어떻게 바뀌는지는 전부
+  // 서버가 정하고, 프론트는 "이 방을 시연 모드로 열어 달라"만 보낸다.
+  createRoom: (maxPlayers: number, accessToken: string, demoMode = false) =>
     request<CreateRoomResult>('/api/rooms', accessToken, {
       method: 'POST',
-      body: JSON.stringify({ maxPlayers }),
+      body: JSON.stringify({ maxPlayers, demoMode }),
     }),
 
   joinRoom: (roomCode: string, accessToken: string) =>

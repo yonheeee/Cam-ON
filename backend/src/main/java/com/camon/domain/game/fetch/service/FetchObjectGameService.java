@@ -1,6 +1,7 @@
 package com.camon.domain.game.fetch.service;
 
 import com.camon.domain.game.common.Mission;
+import com.camon.domain.game.common.demo.DemoScenario;
 import com.camon.domain.game.common.event.GameSessionFinishedEvent;
 import com.camon.domain.game.common.repository.MissionRepository;
 import com.camon.domain.game.common.repository.SaveRoundResult;
@@ -45,11 +46,13 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledFuture;
 import java.util.function.BinaryOperator;
 import java.util.stream.Collectors;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.TaskScheduler;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+@Slf4j
 @Service
 public class FetchObjectGameService {
 
@@ -118,16 +121,26 @@ public class FetchObjectGameService {
             )
             .toList();
         validatePlayerCount(connectedParticipants.size());
-        validateRoundCount(totalRounds, connectedParticipants.size());
 
-        List<Long> missionOrder = selectMissionOrder(gameId, totalRounds);
+        // 시연 모드: 제시어 3개로 줄이고 무엇이 나올지도 고정한다(발표자가 물건을 미리 챙겨야 한다).
+        // 라운드 수 검증(라운드 ≥ 인원)은 건너뛴다 — 4인 시연에서 3라운드는 그 규칙에 걸리는데,
+        // 여기서 예외가 나면 CourseRunner가 이 게임을 통째로 건너뛰어 시연이 사라진다.
+        boolean demo = room.demoMode();
+        int rounds = demo ? DemoScenario.FETCH_TOTAL_ROUNDS : totalRounds;
+        if (!demo) {
+            validateRoundCount(rounds, connectedParticipants.size());
+        }
+
+        List<Long> missionOrder = demo
+            ? demoMissionOrder(gameId, rounds)
+            : selectMissionOrder(gameId, rounds);
         int sessionSeq = room.currentSessionSeq();
         cancelPendingTimeout(room.roomCode(), sessionSeq);
         fetchRedis.initialize(
             room.roomCode(),
             sessionSeq,
             gameId,
-            totalRounds,
+            rounds,
             connectedParticipants.stream()
                 .map(Participant::participantId)
                 .toList(),
@@ -138,9 +151,9 @@ public class FetchObjectGameService {
             room.roomId(),
             gameId,
             sessionSeq,
-            totalRounds
+            rounds
         );
-        startRound(room, sessionSeq, 1, totalRounds);
+        startRound(room, sessionSeq, 1, rounds);
     }
 
     public FetchSubmissionResponse submit(
@@ -745,6 +758,38 @@ public class FetchObjectGameService {
         if (errorCode != null) {
             throw new BusinessException(errorCode);
         }
+    }
+
+    // 시연용 제시어 순서. DemoScenario에 적힌 물건을 그 순서대로 낸다 — 하나라도 DB에 없으면
+    // 라운드 수가 모자라게 되므로 통째로 포기하고 평소의 랜덤 선택으로 돌아간다.
+    private List<Long> demoMissionOrder(Long gameId, int totalRounds) {
+        Map<String, Mission> missionByKeyword = missionRepository
+            .findAllByGameGameIdAndMissionTypeAndIsActiveTrue(
+                gameId,
+                FetchObjectMissionCatalog.MISSION_TYPE
+            )
+            .stream()
+            .collect(Collectors.toMap(
+                Mission::getKeyword,
+                mission -> mission,
+                BinaryOperator.minBy(
+                    Comparator.comparing(Mission::getMissionId)
+                )
+            ));
+        List<Long> order = DemoScenario.FETCH_KEYWORDS.stream()
+            .map(missionByKeyword::get)
+            .filter(java.util.Objects::nonNull)
+            .map(Mission::getMissionId)
+            .limit(totalRounds)
+            .toList();
+        if (order.size() < totalRounds) {
+            log.warn("[Fetch] 시연 모드 : 제시어 {} 중 DB에 있는 게 {}개뿐 — 랜덤 선택으로 진행",
+                DemoScenario.FETCH_KEYWORDS, order.size());
+            return selectMissionOrder(gameId, totalRounds);
+        }
+        log.info("[Fetch] 시연 모드 : 제시어를 {}로 고정 ({}라운드)",
+            DemoScenario.FETCH_KEYWORDS, totalRounds);
+        return order;
     }
 
     private List<Long> selectMissionOrder(Long gameId, int totalRounds) {

@@ -4,7 +4,9 @@
 카드를 만드는 데 성공했다는 것과 카드가 값을 내놓는다는 것은 다른 얘기다 — 뷰가 빠졌거나
 컬럼명이 바뀌면 생성은 되고 열어볼 때만 죽는다. 배포/스키마 변경 후 이걸 돌려 확인한다.
 
-환경변수는 provision_metabase.py와 같다 (MB_ADMIN_EMAIL / MB_ADMIN_PASSWORD / MB_URL).
+환경변수는 provision_metabase.py와 같다 (MB_ADMIN_EMAIL / MB_ADMIN_PASSWORD / MB_URL /
+MB_DASHBOARD_NAME). 기본값은 provision_metabase.py가 만드는 2차 대시보드다 — 여기에 1차
+이름이 박혀 있으면 2차를 프로비저닝하고 검증까지 통과해도 실제로 확인한 건 1차다.
 """
 
 import json
@@ -14,7 +16,9 @@ import urllib.error
 import urllib.request
 
 MB_URL = os.environ.get("MB_URL", "http://localhost:3001").rstrip("/")
-DASHBOARD_NAME = "플레이테스트 핵심 지표"
+DASHBOARD_NAME = os.environ.get(
+    "MB_DASHBOARD_NAME", "플레이테스트 핵심 지표 (2차)"
+)
 
 
 def call(method, path, body=None, token=None):

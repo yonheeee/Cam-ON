@@ -27,7 +27,7 @@ from model import PointHistoryClassifier
 # 한 손만으로 이 라벨이 인식되면 스킬 이펙트가 발동합니다 (지금은 전부 양손 조합이라 비어있음)
 SKILL_EFFECT_LABELS = set()
 # 이 라벨들은 양손을 맞춰야 나오는 조합 포즈라, 양손이 다 잡혔을 때만 판정/발동합니다
-COMBO_SKILL_EFFECT_LABELS = {'snake', 'girl_V', 'mouse', 'Horse', 'cow', 'rabbit',
+COMBO_SKILL_EFFECT_LABELS = {'snake', 'beam', 'mouse', 'Horse', 'cow', 'rabbit',
                              'cat', 'spider', 'sailor_moon'}
 # keypoint_classifier_label.csv 기준 조합 전용 클래스 id — 지금은 전부 양손 조합
 COMBO_CLASS_IDS = {0, 1, 2, 3, 4, 5, 6, 7, 8}
@@ -52,13 +52,29 @@ SKILLS = [
     },
     {
         'name': '냥냥펀치', 'display_name': 'NyangPunch(Cat)',
-        'sequence': ['girl_V', 'cat'], 'damage': 15,
+        # 실제 게임 콘텐츠(DB gesture/skill_gesture, DevNinjaDataSeeder)와 맞춤 — 예전엔 girl_V→cat
+        # 이었지만 백엔드 시드는 rabbit→cat이다.
+        'sequence': ['rabbit', 'cat'], 'damage': 15,
     },
     {
         'name': '바람의 상처', 'display_name': 'WindScar(Wind)',
         'sequence': ['spider', 'Horse', 'mouse', 'sailor_moon'], 'damage': 45,
     },
+    {
+        'name': '벚꽃 참격', 'display_name': 'CherryBlossomSlash',
+        'sequence': ['sailor_moon', 'spider', 'cat'], 'damage': 30,
+    },
+    {
+        'name': '탈모빔', 'display_name': 'HairLossBeam',
+        'sequence': ['cow', 'cat', 'rabbit', 'beam'], 'damage': 45,
+    },
+    {
+        'name': 'slap', 'display_name': 'Slap',
+        'sequence': ['mouse', 'spider'], 'damage': 20,
+    },
 ]
+# 아마테라스(6단)/나선환(4단)은 DB 시드에만 있고 이 프로토타입엔 없다 — 데모는 시퀀스 판정 검증용이라
+# 전부 옮기지 않았다. 콤보 선언의 원본은 backend의 DevNinjaDataSeeder다.
 # 접미사 매칭 시 짧은 시퀀스가 긴 시퀀스보다 먼저 우발적으로 걸리지 않도록 긴 것부터 검사
 SKILLS_BY_LENGTH_DESC = sorted(SKILLS, key=lambda s: -len(s['sequence']))
 

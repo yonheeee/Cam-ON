@@ -1,11 +1,9 @@
-/* 피격 이펙트 컨테이너 스타일. Pixel*Effect(div 컨테이너 + 내부 canvas) 8종이 공유한다.
+/* 피격 이펙트 컨테이너 스타일. Pixel*Effect(div 컨테이너 + 내부 canvas)가 공유한다.
 
    원래 NinjaGamePanel.css에 있었다 — 그 패널이 전용 전투 화면(NinjaBattleScreen)으로 교체돼
-   삭제되면서 옮겼다. 옮기기 전엔 실제 게임 화면이 그 CSS를 import하지도 않으면서, dev 전용
-   프리뷰(NinjaEffectPreview)가 import한 덕에 우연히 스타일을 받아 쓰고 있었다.
+   삭제되면서 옮겼다.
 
-   컴포넌트 파일마다 import하지 않고 두 진입점에서만 가져온다: 게임 경로는 skillEffects.tsx
-   (Pixel*Effect를 실제로 고르는 표), 프리뷰 경로는 NinjaEffectPreview. */
+   컴포넌트 파일마다 import하지 않고 게임 이펙트 매핑인 skillEffects.tsx에서 가져온다. */
 
 /* 이펙트 파티클은 화면 전체를 덮는 캔버스에 그리되, 클릭을 가로채지 않는다. */
 .ninja-effect-overlay {

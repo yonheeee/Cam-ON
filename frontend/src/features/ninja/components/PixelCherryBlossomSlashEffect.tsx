@@ -1,7 +1,8 @@
 import { useEffect, useRef } from 'react';
 import { Application, Container, Graphics } from 'pixi.js';
+import { mixSfxVolume } from '../../sound/lib/sfxVolume';
 
-const DURATION_MS = 2400;
+export const DURATION_MS = 2400;
 const BLOOM_AT_MS = 180;
 const PETAL_COUNT = 110;
 
@@ -191,6 +192,8 @@ export function PixelCherryBlossomSlashEffect() {
 
     let disposed = false;
     let app: Application | null = null;
+    let soundTimer: number | null = null;
+    let sound: HTMLAudioElement | null = null;
 
     const start = async () => {
       const nextApp = new Application();
@@ -222,6 +225,16 @@ export function PixelCherryBlossomSlashEffect() {
       let grid = Math.max(5, Math.min(11, Math.round(Math.min(width, height) / 82)));
       let petals = createPetals(petalLayer, width, height, grid);
       let elapsed = 0;
+
+      sound = new Audio('/assets/sounds/cherry.mp3');
+      sound.preload = 'auto';
+      soundTimer = window.setTimeout(() => {
+        if (disposed || !sound) return;
+        sound.volume = mixSfxVolume(0.85);
+        void sound.play().catch(() => {
+          // 브라우저가 자동 재생을 막더라도 이펙트 진행은 유지한다.
+        });
+      }, BLOOM_AT_MS);
 
       const rebuild = () => {
         grid = Math.max(5, Math.min(11, Math.round(Math.min(width, height) / 82)));
@@ -270,6 +283,9 @@ export function PixelCherryBlossomSlashEffect() {
 
     return () => {
       disposed = true;
+      if (soundTimer !== null) window.clearTimeout(soundTimer);
+      sound?.pause();
+      if (sound) sound.currentTime = 0;
       app?.destroy({ removeView: true }, { children: true });
       host.replaceChildren();
     };

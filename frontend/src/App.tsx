@@ -2,7 +2,6 @@ import { Navigate, Route, Routes, useSearchParams } from 'react-router';
 import { LandingPage } from './features/landing/components/LandingPage';
 import { SetResultPreview } from './features/course/components/SetResultPreview';
 import { CourseResultPreview } from './features/course/components/CourseResultPreview';
-import { NinjaEffectPreview } from './features/ninja/components/NinjaEffectPreview';
 import { JoinRoomPage } from './features/room/pages/JoinRoomPage';
 import { NicknamePage } from './features/room/pages/NicknamePage';
 import { RoomPage } from './features/room/pages/RoomPage';
@@ -38,10 +37,6 @@ function App() {
         {/* 정적 세그먼트가 :roomId보다 우선 매칭되므로 /rooms/join이 RoomPage에 잡히지 않는다 */}
         <Route path="/rooms/join" element={<InviteRedirect />} />
         <Route path="/rooms/:roomId" element={<RoomPage />} />
-        <Route
-          path="/effects-preview"
-          element={import.meta.env.DEV ? <NinjaEffectPreview /> : <Navigate to="/" replace />}
-        />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </>

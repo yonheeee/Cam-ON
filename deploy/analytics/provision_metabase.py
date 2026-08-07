@@ -10,12 +10,23 @@ API로 옮긴 것이다. 배포 서버는 브라우저를 띄울 수 없고, 손
 - 컬렉션/대시보드/카드는 이름으로 찾아 있으면 갱신, 없으면 생성한다
 - 대시보드 배치는 매번 원하는 전체 집합으로 교체한다
 
+회차:
+이 스크립트가 만드는 것은 **2차** 대시보드이고 카드는 playtest2_* 를 읽는다. 백엔드가 2차
+테이블에만 기록하므로 1차 뷰를 읽는 카드는 더 이상 늘지 않는다.
+
+이미 EC2에 만들어져 있는 1차 대시보드("플레이테스트 핵심 지표")는 건드리지 않는다 —
+이름이 달라서 이 스크립트의 upsert 대상에서 빠지고, 1차 뷰도 그대로 살아 있어 두 회차를
+나란히 볼 수 있다. 카드 이름에까지 "(2차)"를 붙인 건 같은 컬렉션 안에서 이름으로 upsert하기
+때문이다. 이름이 겹치면 1차 카드의 SQL을 2차로 덮어써서 1차 대시보드가 조용히 망가진다.
+
 필요 환경변수:
   MB_ADMIN_EMAIL     관리자 이메일
   MB_ADMIN_PASSWORD  관리자 비밀번호
 선택:
   MB_URL             기본 http://localhost:3001
   CAMON_ENV_FILE     MySQL 접속값을 읽을 env 파일. 기본 /opt/camon/.env
+  MB_COLLECTION_NAME 카드/대시보드를 담을 컬렉션 이름. 기본은 루트(`우리의 분석`)
+  MB_DASHBOARD_NAME  대시보드 이름
   MB_ADMIN_FIRST_NAME / MB_ADMIN_LAST_NAME
 """
 
@@ -28,8 +39,11 @@ import urllib.request
 
 MB_URL = os.environ.get("MB_URL", "http://localhost:3001").rstrip("/")
 ENV_FILE = os.environ.get("CAMON_ENV_FILE", "/opt/camon/.env")
-COLLECTION_NAME = "우리의 분석"
-DASHBOARD_NAME = "플레이테스트 핵심 지표"
+# 회차를 컬렉션으로 갈라 두려면 MB_COLLECTION_NAME으로 넘긴다(예: "2차 유저 테스트").
+# 반드시 이 변수로 지정할 것 — Metabase UI에서 카드를 드래그해 옮기면 아래 upsert가 그 카드를
+# 못 찾아(이름 검색 범위가 이 컬렉션이다) 다음 실행 때 루트에 6개를 새로 만든다.
+COLLECTION_NAME = os.environ.get("MB_COLLECTION_NAME", "우리의 분석")
+DASHBOARD_NAME = os.environ.get("MB_DASHBOARD_NAME", "플레이테스트 핵심 지표 (2차)")
 DATABASE_NAME = "Cam-ON"
 
 session_token = None
@@ -277,18 +291,18 @@ def place_cards(dashboard_id, placements):
 CARDS = [
     {
         "key": "completion",
-        "name": "코스 완주율",
+        "name": "코스 완주율 (2차)",
         "display": "scalar",
         "sql": """SELECT
     ROUND(
         100.0 * SUM(course_completed) / NULLIF(COUNT(*), 0),
         1
     ) AS `코스 완주율 (%)`
-FROM playtest_metric_course_attempts;""",
+FROM playtest2_metric_course_attempts;""",
     },
     {
         "key": "summary",
-        "name": "플레이테스트 요약 지표",
+        "name": "플레이테스트 요약 지표 (2차)",
         "display": "table",
         "sql": """SELECT
     (
@@ -297,7 +311,7 @@ FROM playtest_metric_course_attempts;""",
                 / NULLIF(SUM(initial_player_count), 0),
             1
         )
-        FROM playtest_metric_course_attempts
+        FROM playtest2_metric_course_attempts
     ) AS `참가자 중간 이탈률 (%)`,
     (
         -- 전체 참가자 기준: 결과 화면 도달 인원 ÷ 최초 참가 인원.
@@ -310,7 +324,7 @@ FROM playtest_metric_course_attempts;""",
                 / NULLIF(SUM(initial_player_count), 0),
             1
         )
-        FROM playtest_metric_course_attempts
+        FROM playtest2_metric_course_attempts
     ) AS `전체 참가자 기준 결과 화면 도달률 (%)`,
     (
         SELECT ROUND(
@@ -318,11 +332,11 @@ FROM playtest_metric_course_attempts;""",
                 / NULLIF(COUNT(*), 0),
             1
         )
-        FROM playtest_metric_disconnects
+        FROM playtest2_metric_disconnects
     ) AS `재접속 성공률 (%)`,
     (
         SELECT ROUND(AVG(total_duration_seconds), 1)
-        FROM playtest_metric_course_attempts
+        FROM playtest2_metric_course_attempts
         WHERE course_completed = TRUE
           AND total_duration_seconds IS NOT NULL
     ) AS `평균 코스 시간 (초)`,
@@ -333,14 +347,14 @@ FROM playtest_metric_course_attempts;""",
         )
         FROM (
             SELECT room_key, COUNT(*) AS started_attempts
-            FROM playtest_metric_course_attempts
+            FROM playtest2_metric_course_attempts
             GROUP BY room_key
         ) room_attempts
     ) AS `같은 방 재플레이율 (%)`;""",
     },
     {
         "key": "game_dropout",
-        "name": "게임별 이탈률",
+        "name": "게임별 이탈률 (2차)",
         "display": "bar",
         "visualization_settings": {
             "graph.dimensions": ["게임"],
@@ -354,13 +368,13 @@ FROM playtest_metric_course_attempts;""",
         100.0 * SUM(dropout_player_count) / NULLIF(SUM(player_count), 0),
         1
     ) AS `게임별 이탈률 (%)`
-FROM playtest_metric_game_sessions
+FROM playtest2_metric_game_sessions
 GROUP BY game_type
 ORDER BY `게임별 이탈률 (%)` DESC;""",
     },
     {
         "key": "exit_points",
-        "name": "상세 이탈 지점",
+        "name": "상세 이탈 지점 (2차)",
         "display": "table",
         "sql": """SELECT
     game_type AS `게임`,
@@ -394,7 +408,7 @@ FROM (
             AS UNSIGNED
         ) AS turn_number,
         JSON_UNQUOTE(JSON_EXTRACT(properties_json, '$.reason')) AS leave_reason
-    FROM playtest_events
+    FROM playtest2_events
     WHERE event_name = 'PARTICIPANT_LEFT'
       AND JSON_UNQUOTE(
           JSON_EXTRACT(properties_json, '$.roomStatus')
@@ -411,12 +425,12 @@ ORDER BY `이탈 인원` DESC;""",
     },
     {
         "key": "user_summary",
-        "name": "익명 사용자 요약",
+        "name": "익명 사용자 요약 (2차)",
         "display": "table",
         "sql": """SELECT
     (
         SELECT COUNT(DISTINCT analytics_user_key)
-        FROM playtest_metric_user_visits
+        FROM playtest2_metric_user_visits
     ) AS `익명 브라우저 수`,
     (
         SELECT ROUND(
@@ -427,7 +441,7 @@ ORDER BY `이탈 인원` DESC;""",
             SELECT
                 analytics_user_key,
                 COUNT(DISTINCT room_key) AS room_count
-            FROM playtest_metric_user_visits
+            FROM playtest2_metric_user_visits
             GROUP BY analytics_user_key
         ) browser_rooms
     ) AS `다른 방 재플레이율 (%)`,
@@ -439,20 +453,20 @@ ORDER BY `이탈 인원` DESC;""",
         FROM (
             SELECT
                 analytics_user_key,
-                visit_date,
+                visit_date_kst,
                 COUNT(DISTINCT room_key) AS visit_count
-            FROM playtest_metric_user_visits
-            GROUP BY analytics_user_key, visit_date
+            FROM playtest2_metric_user_visits
+            GROUP BY analytics_user_key, visit_date_kst
         ) browser_days
     ) AS `같은 날 재방문율 (%)`,
     (
         SELECT ROUND(
             100.0 * SUM(EXISTS (
                 SELECT 1
-                FROM playtest_metric_user_visits returned
+                FROM playtest2_metric_user_visits returned
                 WHERE returned.analytics_user_key =
                     first_visits.analytics_user_key
-                  AND returned.visit_date = DATE_ADD(
+                  AND returned.visit_date_kst = DATE_ADD(
                       first_visits.first_visit_date,
                       INTERVAL 1 DAY
                   )
@@ -462,25 +476,27 @@ ORDER BY `이탈 인원` DESC;""",
         FROM (
             SELECT
                 analytics_user_key,
-                MIN(visit_date) AS first_visit_date
-            FROM playtest_metric_user_visits
+                MIN(visit_date_kst) AS first_visit_date
+            FROM playtest2_metric_user_visits
             GROUP BY analytics_user_key
         ) first_visits
     ) AS `다음 날 재방문율 (%)`;""",
     },
     {
         "key": "visit_detail",
-        "name": "익명 방문 상세",
+        "name": "익명 방문 상세 (2차)",
         "display": "table",
+        # 시각은 KST로 내보낸다. 뷰가 이미 변환해 두므로 여기서 CONVERT_TZ를 또 걸지 않는다
+        # (두 번 걸면 +18시간이 된다).
         "sql": """SELECT
     LEFT(analytics_user_key, 8) AS `익명 브라우저`,
     LEFT(room_key, 8) AS `방`,
-    entered_at AS `방문 시각`,
-    visit_date AS `방문 날짜`,
+    entered_at_kst AS `방문 시각 (KST)`,
+    visit_date_kst AS `방문 날짜 (KST)`,
     app_version AS `앱 버전`,
     experiment_version AS `실험 버전`
-FROM playtest_metric_user_visits
-ORDER BY entered_at DESC;""",
+FROM playtest2_metric_user_visits
+ORDER BY entered_at_kst DESC;""",
     },
 ]
 

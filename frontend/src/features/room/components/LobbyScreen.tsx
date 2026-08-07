@@ -351,6 +351,13 @@ export function LobbyScreen({
       >
         <img className="lobby-screen__logo" src="/assets/cam-on-logo-v3.png" alt="CAM, ON!" />
       </button>
+      {/* 시연 모드로 열린 방이라는 표시. 게임 규칙(닌자 한 방 데미지, 물건 3개, 고정 제시어)이
+          평소와 다르므로 방장뿐 아니라 참가자 전원에게 보여 준다. */}
+      {room?.demoMode && (
+        <p className="lobby-screen__demo-badge" role="status">
+          시연 모드
+        </p>
+      )}
       <div className="lobby-screen__header-actions">
         <BackgroundMusic
           source="/assets/sounds/cozy-cartridge-club.mp3"

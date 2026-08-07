@@ -100,6 +100,7 @@ public class RoomService {
                 request.maxPlayers(),
                 RoomStatus.WAITING,
                 1,
+                request.isDemoMode(),
                 createdAt
             );
             Participant host = new Participant(
@@ -362,6 +363,7 @@ public class RoomService {
             room.maxPlayers(),
             room.status(),
             room.hostParticipantId(),
+            room.demoMode(),
             participantResponses
         );
     }
