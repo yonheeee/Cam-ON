@@ -7,6 +7,40 @@
 --
 -- 전부 CREATE OR REPLACE VIEW라 몇 번 적용해도 안전하다.
 
+-- ---------------------------------------------------------------------------
+-- 집계 대상 필터 (베이스 뷰)
+--
+-- 지표 뷰 4개는 원본 테이블이 아니라 이 두 뷰를 읽는다. 제외 구간이 생길 때 여기 한 곳만
+-- 고치면 대시보드 카드 전부에 반영된다 -- Metabase 카드마다 필터를 거는 방식은 카드가 늘 때마다
+-- 빠뜨리는 곳이 생기고, "이 카드만 숫자가 다른" 상태를 만든다.
+--
+-- 데이터를 DELETE 하지 않는 이유: 지우면 되돌릴 수 없고, 나중에 "이 구간이 왜 비었나"를
+-- 추적할 근거도 사라진다. 원본은 그대로 두고 집계에서만 빼는 편이 안전하다.
+--
+-- 제외 단위가 "세션"인 이유: 이벤트만 시각으로 잘라내면 세션은 남고 그 안의 이벤트에 구멍이
+-- 나서, 시작만 하고 라운드 기록이 없는 세션이 된다. 그러면 완주율·이탈률이 실제보다 나쁘게
+-- 나온다. 세션 전체를 빼야 모집단에서 깨끗이 빠진다.
+--
+-- 시각은 UTC다(아래 playtest2_metric_user_visits의 주석 참고). 한국 시간으로 조건을 적으면
+-- 9시간 어긋난 엉뚱한 구간이 빠지므로, 주석에 KST를 병기해 둔다.
+
+CREATE OR REPLACE VIEW playtest2_sessions_included AS
+SELECT *
+FROM playtest2_sessions
+WHERE NOT (
+    -- 2026-08-07 09:00~09:45 KST: LiveKit 프로젝트 교체 작업 중 발생한 자체 접속.
+    created_at >= '2026-08-07 00:00:00'
+    AND created_at < '2026-08-07 00:45:00'
+);
+
+CREATE OR REPLACE VIEW playtest2_events_included AS
+SELECT pe.*
+FROM playtest2_events pe
+JOIN playtest2_sessions_included ps
+    ON ps.test_session_id = pe.test_session_id;
+
+-- ---------------------------------------------------------------------------
+
 CREATE OR REPLACE VIEW playtest2_metric_course_attempts AS
 SELECT
     ps.test_session_id,
@@ -28,8 +62,8 @@ SELECT
           AND JSON_UNQUOTE(JSON_EXTRACT(pe.properties_json, '$.roomStatus')) = 'PLAYING'
         THEN pe.participant_key
     END) AS dropout_player_count
-FROM playtest2_sessions ps
-LEFT JOIN playtest2_events pe
+FROM playtest2_sessions_included ps
+LEFT JOIN playtest2_events_included pe
     ON pe.test_session_id = ps.test_session_id
 WHERE ps.started_at IS NOT NULL
 GROUP BY
@@ -64,11 +98,11 @@ FROM (
         MIN(occurred_at) AS started_at,
         MAX(CAST(JSON_UNQUOTE(JSON_EXTRACT(properties_json, '$.playerCount')) AS UNSIGNED))
             AS player_count
-    FROM playtest2_events
+    FROM playtest2_events_included
     WHERE event_name = 'GAME_SESSION_STARTED'
     GROUP BY test_session_id, game_type, session_seq
 ) started
-LEFT JOIN playtest2_events left_event
+LEFT JOIN playtest2_events_included left_event
     ON left_event.test_session_id = started.test_session_id
    AND left_event.participant_key IS NOT NULL
    AND left_event.occurred_at >= started.started_at
@@ -98,8 +132,8 @@ SELECT
     disconnected.session_seq,
     (
         SELECT MIN(next_event.occurred_at)
-        FROM playtest2_events next_event
-        JOIN playtest2_sessions next_session
+        FROM playtest2_events_included next_event
+        JOIN playtest2_sessions_included next_session
             ON next_session.test_session_id = next_event.test_session_id
         WHERE next_session.room_key = disconnected_session.room_key
           AND next_event.participant_key = disconnected.participant_key
@@ -108,8 +142,8 @@ SELECT
     ) AS resolved_at,
     (
         SELECT next_event.event_name
-        FROM playtest2_events next_event
-        JOIN playtest2_sessions next_session
+        FROM playtest2_events_included next_event
+        JOIN playtest2_sessions_included next_session
             ON next_session.test_session_id = next_event.test_session_id
         WHERE next_session.room_key = disconnected_session.room_key
           AND next_event.participant_key = disconnected.participant_key
@@ -118,8 +152,8 @@ SELECT
         ORDER BY next_event.occurred_at, next_event.server_received_at
         LIMIT 1
     ) AS outcome
-FROM playtest2_events disconnected
-JOIN playtest2_sessions disconnected_session
+FROM playtest2_events_included disconnected
+JOIN playtest2_sessions_included disconnected_session
     ON disconnected_session.test_session_id = disconnected.test_session_id
 WHERE disconnected.event_name = 'PARTICIPANT_DISCONNECTED';
 
@@ -149,8 +183,8 @@ SELECT
     DATE(CONVERT_TZ(MIN(pe.occurred_at), '+00:00', '+09:00')) AS visit_date_kst,
     ps.app_version,
     ps.experiment_version
-FROM playtest2_events pe
-JOIN playtest2_sessions ps
+FROM playtest2_events_included pe
+JOIN playtest2_sessions_included ps
     ON ps.test_session_id = pe.test_session_id
 WHERE pe.event_name = 'ROOM_ENTERED'
   AND pe.analytics_user_key IS NOT NULL
