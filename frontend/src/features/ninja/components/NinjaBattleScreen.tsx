@@ -258,6 +258,12 @@ export function NinjaBattleScreen({
   }, [inEffectPlayback, round, exchange]);
 
   const effectTargetId = inEffectPlayback ? (lastAttack?.targetToken ?? null) : null;
+  // 연출 중에는 맞는 사람뿐 아니라 때리는 사람도 어둠 위로 올린다 — 대상만 비추면 "누가 때렸는지"가
+  // 화면에서 사라져서, 술법 알림을 놓친 사람은 자기가 맞은 이유를 모른 채 HP만 깎였다.
+  // attackerToken이 target과 같은 경우는 없지만(자기 공격 불가), 겹치면 대상 표시를 우선한다.
+  const effectAttackerId = inEffectPlayback
+    ? ((lastAttack?.attackerToken ?? currentAttackerToken) || null)
+    : null;
   const effectSkillId = lastAttack?.skillId ?? requiredSkill?.skillId;
   const [cinematicPhase, setCinematicPhase] = useState<'idle' | 'blackout' | 'focus'>('idle');
   const pixelEffect = cinematicPhase === 'focus' && effectTargetId
@@ -339,6 +345,10 @@ export function NinjaBattleScreen({
         }}
         className={`ninja-tile ninja-tile--p${participantColorIndexById.get(id) ?? (seat % 4) + 1}${dead ? ' ninja-tile--dead' : ''}${
           cinematicPhase === 'focus' && effectTargetId === id ? ' ninja-tile--cinematic-target' : ''
+        }${
+          cinematicPhase === 'focus' && effectTargetId !== id && effectAttackerId === id
+            ? ' ninja-tile--cinematic-attacker'
+            : ''
         }${!dead && speakingIds.has(id) ? ' ninja-tile--speaking' : ''}`}
       >
         <div className="ninja-tile__cam participant-audio-host">
